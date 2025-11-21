@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Findom</title>
+
+    <link rel="manifest" href="manifest.json" />
+    <meta name="theme-color" content="#8b0000" />
+
+    <link rel="stylesheet" href="css/app.css" />
+    <link rel="stylesheet" href="css/bonusAtivoGPT.css" />
+    <link rel="stylesheet" href="css/luzLateral.css" />
+  </head>
+  <body>
+    <!-- Splash / Loading overlay -->
+    <div class="photo-container" id="splash" aria-hidden="true">
+      <div class="splash-card">
+        <div class="splash-aura"></div>
+        <div class="splash-logo-wrap">
+          <img src="icon-512.jpg" alt="Financial Dominance" class="splash-logo" />
+        </div>
+        <div class="splash-particles" aria-hidden="true"></div>
+        <div class="splash-title">FINANCIAL DOMINATION</div>
+        <div class="splash-sub">Carregando sua dominação financeira…</div>
+        <div class="splash-bar"><span class="splash-progress"></span></div>
+        <button class="splash-skip" type="button">Pular</button>
+      </div>
+    </div>
+
+    <div class="container">
+      <h1 id="simuladorTitulo">Findom Wallet</h1>
+
+      <div class="section">
+        <div id="bonusActiveBanner">
+          <span class="bonus-text">BÔNUS 15% CRÉDITO</span>
+          <span class="bonus-icon">✨</span>
+        </div>
+        <div id="bonusActiveBanner">
+          <span class="bonus-text">DESCONTO 15% COMPRAS</span>
+          <span class="bonus-icon">💥</span>
+        </div>
+
+        <!-- cabeçalho com título + botão do contrato à direita -->
+        <div class="section-header">
+          <h2>Controle de Saldo</h2>
+          <button id="abrirContrato" class="icon-btn" title="Abrir contrato" onclick="window.open('💎 Contrato de Submissão e Resgate de Saldo.pdf','_blank')">📜</button>
+        </div>
+
+        <!-- saldo em linha com o rótulo -->
+        <div class="saldo-row">
+          <label class="saldo-label">Saldo Dominadora:</label>
+          <span id="saldoDominadora" class="saldo-badge">0,00</span>
+        </div>
+
+        <!-- ações -->
+        <div class="btn-row">
+          <button type="button" id="resetSaldo">Resetar Saldo</button>
+          <button type="button" id="limparHistorico">Limpar Histórico</button>
+        </div>
+
+        <div class="controle-saldo">
+          <div class="bonus-especial-toggle">
+            <label>
+              <input type="checkbox" id="bonusEspecialCheckbox" />
+              Bônus - lingerie
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>🎯 Tarefas Pendentes</h2>
+        <div id="tarefasPendentes">
+          <p style="color: #999; text-align: center" id="noTasksMessage">Nenhuma tarefa pendente. 👑</p>
+        </div>
+      </div>
+
+      <div class="section" id="tarefasLimitadasSection">
+        <h2>⏳ Tarefas com Limite Ativo</h2>
+        <div id="tarefasLimitadasLista">
+          <p style="color: #aaa">Nenhuma tarefa limitada ativa.</p>
+          <span class="tempo-restante" data-expira="1699999999999"></span>
+        </div>
+      </div>
+
+      <div id="aceleracoesAtivas"></div>
+
+      <div class="section">
+        <h2>Nova Transação</h2>
+
+        <label>Tipo de operação:</label>
+        <select id="tipoTransacao">
+          <option value="gasto">Compra de Serviço 📉</option>
+          <option value="ganho">Ganho de Crédito 📈</option>
+        </select>
+
+        <div id="compraFields">
+          <label>Tarefa (Compra):</label>
+          <select id="selectTarefa">
+            <option value="0" data-placeholder="1">-- Escolher tarefa --</option>
+            <option value="1500|Tirar cravos|Aturar tudo mesmo que doa">Tirar cravos — R$ 1.500</option>
+            <option value="3000|Vale escolher filme/série|Proibido Ásia">Vale escolher filme/série 🚫🇰🇷 — R$ 3.000</option>
+            <option value="3500|Massagem nos pés|Sem creme se tiver chulé">Massagem nos pés — R$ 3.500</option>
+            <option value="4000|Café da manhã na cama|Servir na cama">Café da manhã na cama — R$ 4.000</option>
+            <option value="4500|Lavar os pés e esfoliar.|Ficar no chão">Lavar os pés e esfoliar — R$ 4.500</option>
+            <option value="5000|Massagem|Relaxamento profundo">Massagem — R$ 5.000</option>
+            <option value="6000|Cozinhar jantar|Dominado à disposição durante o jantar">Cozinhar jantar (cada amiga - R$ 500) — R$ 6.000</option>
+            <option value="6500|Vale sair sozinha com amiga|Liberdade social">Vale sair sozinha com amiga — R$ 6.500</option>
+            <option value="6500|Obrigação de servir (2 tarefas)|Intensifica sensação de controle">Obrigação de servir (2 tarefas) — R$ 6.500</option>
+            <option value="12250|Vale de escolha de FILME|Permitido Ásia">Vale escolher FILME ✔️🇰🇷 — R$ 12.250</option>
+            <option value="15000|Ela decide toda a agenda do dia|Dominado obedece tudo">Ela decide toda a agenda do dia — R$ 15.000</option>
+            <option value="25000|Ganha 60 dólares na vida real|Dominado compra tudo ate 60 dólares">Ganha 60 dólares na vida real — R$ 25.000</option>
+            <!-- Opções que reduzem o tempo dos bloqueios ativos -->
+            <optgroup label="👑 Redução de Limite 👑">
+              <option value="2000|REDUZIR_BLOQUEIO_6H|Aceleração ⏳ (Reduz 6h por 1mins)" data-reduz-horas="6">Reduzir 6h ⌛ — R$ 2.000</option>
+              <option value="3500|REDUZIR_BLOQUEIO_12H|Aceleração ⏳ (Reduz 12h por 1mins)" data-reduz-horas="12">Reduzir 12h ⌛ — R$ 3.500</option>
+              <option value="6000|REDUZIR_BLOQUEIO_1D|Aceleração ⏳ (Reduz 1d por 1mins)" data-reduz-horas="24">Reduzir 1 dia ⌛ — R$ 6.000</option>
+              <option value="11000|REDUZIR_BLOQUEIO_3D|Aceleração ⏳ (Reduz 3d por 1mins)" data-reduz-horas="72">Reduzir 3 dias ⌛ — R$ 11.000</option>
+              <option value="18000|ACELERAR_GLOBAL_4D_1H|Aceleração ⏳ (Reduz 4d por 1mins)">Reduzir 4 dias ⌛ — R$ 18.000</option>
+            </optgroup>
+          </select>
+
+          <label>Descrição:</label>
+          <input type="text" id="descricaoTransacao" readonly />
+        </div>
+
+        <div id="ganhoFields" style="display: none">
+          <label>Como ganhou crédito:</label>
+          <select id="selectGanho" onchange="calcularValorGanho()">
+            <option value="">-- Escolher forma --</option>
+            <option value="Tapa de pé na cara">Tapa de pé na cara R$ 2,00</option>
+            <option value="Dedo do meio com desprezo">Dedo do meio com desprezo R$ 30,00</option>
+            <option value="Peidar na cara">Peidar na cara R$ 150,00</option>
+            <option value="Dar uma meleca para comer">Dar uma meleca para comer R$ 200,00</option>
+            <option value="Chupar buceta">Chupar buceta R$ 200,00</option>
+            <option value="Cuspir na cara">Cuspir na cara R$ 320,00</option>
+            <option value="Mijar na boca">Mijar na boca R$ 380,00</option>
+            <option value="Chupar peito">Chupar peito R$ 500,00</option>
+            <option value="Comer cutícula e peles dos pés">Comer cutícula e peles dos pés R$ 800,00</option>
+            <option value="Pés na cara">Pés na cara - R$ 400,00</option>
+            <option value="Cuspir porra (Sêmen) na boca">Cuspir porra (Sêmen) na boca R$ 2000,00</option>
+            <option value="Vestir cinta e comer dominado">Vestir cinta e comer dominado R$ 3500,00</option>
+            <option value="Match Masters">Match Masters</option>
+            <!-- <option value="Buraco">Conversar no grupo sobre sair ou planejar comida compartilhado na TV 💲</option> -->
+            <option value="Videogames Competitivos">Videogames Competitivos 💲</option>
+            <option value="Buraco">Buraco 💲</option>
+            <option value="Perfil">Perfil 💲</option>
+            <option value="Jogos de tabuleiro com amigas">Jogos de tabuleiro com amigas 💲</option>
+            <option value="Outro">Outro (Valor editável)</option>
+          </select>
+
+          <label>
+            Valor (R$):
+            <input type="number" id="valorGanho" value="0" step="1" />
+          </label>
+
+          <div id="pesNaCaraOptions" class="checkbox-group" style="display: none">
+            <label>
+              <input type="checkbox" id="chkChule" data-value="400" onchange="calcularValorGanho()" />
+              Pés com chulé (+ R$ 400)
+            </label>
+            <label>
+              <input type="checkbox" id="chkFrancesinha" data-value="300" onchange="calcularValorGanho()" />
+              Francesinha (+ R$ 300)
+            </label>
+          </div>
+
+          <div id="comCatarro" class="checkbox-group" style="display: none">
+            <label>
+              <input type="checkbox" id="chkCatarro" data-value="500" onchange="calcularValorGanho()" />
+              Cuspe com Catarro (+ R$ 500)
+            </label>
+          </div>
+
+          <label id="labelQuantidadeMultiplicador" style="display: none; margin-top: 12px">Quantidade (multiplicador):</label>
+          <input type="number" id="quantidadeMultiplicador" value="1" min="1" style="display: none; margin-top: 8px" onchange="calcularValorGanho()" />
+
+          <div id="contadorBloco" style="background: #1a1a1a; padding: 15px; border-radius: 12px; border: 1px solid #444; margin-top: 20px">
+            <label>Valor por minuto (R$):</label>
+            <input type="number" id="valorPorMinuto" value="0" min="1" step="1" readonly />
+
+            <div id="contadorContainer" style="margin-top: 12px">
+              <span style="margin-right: 15px; font-size: 17px">
+                Tempo:
+                <strong id="tempoDisplay">00:00</strong>
+              </span>
+              <span style="font-size: 17px">
+                Valor:
+                <strong id="valorAcumuladoDisplay" style="color: #50b050">R$ 0,00</strong>
+              </span>
+              <button id="btnPlayPauseTempo">▶️ Começar</button>
+              <button id="btnTerminarTempo">⏹️ Calcular</button>
+            </div>
+          </div>
+        </div>
+
+        <button id="adicionar">Registrar</button>
+      </div>
+
+      <div class="section">
+        <!-- ... -->
+        <h2>Histórico de Transações</h2>
+
+        <label>Filtrar por dia:</label>
+        <input type="date" id="filterDate" />
+        <div style="display: flex; gap: 10px; margin-top: 8px">
+          <button id="aplicarFiltro" style="background: #b8860b; color: #1e1e1e">Filtrar</button>
+          <button id="limparFiltro" style="background: #444; color: #ccc">Limpar</button>
+        </div>
+
+        <div id="historico"></div>
+        <button id="enviarHistoricoWhatsApp" style="background: #1e90ff; color: white; border-radius: 8px; border: none; margin-top: 10px">Enviar histórico por WhatsApp</button>
+        <!-- ... -->
+      </div>
+    </div>
+
+    <!-- Camada das chamas -->
+    <canvas id="fx-embers" aria-hidden="true"></canvas>
+
+    <script type="module" src="dbFirebase/firebaseConfiguration.js"></script>
+    <script type="module" src="dbFirebase/firestoreAppState.js"></script>
+
+    <!-- <script type="module" src="dbFirebase/firebaseStorageBridge.js"></script> -->
+
+    <script defer src="js/luzLateral.js"></script>
+    <script defer src="js/splashAmimacao.js"></script>
+    <script defer src="js/storage.js"></script>
+    <script defer src="js/utils.js"></script>
+    <script defer src="js/bonusEspecial.js"></script>
+    <script defer src="js/ganhoFixo.js"></script>
+    <script defer src="js/tarefasPendentes.js"></script>
+    <script defer src="js/timer.js"></script>
+    <script defer src="js/serviceWorker.js"></script>
+    <script defer src="js/efeitoBonusAtivoGanhoCredito.js"></script>
+    <script defer src="js/efeitoBonusAtivoCompraServico.js"></script>
+    <script defer src="js/chovendoGrana.js"></script>
+    <!-- <script defer src="js/AA_testeCodigoDiff.js"></script> -->
+    <script src="js/appMain.js"></script>
+    <script src="js/roleta.js"></script>
+  </body>
+</html>

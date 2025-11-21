@@ -1,0 +1,114 @@
+/* Brasas / fagulhas douradas */
+#fx-embers {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4; /* acima do fundo, abaixo dos cards */
+}
+
+/* ===== BOTÕES EM ESTILO "PILL" (todos os principais) ===== */
+
+/* formato geral + animação */
+.btn-row button,
+#aplicarFiltro,
+#limparFiltro,
+#enviarHistoricoWhatsApp,
+#btnPlayPauseTempo,
+#btnTerminarTempo,
+#resetSaldo,
+#limparHistorico,
+#adicionar {
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  border: 1px solid #444;
+  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+}
+
+/* hover padrão (todas essas IDs entram aqui) */
+.btn-row button:hover,
+#aplicarFiltro:hover,
+#limparFiltro:hover,
+#enviarHistoricoWhatsApp:hover,
+#btnPlayPauseTempo:hover,
+#btnTerminarTempo:hover,
+#resetSaldo:hover,
+#limparHistorico:hover,
+#adicionar:hover {
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
+  transform: translateY(-1px);
+}
+
+/* ===== CORES ===== */
+
+/* botões escuros padrão (reset, limpar, adicionar, timer, LIMPAR filtro) */
+.btn-row button,
+#resetSaldo,
+#limparHistorico,
+#adicionar,
+#btnPlayPauseTempo,
+#btnTerminarTempo,
+#limparFiltro {
+  background: radial-gradient(circle at 30% 0, #3b2410, #130b08);
+  border-color: rgba(255, 215, 0, 0.35);
+  color: #fbe9c4;
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+}
+
+.btn-row button:hover,
+#resetSaldo:hover,
+#limparHistorico:hover,
+#adicionar:hover,
+#btnPlayPauseTempo:hover,
+#btnTerminarTempo:hover,
+#limparFiltro:hover {
+  background: radial-gradient(circle at 30% 0, #5a3618, #1a0e0a);
+}
+
+/* FILTRAR – dourado chamativo */
+#aplicarFiltro {
+  background: #ffb02a;
+  border-color: #ffcf6a;
+  color: #2b1500;
+  box-shadow: 0 0 12px rgba(255, 193, 7, 0.35);
+}
+
+#aplicarFiltro:hover {
+  background: #ffc857;
+}
+
+/* ENVIAR HISTÓRICO POR WHATSAPP – mantém estilo botão azul chamativo */
+#enviarHistoricoWhatsApp {
+  background: #0069d9; /* pode trocar pra #25d366 se quiser verde WhatsApp */
+  border-color: #1181ff;
+  color: #fff;
+  box-shadow: 0 0 14px rgba(0, 105, 217, 0.55);
+}
+
+#enviarHistoricoWhatsApp:hover {
+  background: #1a7fff;
+}
+
+/* botão deletar do histórico */
+.btn-del-hist {
+  background: radial-gradient(circle at 30% 0, #3b2410, #130b08);
+  border-radius: 999px;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(255, 215, 0, 0.45);
+  color: #ff6a5f;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+.btn-del-hist:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.65);
+  background: radial-gradient(circle at 30% 0, #5a3618, #1a0e0a);
+}

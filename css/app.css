@@ -1,0 +1,1279 @@
+/* --- CSS Completo e Aprimorado com Estilo de Dominação --- */
+body {
+  font-family: 'Times New Roman', serif; /* Fonte mais clássica e séria */
+  margin: 0;
+  padding: 0;
+  color: #f0f0f0;
+  background: #0d0d0d; /* Fundo mais escuro */
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 100vh;
+  background-image: radial-gradient(circle at center, rgba(139, 0, 0, 0.1) 1%, transparent 100%); /* Toque sutil de poder */
+}
+.container {
+  width: 90%;
+  max-width: 700px; /* Levemente mais largo */
+  /* Ajustado para mobile: padding lateral menor */
+  padding: 30px 15px;
+  box-sizing: border-box;
+  padding-top: 40px;
+}
+
+h1 {
+  font-family: 'Georgia', serif;
+  font-size: 50px;
+  margin-bottom: 30px;
+  color: #ffd700; /* Dourado Sólido */
+  text-align: center;
+  border-bottom: 3px solid #b8860b; /* Linha dourada forte */
+  padding-bottom: 12px;
+  text-shadow: 0 0 10px rgba(255, 215, 0, 0.6), 0 0 20px rgba(255, 140, 0, 0.2); /* Brilho autoritário */
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+h2 {
+  margin-top: 0;
+  margin-bottom: 20px;
+  font-size: 24px;
+  color: #ffd700; /* Títulos de seção em dourado */
+  border-left: 5px solid #8b0000; /* Toque de vermelho escuro/vinho */
+  padding-left: 15px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.section {
+  background: #181818; /* Seções mais escuras */
+  padding: 25px;
+  border-radius: 15px;
+  margin-bottom: 35px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.8), inset 0 0 10px rgba(184, 134, 11, 0.1); /* Sombra pesada e inset sutilmente dourado */
+  border: 2px solid #333;
+  transition: box-shadow 0.3s;
+}
+
+label {
+  display: block;
+  margin-top: 18px;
+  font-weight: bold;
+  color: #ffd700; /* Labels em dourado */
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+input,
+input[type='number'],
+select {
+  padding: 14px;
+  margin-top: 8px;
+  border-radius: 10px;
+  border: 2px solid #555; /* Borda mais grossa */
+  width: 100%;
+  box-sizing: border-box;
+  background: #222; /* Fundo de input escuro */
+  color: #f0f0f0;
+  font-size: 17px;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+input:focus,
+select:focus {
+  border-color: #8b0000; /* Foco em vermelho escuro */
+  box-shadow: 0 0 8px rgba(139, 0, 0, 0.7);
+  outline: none;
+}
+input:disabled,
+select:disabled {
+  background: #2c2c2c;
+  color: #777;
+  cursor: not-allowed;
+}
+
+.checkbox-group {
+  margin-top: 15px;
+  padding: 10px;
+  border: 1px dashed #555; /* Borda mais discreta */
+  border-radius: 8px;
+}
+.checkbox-group label {
+  display: flex;
+  align-items: center;
+  margin-top: 10px;
+  font-size: 15px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: #ccc;
+}
+.checkbox-group input[type='checkbox'] {
+  width: 20px;
+  height: 20px;
+  margin-right: 12px;
+  cursor: pointer;
+  accent-color: #8b0000; /* Destaque em vermelho escuro */
+}
+
+button {
+  padding: 14px 25px;
+  margin-top: 20px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  font-size: 17px;
+  cursor: pointer;
+  transition: 0.3s ease-in-out;
+  text-transform: uppercase;
+  font-weight: bold;
+  letter-spacing: 1.5px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.6);
+}
+button:hover {
+  opacity: 1;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 10px rgba(0, 0, 0, 0.8), 0 0 10px rgba(255, 215, 0, 0.3); /* Dourado no hover */
+}
+#resetSaldo {
+  background: #8b0000;
+  color: white;
+} /* Vermelho Dominante */
+#adicionar {
+  background: linear-gradient(45deg, #ffd700, #b8860b);
+  color: #1e1e1e;
+} /* Gradiente Dourado */
+#adicionar:hover {
+  border-color: #8b0000;
+}
+#limparHistorico {
+  background: #3a3a3a;
+  color: #ccc;
+  margin-left: 15px;
+  border: 1px solid #555;
+}
+#aplicarFiltro {
+  background: #b8860b;
+  color: #1e1e1e;
+}
+#limparFiltro {
+  background: #3a3a3a;
+  color: #ccc;
+}
+
+#saldoDominadora {
+  font-weight: 900; /* Ultra negrito */
+  font-size: 36px;
+  margin-top: 10px;
+  color: #ffd700;
+  display: inline-block;
+  padding: 8px 15px;
+  background: #222;
+  border-radius: 10px;
+  border: 3px double #b8860b; /* Borda dupla dourada */
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
+}
+.saldo-label {
+  font-size: 18px;
+  color: #ccc;
+  margin-bottom: 8px;
+  display: block;
+}
+
+#historico {
+  margin-top: 20px;
+  background: #0d0d0d; /* Fundo mais escuro para o histórico */
+  padding: 20px;
+  border-radius: 12px;
+  max-height: 450px;
+  overflow-y: auto;
+  border: 1px solid #444;
+}
+
+#historico {
+  overflow: auto;
+}
+#historico::-webkit-scrollbar {
+  width: 8px;
+}
+#historico::-webkit-scrollbar-thumb {
+  background: rgba(255, 215, 0, 0.35);
+  border-radius: 8px;
+}
+#historico::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 8px;
+}
+
+#historico div {
+  padding: 10px 0;
+  border-bottom: 1px dashed #3a3a3a; /* Linhas mais sutis */
+  font-size: 15px;
+}
+#historico div:last-child {
+  border-bottom: none;
+}
+#historico strong {
+  color: #aaa;
+  font-weight: normal;
+}
+#historico .ganho {
+  color: #50b050;
+  font-weight: bold;
+  text-shadow: 0 0 3px rgba(80, 176, 80, 0.5); /* Toque de brilho no ganho */
+}
+#historico .gasto {
+  color: #ff6347; /* Vermelho mais vibrante para o gasto */
+  font-weight: bold;
+  text-shadow: 0 0 3px rgba(255, 99, 71, 0.5); /* Toque de brilho no gasto */
+}
+
+/* CSS do Modal do Contrato - Ajustes */
+.modal-overlay {
+  display: none; /* Inicia oculto */
+  position: fixed;
+  z-index: 1000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background-color: rgba(0, 0, 0, 0.8);
+  padding-top: 50px;
+}
+.modal-content {
+  background-color: #1a1a1a;
+  margin: 5% auto;
+  padding: 25px;
+  border: 2px solid #ffd700; /* Borda modal em dourado */
+  width: 90%;
+  max-width: 700px;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9);
+}
+.modal-content h3 {
+  color: #8b0000;
+  font-size: 24px;
+  margin-bottom: 15px;
+  text-align: center;
+  text-transform: uppercase;
+} /* Título modal em vermelho */
+.modal-content h4 {
+  color: #ccc;
+  font-size: 18px;
+  margin-top: 25px;
+  border-bottom: 1px solid #444;
+  padding-bottom: 5px;
+}
+.modal-content p,
+.modal-content li {
+  font-size: 15px;
+  line-height: 1.6;
+  color: #aaa;
+  margin-bottom: 10px;
+}
+.modal-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 15px;
+  font-size: 14px;
+}
+.modal-content th,
+.modal-content td {
+  border: 1px solid #333;
+  padding: 10px;
+  text-align: left;
+}
+.modal-content th {
+  background-color: #282828;
+  color: #ffd700;
+  font-weight: bold;
+}
+.modal-content td {
+  background-color: #131313;
+}
+.modal-content strong {
+  color: #f0f0f0;
+}
+.close-btn {
+  color: #8b0000;
+  float: right;
+  font-size: 30px;
+  font-weight: bold;
+  cursor: pointer;
+  line-height: 20px;
+}
+
+/* ---------------------------------------------------- */
+/* ✅ CORREÇÃO DESKTOP: Layout do Contador de Tempo */
+/* ---------------------------------------------------- */
+#contadorBloco {
+  background: #111;
+  padding: 20px;
+  border-radius: 15px;
+  border: 2px solid #444;
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
+  /* Mudança: Ocupa a largura total para melhor alinhamento */
+  display: block;
+}
+#contadorContainer {
+  display: flex;
+  /* Alinha todos os itens (texto e botões) verticalmente no centro */
+  align-items: center;
+  gap: 15px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+  /* Garante que o texto de Tempo/Valor fique alinhado à esquerda */
+  justify-content: flex-start;
+}
+
+/* Ajuste nos botões do contador para que fiquem menores e mais coesos no desktop */
+#btnPlayPauseTempo,
+#btnTerminarTempo {
+  padding: 10px 20px; /* Redução sutil no padding */
+  border-radius: 15px;
+  border: none;
+  font-size: 15px; /* Redução sutil no tamanho da fonte */
+  font-weight: bold;
+  cursor: pointer;
+  transition: 0.3s all;
+  color: white;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+  margin-top: 0; /* Remove margem superior desnecessária no contexto flex */
+  flex-shrink: 0; /* Impede que os botões encolham em telas menores */
+}
+
+#btnPlayPauseTempo {
+  background: linear-gradient(45deg, #ffd700, #b8860b);
+  color: #1e1e1e;
+}
+#btnPlayPauseTempo:hover {
+  background: linear-gradient(45deg, #ffeb99, #ffd700);
+  transform: scale(1.05);
+}
+
+#btnTerminarTempo {
+  background: linear-gradient(45deg, #8b0000, #d32f2f);
+  color: white;
+}
+#btnTerminarTempo:hover {
+  background: linear-gradient(45deg, #a00000, #ff6347);
+  transform: scale(1.05);
+}
+
+#abrirContrato {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 50px;
+  height: 50px;
+  font-size: 30px;
+  color: #ffd700;
+  background: #0d0d0d;
+  border-radius: 50%;
+  text-decoration: none;
+  border: 3px double #8b0000; /* Borda dupla em vermelho */
+  box-shadow: 0 0 10px rgba(139, 0, 0, 0.5);
+  transition: all 0.3s;
+}
+#abrirContrato:hover {
+  transform: scale(1.1) rotate(-5deg);
+  box-shadow: 0 0 15px rgba(255, 215, 0, 0.7);
+}
+
+/* ---------------------------------------------------- */
+/* ✅ CORREÇÃO DESKTOP: Tarefas Pendentes - Alinhamento */
+/* ---------------------------------------------------- */
+#tarefasPendentes .tarefa-item {
+  display: flex;
+  /* Alinha os itens ao topo do contêiner para que o checkbox não se desloque */
+  align-items: flex-start;
+  padding: 12px 0;
+  border-bottom: 1px solid #222;
+  transition: background-color 0.3s;
+  font-size: 16px;
+}
+
+#tarefasPendentes .tarefa-item:last-child {
+  border-bottom: none;
+}
+
+#tarefasPendentes input[type='checkbox'] {
+  /* Impede o checkbox de encolher/crescer e o mantém fixo no layout */
+  flex-shrink: 0;
+  margin-right: 15px;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: #8b0000;
+  /* Ajuste vertical sutil para melhor alinhamento visual com a primeira linha */
+  position: relative;
+  top: 2px;
+}
+
+#tarefasPendentes .tarefa-descricao {
+  /* Permite que a descrição ocupe o espaço restante */
+  flex-grow: 1;
+  color: #aaa;
+  line-height: 1.4; /* Melhora a leitura em múltiplas linhas */
+  /* Garante que o texto possa quebrar sem interferir no valor */
+  word-break: break-word;
+}
+
+#tarefasPendentes .tarefa-valor {
+  /* Garante que o valor não quebre a linha e fique sempre no final */
+  flex-shrink: 0;
+  font-weight: 900;
+  color: #ff6347;
+  /* IMPORTANTE: Empurra o valor para a direita, separando-o da descrição */
+  margin-left: auto;
+  padding-left: 10px;
+}
+
+/* ---------------------------------------------------- */
+/* ✅ OTIMIZAÇÃO PARA MOBILE (Media Query) */
+/* ---------------------------------------------------- */
+@media (max-width: 600px) {
+  /* 1. Títulos: Reduz o tamanho de fontes grandes */
+  h1 {
+    font-size: 34px;
+    letter-spacing: 1px;
+    margin-bottom: 20px;
+  }
+  h2 {
+    font-size: 20px;
+  }
+
+  /* 2. Saldo: Reduz o tamanho do display de saldo */
+  #saldoDominadora {
+    font-size: 28px;
+    padding: 6px 10px;
+  }
+  .saldo-label {
+    font-size: 16px;
+  }
+
+  /* 3. Inputs e Selects */
+  input,
+  input[type='number'],
+  select {
+    padding: 10px;
+    font-size: 16px;
+  }
+
+  /* 4. Layout de botões: Força quebra de linha para botões de Saldo */
+  button {
+    padding: 12px 20px;
+    font-size: 15px;
+    margin-top: 15px;
+  }
+  #resetSaldo {
+    display: block;
+    width: 100%;
+    margin-left: 0;
+  }
+  #limparHistorico {
+    display: block;
+    width: 100%;
+    margin-left: 0; /* Remove margem lateral */
+    margin-top: 10px; /* Espaçamento entre os botões */
+  }
+
+  /* Ajuste de layout de botões de contador no mobile */
+  #contadorContainer {
+    /* Permite que o texto de Tempo/Valor e os botões ocupem a linha inteira */
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  #btnPlayPauseTempo,
+  #btnTerminarTempo {
+    /* Botões do contador ficam em 100% de largura */
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* 5. Histórico e Tarefas Pendentes: Reduz o tamanho do texto interno */
+  #historico div,
+  #tarefasPendentes .tarefa-item {
+    font-size: 14px;
+    /* Habilitar quebra de linha (wrap) */
+    flex-wrap: wrap;
+    /* Alinhamento ao topo, crucial para o checkbox */
+    align-items: flex-start;
+  }
+
+  /* 6. Ajuste fino na área de Tarefas Pendentes para evitar estouro */
+  #tarefasPendentes .tarefa-descricao {
+    /* Permite que a descrição ocupe o máximo de espaço possível na 1ª linha */
+    flex-basis: 70%;
+    flex-grow: 1;
+    margin-right: 10px;
+  }
+
+  #tarefasPendentes .tarefa-valor {
+    /* O valor ocupa 100% da largura, forçando a quebra de linha *após* a primeira linha de texto */
+    flex-basis: 100%;
+    width: 100%;
+    text-align: left;
+    margin-top: 5px;
+    /* Alinha o valor com a descrição, compensando o checkbox */
+    margin-left: 35px;
+    display: block;
+  }
+}
+
+/* ===== Toast de feedback do multiplicador ===== */
+#toastContainer {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 9999;
+  pointer-events: none;
+}
+.toast {
+  background: rgba(18, 18, 18, 0.96);
+  color: #fff;
+  border: 1px solid #444;
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  padding: 12px 14px;
+  width: min(380px, 90vw);
+  font-family: inherit;
+  pointer-events: auto;
+}
+.toast .title {
+  font-weight: 700;
+  margin: 0 0 6px 0;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.toast .title .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ffd54a;
+  display: inline-block;
+}
+.toast .line {
+  font-size: 14px;
+  margin: 4px 0;
+  color: #ddd;
+}
+.toast .strong {
+  font-weight: 800;
+  color: #fff;
+}
+.toast .meta {
+  font-size: 12px;
+  color: #aaa;
+  margin-top: 6px;
+}
+.toast .close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  border: none;
+  background: transparent;
+  color: #bbb;
+  cursor: pointer;
+  font-weight: 700;
+}
+.toast .bar {
+  height: 3px;
+  background: #ffd54a;
+  border-radius: 999px;
+  margin-top: 10px;
+  transform-origin: left;
+}
+
+/* === Splash / Loading overlay === */
+#splash {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(120% 120% at 50% 30%, rgba(70, 255, 130, 0.08), rgba(0, 0, 0, 0.92) 55%, rgba(0, 0, 0, 0.98));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  opacity: 1;
+  transition: opacity 0.6s ease;
+}
+#splash.hide {
+  opacity: 0;
+  pointer-events: none;
+}
+.splash-card {
+  background: rgba(20, 20, 24, 0.94);
+  border: 1px solid #3c3c3c;
+  border-radius: 24px;
+  padding: 22px;
+  width: min(420px, 90vw);
+  text-align: center;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+.splash-logo {
+  width: 128px;
+  height: 128px;
+  border-radius: 24px;
+  object-fit: cover;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.06) inset;
+}
+.splash-title {
+  margin-top: 12px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  font-size: 20px;
+  color: #fff;
+}
+.splash-sub {
+  font-size: 14px;
+  color: #cfcfcf;
+  margin-top: 6px;
+}
+.splash-bar {
+  margin-top: 14px;
+  height: 6px;
+  background: #2a2a2a;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.splash-progress {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #b5ff6a, #66ffb3, #33ffd2);
+  animation: loadbar 5s linear forwards;
+}
+@keyframes loadbar {
+  to {
+    width: 100%;
+  }
+}
+.splash-skip {
+  margin-top: 10px;
+  background: transparent;
+  color: #a9a9a9;
+  border: none;
+  font-size: 12px;
+  cursor: pointer;
+}
+/* === end Splash === */
+
+/* === Splash Deluxe effects === */
+/* animated background subtle swirl */
+#splash {
+  background: radial-gradient(120% 120% at 50% 30%, rgba(70, 255, 130, 0.1), rgba(0, 0, 0, 0.92) 55%, rgba(0, 0, 0, 0.98)),
+    conic-gradient(from 180deg at 50% 50%, rgba(51, 255, 210, 0.04), rgba(0, 0, 0, 0) 20%, rgba(180, 255, 120, 0.04) 40%, rgba(0, 0, 0, 0) 60%, rgba(120, 255, 170, 0.04) 80%, rgba(0, 0, 0, 0) 100%);
+  animation: bgSpin 24s linear infinite;
+}
+@keyframes bgSpin {
+  to {
+    filter: hue-rotate(15deg);
+  }
+}
+
+/* card glow aura */
+.splash-card {
+  position: relative;
+  overflow: hidden;
+}
+.splash-aura {
+  position: absolute;
+  inset: -20%;
+  pointer-events: none;
+  background: radial-gradient(60% 60% at 50% 40%, rgba(120, 255, 180, 0.08), rgba(0, 0, 0, 0));
+  filter: blur(18px);
+  animation: auraPulse 3s ease-in-out infinite;
+}
+@keyframes auraPulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+/* logo pulse + neon ring */
+.splash-logo-wrap {
+  position: relative;
+  display: inline-block;
+}
+.splash-logo {
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.06) inset, 0 8px 30px rgba(0, 0, 0, 0.5);
+  animation: logoPulse 2.8s ease-in-out infinite;
+}
+.splash-logo-wrap::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 28px;
+  background: radial-gradient(70% 70% at 50% 50%, rgba(120, 255, 180, 0.18), rgba(120, 255, 180, 0));
+  filter: blur(8px);
+}
+@keyframes logoPulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.035);
+  }
+}
+
+/* shine sweep across the logo */
+.splash-logo-wrap::after {
+  content: '';
+  position: absolute;
+  top: -20%;
+  left: -120%;
+  width: 50%;
+  height: 140%;
+  background: linear-gradient(100deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.35) 50%, rgba(255, 255, 255, 0) 100%);
+  transform: skewX(-20deg);
+  animation: shine 3.7s ease-in-out infinite;
+}
+@keyframes shine {
+  0% {
+    left: -120%;
+  }
+  55% {
+    left: 120%;
+  }
+  100% {
+    left: 120%;
+  }
+}
+
+/* floating particles: currency symbols drifting up */
+.splash-particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.splash-particles .p {
+  position: absolute;
+  color: #eafff5;
+  opacity: 0;
+  font-weight: 900;
+  text-shadow: 0 0 8px rgba(120, 255, 200, 0.28);
+  will-change: transform, opacity;
+  animation: floatUp var(--dur) linear var(--delay) infinite;
+}
+@keyframes floatUp {
+  0% {
+    transform: translate(var(--x), 20px) scale(0.6) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.8;
+  }
+  85% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate(calc(var(--x) * 1.2), -120%) scale(1) rotate(var(--rot));
+    opacity: 0;
+  }
+}
+
+/* parallax tilt */
+.splash-card {
+  transform-style: preserve-3d;
+  transition: transform 0.3s ease;
+}
+.splash-card.tilt {
+  transition-duration: 40ms;
+}
+
+/* vibração curtinha quando toca o chicote */
+#splash.play-sfx .splash-logo-wrap {
+  animation: whipHit 0.3s cubic-bezier(0.36, 0.07, 0.19, 0.97) 1;
+}
+@keyframes whipHit {
+  0% {
+    transform: translateX(0) rotate(0deg);
+  }
+  25% {
+    transform: translateX(-4px) rotate(-1deg);
+  }
+  50% {
+    transform: translateX(4px) rotate(1deg);
+  }
+  75% {
+    transform: translateX(-2px) rotate(-0.5deg);
+  }
+  100% {
+    transform: translateX(0) rotate(0deg);
+  }
+}
+
+/* nudge: liberar som só quando necessário */
+#soundNudge {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 10001;
+  background: #16181d;
+  border: 1px solid #32363c;
+  color: #e9eef5;
+  padding: 10px 12px;
+  border-radius: 12px;
+  display: none;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+#soundNudge.show {
+  display: inline-flex;
+}
+#soundNudge button {
+  background: #1f5;
+  color: #041;
+  border: none;
+  font-weight: 800;
+  padding: 6px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+/* --- CORREÇÃO CHECKBOX BÔNUS ESPECIAL --- */
+
+/* 1. Define o contêiner como flex (para alinhar lado a lado) */
+.bonus-especial-toggle {
+  display: flex;
+  align-items: center; /* Alinha verticalmente */
+  gap: 8px; /* Espaço entre o texto e a caixa */
+  margin-top: 10px; /* Um espaço para respirar */
+}
+
+/* 2. Sobrescreve o 'display: block' global do LABEL */
+.bonus-especial-toggle label {
+  display: inline; /* Volta ao comportamento normal */
+  margin-top: 0; /* Remove a margem global */
+  font-size: 15px; /* Ajuste o tamanho se desejar */
+  text-transform: none; /* Remove o uppercase se desejar */
+  color: #ccc; /* Ajusta a cor para ficar igual aos outros checkboxes */
+  order: 2; /* Opcional: Garante que o texto venha depois da caixa */
+}
+
+/* 3. Sobrescreve o 'width: 100%' global do INPUT */
+.bonus-especial-toggle input[type='checkbox'] {
+  width: 20px; /* Define uma largura fixa */
+  height: 20px; /* Define uma altura fixa */
+  margin-top: 0; /* Remove a margem global */
+  accent-color: #8b0000;
+  order: 1; /* Opcional: Garante que a caixa venha primeiro */
+}
+
+.controle-saldo {
+  background: transparent;
+  border: none;
+  padding: 16px 0;
+}
+
+/* Letreiro elegante e legível */
+.bonus-especial-toggle label {
+  display: flex;
+  align-items: center;
+  font-family: 'Cinzel Decorative', serif;
+  font-size: 1.1rem;
+  color: #ffd6a5;
+  letter-spacing: 1.3px;
+  transition: all 0.4s ease;
+  cursor: pointer;
+}
+
+/* Caixa de seleção com brilho refinado */
+.bonus-especial-toggle input[type='checkbox'] {
+  width: 22px;
+  height: 22px;
+  margin-right: 10px;
+  appearance: none;
+  background-color: transparent;
+  border: 2px solid rgba(0, 0, 0, 0.6);
+  border-radius: 6px;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.3s ease;
+  box-shadow: 0 0 6px rgba(255, 90, 90, 0.2);
+}
+
+.bonus-especial-toggle input[type='checkbox']:checked {
+  border-color: rgba(255, 215, 0, 0.45);
+  box-shadow: 0 0 6px rgba(255, 215, 0, 0.45), 0 0 10px rgba(255, 215, 0, 0.45), 0 0 20pxrgba (76, 0, 76, 0.6);
+}
+
+/* Ícone centralizado e pulsante */
+.bonus-especial-toggle input[type='checkbox']::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 1px;
+  font-size: 15px;
+  transition: all 0.3s ease;
+  opacity: 0;
+}
+
+.bonus-especial-toggle input[type='checkbox']:checked::after {
+  content: '✔️';
+  opacity: 1;
+  animation: pulsarCoracao 1.4s infinite alternate ease-in-out;
+}
+
+/* Batimento suave */
+@keyframes pulsarCoracao {
+  from {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+}
+
+/* Efeito de DESAPARECIMENTO LUXUOSO para Tarefa Concluída */
+.tarefa-concluida {
+  /* Define a animação: 800ms de duração, nome 'taskFadeOut' */
+  animation: taskFadeOut 800ms ease-in-out forwards;
+  /* Adiciona uma borda sutilmente vermelha/púrpura ao redor da div */
+  border: 1px solid rgba(139, 0, 0, 0.6); /* Vermelho escuro quase vinho */
+  border-radius: 8px;
+  padding: 8px;
+  margin: 5px 0;
+}
+
+@keyframes taskFadeOut {
+  0% {
+    opacity: 1;
+    /* Dá um leve pulso de crescimento (como uma explosão suave) */
+    transform: scale(1);
+  }
+  10% {
+    /* Brilho momentâneo: simula a energia sendo liberada/paga */
+    box-shadow: 0 0 10px rgba(255, 0, 0, 0.8);
+  }
+  100% {
+    opacity: 0;
+    /* Diminui de tamanho para desaparecer suavemente */
+    transform: scale(0.8);
+    height: 0;
+    padding: 0;
+    margin: 0;
+    /* O overflow: hidden no container garante que o texto não "vaze" */
+  }
+}
+
+#simuladorTitulo {
+  color: #800080; /* neon roxo */
+  text-shadow: 0 0 5px #800080, 0 0 10px #800080, 0 0 15px #800080;
+  position: relative;
+}
+
+@keyframes sparkAnim {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+    background: #fff;
+  }
+  25% {
+    background: #ff0;
+  }
+  50% {
+    background: #f00;
+  }
+  75% {
+    background: #0ff;
+  }
+  100% {
+    transform: translate(var(--x), var(--y)) scale(0);
+    opacity: 0;
+  }
+}
+
+.spark {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  animation: sparkAnim 1s linear forwards; /* Duração aumentada para 1s */
+}
+
+/* =========================
+   Rain of Money Emojis
+   ========================= */
+
+/* efeitoBonusAtivo.css */
+.money-note {
+  position: fixed;
+  top: -50px;
+  font-size: 40px;
+  pointer-events: none;
+  animation: fall 4s linear forwards;
+  z-index: 14000;
+}
+
+@keyframes fall {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100vh) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+/* Opcional: checkbox com brilho e ícone ✔️ */
+.bonus-especial-toggle input[type='checkbox']::after {
+  content: '✔️';
+  display: none;
+}
+
+.bonus-especial-toggle input[type='checkbox']:checked::after {
+  display: inline;
+  animation: pulsar 1.4s infinite alternate ease-in-out;
+}
+
+@keyframes pulsar {
+  from {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+}
+
+h1 {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* ===== Botão de remover em Tarefas com Limite Ativo ===== */
+#tarefasLimitadasLista button {
+  /* layout */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 32px;
+  padding: 0;
+  /* visual */
+  background: radial-gradient(120% 120% at 50% 15%, rgba(255, 215, 0, 0.1), rgba(0, 0, 0, 0) 60%), linear-gradient(180deg, rgba(26, 26, 26, 0.85), rgba(12, 12, 12, 0.85));
+  color: #fffbe6; /* ícone claro, legível */
+  border: 1px solid rgba(255, 215, 0, 0.35);
+  border-radius: 10px;
+  box-shadow: 0 1px 0 rgba(255, 215, 0, 0.08) inset, /* brilho sutil interno topo */ 0 -1px 0 rgba(0, 0, 0, 0.6) inset, /* profundidade em baixo   */ 0 0 12px rgba(255, 215, 0, 0.15); /* halo externo leve       */
+  text-shadow: 0 0 6px rgba(255, 215, 0, 0.45);
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.25s ease, border-color 0.25s ease, background 0.25s ease, color 0.25s ease;
+}
+
+/* Espaçamento entre os itens da lista de limites */
+#tarefasLimitadasLista {
+  display: flex; /* garante coluna */
+  flex-direction: column;
+  gap: 8px; /* << distância entre os itens */
+}
+
+/* Respiro interno e leitura melhor */
+#tarefasLimitadasLista li {
+  padding: 6px 0;
+  line-height: 1.45;
+  border-bottom: 1px dashed #2a2a2a; /* opcional, remove se não quiser linha */
+}
+#tarefasLimitadasLista li:last-child {
+  border-bottom: none;
+}
+
+/* (opcional) afasta ícone do texto */
+#tarefasLimitadasLista li .icon,
+#tarefasLimitadasLista li i,
+#tarefasLimitadasLista li svg {
+  margin-right: 6px;
+}
+
+#tarefasLimitadasLista button:hover {
+  border-color: rgba(255, 215, 0, 0.55);
+  box-shadow: 0 1px 0 rgba(255, 215, 0, 0.12) inset, 0 -1px 0 rgba(0, 0, 0, 0.6) inset, 0 0 18px rgba(255, 215, 0, 0.35);
+  background: radial-gradient(120% 120% at 50% 10%, rgba(255, 215, 0, 0.18), rgba(0, 0, 0, 0) 65%), linear-gradient(180deg, rgba(30, 30, 30, 0.9), rgba(12, 12, 12, 0.9));
+  transform: translateY(-1px) scale(1.05);
+}
+
+#tarefasLimitadasLista button:active {
+  transform: translateY(0) scale(0.96);
+  box-shadow: 0 2px 10px rgba(255, 215, 0, 0.2) inset, 0 0 10px rgba(255, 215, 0, 0.25);
+}
+
+#tarefasLimitadasLista button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(24, 24, 24, 1), 0 0 0 3px rgba(255, 215, 0, 0.75), 0 0 18px rgba(255, 215, 0, 0.4);
+}
+
+/* mantém o ícone central e com tamanho equilibrado */
+#tarefasLimitadasLista button,
+#tarefasLimitadasLista button span {
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* opções bloqueadas no select de tarefa */
+#selectTarefa option.locked {
+  color: #b78f00;
+  background: #1a1a1a;
+}
+#selectTarefa option:disabled {
+  color: #777 !important;
+}
+
+/* header do card: título à esquerda, ícone à direita */
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+/* botão-ícone (contrato) */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 32px;
+  padding: 0;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(26, 26, 26, 0.9), rgba(12, 12, 12, 0.9));
+  border: 1px solid rgba(255, 215, 0, 0.35);
+  color: #ffd700;
+  font-size: 18px;
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.15), inset 0 0 6px rgba(0, 0, 0, 0.6);
+  transition: transform 0.18s ease, box-shadow 0.25s ease, border-color 0.25s ease, background 0.25s ease;
+}
+.icon-btn:hover {
+  border-color: rgba(255, 215, 0, 0.55);
+  box-shadow: 0 0 16px rgba(255, 215, 0, 0.35);
+  transform: translateY(-1px);
+}
+.icon-btn:active {
+  transform: scale(0.96);
+}
+
+/* saldo em linha com o rótulo */
+.saldo-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 6px 0 14px;
+  flex-wrap: wrap;
+}
+.saldo-label {
+  color: #d6c27a;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+/* se quiser garantir que a “plaquinha” do saldo fique bem encaixada em linha */
+.saldo-badge {
+  display: inline-block;
+}
+
+/* botões lado a lado */
+.btn-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 6px 0 10px;
+}
+
+/* === Inputs dark + borda amarela + texto visível (escopo .section) === */
+.section input:not([type='checkbox']):not([type='radio']),
+.section select,
+.section textarea {
+  background-color: #1a1a1a !important; /* fundo escuro */
+  color: #e7e7e7 !important; /* texto claro */
+  border: 1px solid #ffd700 !important; /* borda amarela */
+}
+
+/* placeholders visíveis no dark */
+.section input::placeholder,
+.section textarea::placeholder {
+  color: #9a9a9a !important;
+  opacity: 1;
+}
+
+/* menu de opções do select (quando aberto) no tema dark */
+.section select option {
+  background: #1a1a1a;
+  color: #e7e7e7;
+}
+
+/* foco discreto (anel suave) */
+.section input:not([type='checkbox']):not([type='radio']):focus,
+.section select:focus,
+.section textarea:focus {
+  outline: none;
+  border-color: #ffd700 !important;
+  box-shadow: 0 0 0 2px rgba(255, 215, 0, 0.15);
+}
+
+/* desabilitados: mesma base escura, borda um pouco menos saturada */
+.section input:disabled,
+.section select:disabled,
+.section textarea:disabled {
+  background-color: #1a1a1a !important;
+  color: #8c8c8c !important;
+  border-color: #e6c200 !important;
+}
+
+.chip-desconto-lingerie {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(212, 162, 26, 0.75);
+  background: rgba(212, 162, 26, 0.08);
+  color: #ffd54d;
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 0.3px;
+  box-shadow: inset 0 0 12px rgba(212, 162, 26, 0.05);
+}
+.chip-desconto-lingerie .chip-pct {
+  border: 1px solid rgba(212, 162, 26, 0.6);
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(255, 215, 0, 0.1);
+}
+.chip-preview {
+  margin-top: 6px;
+  color: #d1c089;
+  font-size: 12px;
+}
+.chip-preview .pv-label {
+  opacity: 0.8;
+  margin-right: 6px;
+}
+.chip-preview .pv-old {
+  text-decoration: line-through;
+  opacity: 0.6;
+  margin-right: 6px;
+}
+.chip-preview .pv-new {
+  color: #ffda55;
+}
