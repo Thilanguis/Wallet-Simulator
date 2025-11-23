@@ -10,6 +10,9 @@
   // ==========================
   const COOLDOWN_MS = 3 * 24 * 60 * 60 * 1000; // 3 dias
 
+  // id do giro atualmente exibido no card "Resultado da roleta"
+  let idGiroAtual = null;
+
   // ==========================
   // SONS
   // ==========================
@@ -71,6 +74,49 @@
     const m = Math.floor(t / 60);
     const s = t - m * 60;
     return (d > 0 ? d + 'd ' : '') + String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  }
+
+  // Restaura SEMPRE o giro mais antigo existente em debugRoleta
+  // (os já consumidos são apagados do banco no clique)
+  function restaurarResultado() {
+    try {
+      const fsState = window.firestoreAppState || null;
+      const lista = (fsState && fsState.debugRoleta) || [];
+
+      // nada salvo ainda
+      if (!Array.isArray(lista) || !lista.length) {
+        idGiroAtual = null;
+        return;
+      }
+
+      // pega o MAIS ANTIGO giro com criadoEmMs válido
+      let candidato = null;
+      let candidatoMs = Infinity;
+
+      for (const giro of lista) {
+        const criadoMs = Number(giro.criadoEmMs) || 0;
+        if (!criadoMs) continue;
+
+        if (criadoMs < candidatoMs) {
+          candidato = giro;
+          candidatoMs = criadoMs;
+        }
+      }
+
+      // não achou nada válido
+      if (!candidato || !candidato.resultadoTexto) {
+        idGiroAtual = null;
+        return;
+      }
+
+      // guarda o id do giro que está sendo mostrado AGORA
+      idGiroAtual = candidato.id || null;
+
+      // atualiza o texto na tela
+      salvarResultado(candidato.resultadoTexto);
+    } catch (e) {
+      console.warn('[roleta] Falha ao restaurar resultado:', e);
+    }
   }
 
   // ==========================
@@ -530,8 +576,6 @@
         }
       }
 
-      salvarResultado(premio.full);
-
       setTimeout(() => {
         overlay.remove();
         if (onFinish) onFinish();
@@ -567,91 +611,111 @@
   }
 
   // ====================================================================
-  // RESULTADO SALVO
+  // RESULTADOS SALVOS (MÚLTIPLOS PRÊMIOS PENDENTES)
   // ====================================================================
 
-  function salvarResultado(texto) {
-    // Resultado é persistido no Firestore via fsRegistrarGiroRoleta.
-    // Aqui só atualizamos a UI local.
+  // Renderiza todas as entradas pendentes da coleção debugRoleta
+  function renderResultadosPendentes(lista) {
+    const container = obterContainerResultados();
+    if (!container) return;
 
-    const span = obterAreaResultadoTexto();
-    if (span) {
-      span.textContent = 'Resultado da roleta: ' + texto;
-      span.parentElement.style.display = 'flex';
-    }
+    // Remove linhas antigas da roleta
+    container.querySelectorAll('.resultado-roleta-item').forEach((el) => el.remove());
+
+    if (!Array.isArray(lista) || !lista.length) return;
+
+    // Só os giros que ainda NÃO foram consumidos (sem campo consumidoEm)
+    const pendentes = lista
+      .filter((giro) => !giro.consumidoEm)
+      .sort((a, b) => {
+        const ta = Number(a.criadoEmMs || 0);
+        const tb = Number(b.criadoEmMs || 0);
+        // mais antigo em cima
+        return ta - tb;
+      });
+
+    pendentes.forEach((giro) => {
+      const label = document.createElement('label');
+      label.className = 'resultado-roleta-item';
+      label.style = `
+        display: flex;
+        gap: 10px;
+        margin-top: 10px;
+        padding: 12px;
+        background: #222;
+        border-radius: 10px;
+        border: 1px solid #ffd700;
+        color: #ffd700;
+        font-size: 13px;
+        align-items: center;
+        box-shadow: 0 0 12px rgba(0,0,0,.6);
+      `;
+
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.style = 'cursor:pointer; width:16px; height:16px;';
+
+      cb.onchange = () => {
+        // some da tela imediatamente
+        label.style.display = 'none';
+
+        // apaga aquele giro do Firestore
+        if (cb.checked && typeof window.fsDeletarGiroRoleta === 'function') {
+          try {
+            window.fsDeletarGiroRoleta(giro.id);
+          } catch (e) {
+            console.warn('[roleta] Falha ao apagar giro da roleta no Firestore:', e);
+          }
+        }
+      };
+
+      const span = document.createElement('span');
+      span.style = 'flex:1;';
+      span.textContent = 'Resultado da roleta: ' + (giro.resultadoTexto || '');
+
+      label.appendChild(cb);
+      label.appendChild(span);
+      container.appendChild(label);
+    });
   }
 
-  function restaurarResultado() {
-    let texto = null;
-
-    // Tenta ler do Firestore (estado sincronizado pelo firestoreAppState)
-    try {
-      const appState = window.firestoreAppState;
-      const usuario = appState && appState.usuario;
-      if (usuario && typeof usuario.roletaUltimoResultadoTexto === 'string') {
-        texto = usuario.roletaUltimoResultadoTexto;
-      }
-    } catch (e) {
-      console.warn('Erro ao ler roletaUltimoResultadoTexto do Firestore', e);
-    }
-
-    if (!texto) return;
-
-    const span = obterAreaResultadoTexto();
-    if (span) {
-      span.textContent = 'Resultado da roleta: ' + texto;
-      span.parentElement.style.display = 'flex';
-    }
-  }
-
-  function obterAreaResultadoTexto() {
-    let area = document.getElementById('resultadoRoletaDia');
-    if (area) {
-      return document.getElementById('resultadoRoletaDiaTexto');
-    }
+  // Cria (ou reaproveita) o container onde as linhas vão ficar
+  function obterContainerResultados() {
+    let container = document.getElementById('listaResultadosRoleta');
+    if (container) return container;
 
     const tarefas = document.getElementById('tarefasPendentes');
     if (!tarefas || !tarefas.parentElement) return null;
 
-    const container = tarefas.parentElement;
+    container = document.createElement('div');
+    container.id = 'listaResultadosRoleta';
+    container.style = 'display:flex; flex-direction:column;';
 
-    area = document.createElement('label');
-    area.id = 'resultadoRoletaDia';
-    area.style = `
-      display: flex;
-      gap: 10px;
-      margin-top: 10px;
-      padding: 12px;
-      background: #222;
-      border-radius: 10px;
-      border: 1px solid #ffd700;
-      color: #ffd700;
-      font-size: 13px;
-      align-items: center;
-      box-shadow: 0 0 12px rgba(0,0,0,.6);
-    `;
-
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    cb.style = 'cursor:pointer; width:16px; height:16px;';
-    cb.onchange = () => {
-      area.style.display = 'none';
-    };
-
-    const span = document.createElement('span');
-    span.id = 'resultadoRoletaDiaTexto';
-    span.style = 'flex:1;';
-
-    area.appendChild(cb);
-    area.appendChild(span);
-
+    // coloca logo abaixo do bloco de "Tarefas Pendentes"
     if (tarefas.nextSibling) {
-      container.insertBefore(area, tarefas.nextSibling);
+      tarefas.parentElement.insertBefore(container, tarefas.nextSibling);
     } else {
-      container.appendChild(area);
+      tarefas.parentElement.appendChild(container);
     }
 
-    return span;
+    return container;
+  }
+
+  // Chamado pelo firestoreAppState sempre que a coleção debugRoleta mudar
+  window.onDebugRoletaChange = function (lista) {
+    renderResultadosPendentes(lista || []);
+  };
+
+  // Quando a página carrega, usa o que já está em window.firestoreAppState
+  function restaurarResultadosAoCarregar() {
+    try {
+      const fsState = window.firestoreAppState || null;
+      if (fsState && Array.isArray(fsState.debugRoleta)) {
+        renderResultadosPendentes(fsState.debugRoleta);
+      }
+    } catch (e) {
+      console.warn('[roleta] Falha ao restaurar resultados pendentes:', e);
+    }
   }
 
   // ====================================================================
@@ -740,6 +804,6 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     criarBotaoFlutuante();
-    restaurarResultado();
+    restaurarResultadosAoCarregar();
   });
 })();

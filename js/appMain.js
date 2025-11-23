@@ -53,6 +53,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Sistema de bloqueios — agora só em memória / Firestore
   let tarefasBloqueadas = [];
 
+  // controla de quanto em quanto tempo vamos persistir os bloqueios no Firestore
+  let _lastPersistTarefasBloqueadas = 0;
+
   // Aceleração global — boosters ativos (somente em memória)
   let accelBoosts = [];
 
@@ -176,17 +179,44 @@ document.addEventListener('DOMContentLoaded', () => {
 
     atualizarSaldo();
 
-    // ---------- Tarefas pendentes ----------
-    // Aqui é o pulo do gato: ler o campo `tarefasPendentes`
-    // do documento do usuário e jogar pra variável global
-    // que o tarefasPendentes.js usa.
-    if (Array.isArray(usuario.tarefasPendentes)) {
-      tarefasPendentes = usuario.tarefasPendentes;
+    window.onUserStateChange = function (usuario) {
+      usuario = usuario || {};
 
-      if (typeof renderTarefasPendentes === 'function') {
-        renderTarefasPendentes();
+      // ---------- Saldo ----------
+      if (typeof usuario.saldoDominadora === 'number') {
+        saldoDominadora = usuario.saldoDominadora;
+      } else if (typeof saldoDominadora !== 'number') {
+        saldoDominadora = 0;
       }
-    }
+
+      // ---------- Bônus especial ----------
+      if (typeof usuario.bonusEspecialAtivo === 'boolean') {
+        bonusEspecialAtivo = usuario.bonusEspecialAtivo;
+        if (bonusCheckbox) {
+          bonusCheckbox.checked = bonusEspecialAtivo;
+          window.bonusEspecialAtivo = bonusCheckbox.checked;
+        }
+      }
+
+      // ---------- Tarefas com limite ativo ----------
+      if (Array.isArray(usuario.tarefasBloqueadas)) {
+        tarefasBloqueadas = usuario.tarefasBloqueadas;
+        console.log('[onUserStateChange] tarefasBloqueadas =', tarefasBloqueadas);
+      } else {
+        tarefasBloqueadas = [];
+      }
+
+      if (typeof atualizarTarefasLimitadasUI === 'function') {
+        atualizarTarefasLimitadasUI();
+      }
+      if (typeof atualizarBloqueiosNoSelectTarefa === 'function') {
+        atualizarBloqueiosNoSelectTarefa();
+      }
+
+      atualizarSaldo();
+
+      // 🔥 NÃO LÊ MAIS usuario.tarefasPendentes AQUI
+    };
   };
 
   // Chamado pelo firestoreAppState.js quando a subcoleção `tarefas` muda
@@ -487,8 +517,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const agora = Date.now();
     lista.innerHTML = '';
 
-    // Remove expiradas (somente em memória/UI; o Firestore é atualizado só nas mudanças explícitas)
+    // Remove expiradas e persiste no Firestore
+    const antes = tarefasBloqueadas.length;
     tarefasBloqueadas = (tarefasBloqueadas || []).filter((t) => t.expiraEm > agora);
+
+    // se realmente removeu alguma, sincroniza com o usuário
+    if (tarefasBloqueadas.length !== antes && typeof fsAtualizarUsuario === 'function') {
+      fsAtualizarUsuario({ tarefasBloqueadas });
+    }
 
     if (tarefasBloqueadas.length === 0) {
       lista.innerHTML = '<p style="color:#aaa;">Nenhuma tarefa limitada ativa.</p>';
@@ -855,11 +891,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (stepInt > 0 && Array.isArray(tarefasBloqueadas)) {
           let changed = false;
           const now2 = Date.now();
+
           tarefasBloqueadas = (tarefasBloqueadas || [])
             .map((t) => {
               if (t.expiraEm > now2) {
+                // não mexe no próprio item de aceleração nem nos redutores
                 if (t.nome === 'ACELERAR_GLOBAL_4D_1H') return t;
                 if (/^REDUZIR_BLOQUEIO_/.test(t.nome)) return t;
+
                 const novo = Math.max(now2, t.expiraEm - stepInt);
                 if (novo !== t.expiraEm) changed = true;
                 return { ...t, expiraEm: novo };
@@ -873,6 +912,16 @@ document.addEventListener('DOMContentLoaded', () => {
               atualizarTarefasLimitadasUI();
               atualizarBloqueiosNoSelectTarefa();
             } catch {}
+
+            // 🔄 salva os novos tempos de bloqueio no Firestore
+            if (typeof fsAtualizarUsuario === 'function') {
+              const agoraPersist = Date.now();
+              // limita pra, no máximo, 1 gravação a cada 2 segundos
+              if (agoraPersist - _lastPersistTarefasBloqueadas > 2000) {
+                _lastPersistTarefasBloqueadas = agoraPersist;
+                fsAtualizarUsuario({ tarefasBloqueadas });
+              }
+            }
           }
         }
 
@@ -1188,27 +1237,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
           saldoDominadora -= custo;
           atualizarSaldo();
+
+          // 🔥 Salva o novo saldo no Firestore
+          if (typeof fsAtualizarUsuario === 'function') {
+            fsAtualizarUsuario({ saldoDominadora });
+          }
+
           adicionarHistorico('Aceleração global (− tempo cronometrado)', custo, 'gasto');
 
           startGlobalAcceleration(perSecondMs, DURACAO_MS, REDUZ_TOTAL_MS, 'ACELERAR_GLOBAL_4D_1H');
 
-          try {
-            const agora2 = Date.now();
-            const cdMs = getBloqueioMsPorTarefa('ACELERAR_GLOBAL_4D_1H');
-            if (cdMs > 0) {
-              tarefasBloqueadas.push({
-                nome: 'ACELERAR_GLOBAL_4D_1H',
-                expiraEm: agora2 + cdMs,
-              });
+          const agora2 = Date.now();
+          const cdMs = getBloqueioMsPorTarefa('ACELERAR_GLOBAL_4D_1H');
+          if (cdMs > 0) {
+            tarefasBloqueadas.push({
+              nome: 'ACELERAR_GLOBAL_4D_1H',
+              expiraEm: agora2 + cdMs,
+            });
 
-              if (typeof fsAtualizarUsuario === 'function') {
-                fsAtualizarUsuario({ tarefasBloqueadas });
-              }
-
-              atualizarTarefasLimitadasUI();
-              atualizarBloqueiosNoSelectTarefa();
+            if (typeof fsAtualizarUsuario === 'function') {
+              fsAtualizarUsuario({ tarefasBloqueadas });
             }
-          } catch {}
+
+            atualizarTarefasLimitadasUI();
+            atualizarBloqueiosNoSelectTarefa();
+          }
 
           if (selectTarefaSelect) selectTarefaSelect.value = '';
           return;
@@ -1233,6 +1286,10 @@ document.addEventListener('DOMContentLoaded', () => {
           if (saldoDominadora < valor) return alert('Saldo insuficiente!');
           saldoDominadora -= valor;
           atualizarSaldo();
+
+          if (typeof fsAtualizarUsuario === 'function') {
+            fsAtualizarUsuario({ saldoDominadora });
+          }
 
           const duracaoMs = (optSel?.dataset?.reduzDuracaoMs && parseInt(optSel.dataset.reduzDuracaoMs, 10)) || REDUTOR_DURACAO_MS[redutorId] || 60 * 1000;
 
@@ -1269,7 +1326,6 @@ document.addEventListener('DOMContentLoaded', () => {
           const expiraEm = agora + msBloqueio;
           tarefasBloqueadas.push({ nome: tarefa, expiraEm });
 
-          // Salva no Firestore
           if (typeof fsAtualizarUsuario === 'function') {
             fsAtualizarUsuario({ tarefasBloqueadas });
           }
@@ -1308,6 +1364,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         saldoDominadora -= valorFinal;
+
+        // Atualiza saldo na tela e no Firestore
+        atualizarSaldo();
+        if (typeof fsAtualizarUsuario === 'function') {
+          fsAtualizarUsuario({ saldoDominadora });
+        }
 
         adicionarHistorico(tarefa, valorFinal, 'gasto', {
           valorOriginal,
@@ -1405,6 +1467,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (valorGanhoInput) valorGanhoInput.value = '0';
         atualizarSaldo();
 
+        if (typeof fsAtualizarUsuario === 'function') {
+          fsAtualizarUsuario({ saldoDominadora });
+        }
+
         if (typeof aplicarBonusDeTarefaDuranteTimer === 'function') {
           try {
             aplicarBonusDeTarefaDuranteTimer(valor, ganhoSelecionado);
@@ -1499,6 +1565,10 @@ document.addEventListener('DOMContentLoaded', () => {
             percentual: Math.round((multBonus - 1) * 100),
           });
           atualizarSaldo();
+
+          if (typeof fsAtualizarUsuario === 'function') {
+            fsAtualizarUsuario({ saldoDominadora });
+          }
         }
 
         valorPorMinutoInput.value = 1;

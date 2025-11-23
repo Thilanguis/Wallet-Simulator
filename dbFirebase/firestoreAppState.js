@@ -15,6 +15,8 @@ const appState = {
   tarefasPendentes: [],
   tarefasBloqueadas: [],
   historico: [],
+  accelBoosts: [],
+  // debugRoleta: [],
 };
 
 // ---------- LISTENERS (onSnapshot) ----------
@@ -40,22 +42,25 @@ function initFirestoreAppState() {
     snapshot.forEach((docSnap) => {
       const data = docSnap.data() || {};
 
-      // 🔧 Normaliza para o formato antigo da app
       const tarefaStr = data.tarefa || data.titulo || '';
       const timestamp = data.timestamp || data.criadoEm || null;
 
       const t = {
         id: docSnap.id,
         ...data,
-        tarefa: tarefaStr, // garante que SEMPRE existe .tarefa
-        timestamp, // garante que SEMPRE existe .timestamp
+        tarefa: tarefaStr,
+        timestamp,
       };
 
-      if (t.status === 'bloqueada') {
+      const status = t.status || 'pendente'; // default pros antigos
+
+      if (status === 'bloqueada') {
         bloqueadas.push(t);
-      } else {
-        pendentes.push(t); // pendente, concluída, etc.
+      } else if (status === 'pendente') {
+        // só essas vão pra lista de "TAREFAS PENDENTES"
+        pendentes.push(t);
       }
+      // status "concluida" (e outros) ficam fora de pendentes
     });
 
     appState.tarefasPendentes = pendentes;
@@ -89,6 +94,41 @@ function initFirestoreAppState() {
 
     if (window.onHistoricoChange) {
       window.onHistoricoChange(lista);
+    }
+  });
+
+  // Histórico de giros da roleta (usuarios/gabriel-local/debugRoleta)
+  onSnapshot(debugRoletaCol, (snapshot) => {
+    const lista = [];
+
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data() || {};
+
+      // criadoEm é um Timestamp do Firestore
+      let criadoEmMs = 0;
+      if (data.criadoEm && typeof data.criadoEm.toMillis === 'function') {
+        criadoEmMs = data.criadoEm.toMillis();
+      } else if (data.criadoEm) {
+        criadoEmMs = new Date(data.criadoEm).getTime() || 0;
+      }
+
+      lista.push({
+        id: docSnap.id,
+        ...data,
+        criadoEmMs,
+      });
+    });
+
+    // Mais recente primeiro
+    lista.sort((a, b) => (b.criadoEmMs || 0) - (a.criadoEmMs || 0));
+
+    appState.debugRoleta = lista;
+
+    console.log('[Firestore debugRoleta] giros =', lista.length);
+
+    // callback opcional para a UI (roleta.js vai usar isso)
+    if (window.onDebugRoletaChange) {
+      window.onDebugRoletaChange(lista);
     }
   });
 
@@ -157,25 +197,57 @@ async function fsAtualizarTarefa(id, patch) {
   await updateDoc(doc(tarefasCol, String(id)), patch);
 }
 
-// roleta: atualiza campos no doc do usuário + log de giros
+// roleta: registra giro só no debugRoleta + horário no usuário (pra cooldown)
 async function fsRegistrarGiroRoleta(premio, resultadoTexto) {
   const agoraIso = new Date().toISOString();
 
   await Promise.all([
+    // mantém só a info de "último uso" no doc do usuário (se você usa pra bloquear roleta)
     setDoc(
       userRef,
       {
         roletaUltimoUso: agoraIso,
-        roletaUltimoResultadoTexto: resultadoTexto ?? null,
       },
       { merge: true }
     ),
+
+    // log completo do giro na subcoleção debugRoleta
     addDoc(debugRoletaCol, {
       premio: premio ?? null,
       resultadoTexto: resultadoTexto ?? null,
       criadoEm: serverTimestamp(),
     }),
   ]);
+}
+
+// Apagar um giro da roleta (debugRoleta)
+async function fsDeletarGiroRoleta(id) {
+  await deleteDoc(doc(debugRoletaCol, String(id)));
+}
+
+async function fsMarcarGiroRoletaConsumido(id) {
+  if (!id) return;
+  try {
+    await updateDoc(doc(debugRoletaCol, String(id)), {
+      consumidoEm: serverTimestamp(),
+    });
+  } catch (e) {
+    console.warn('[Firestore] Falha ao marcar giro da roleta como consumido:', e);
+  }
+}
+
+// Apaga todos os giros da roleta que já foram consumidos
+async function fsLimparGirosConsumidos() {
+  const q = query(debugRoletaCol, where('consumidoEm', '!=', null));
+  const snap = await getDocs(q);
+
+  const promises = [];
+  snap.forEach((docSnap) => {
+    promises.push(deleteDoc(docSnap.ref));
+  });
+
+  await Promise.all(promises);
+  console.log('[debugRoleta] Giros consumidos apagados:', promises.length);
 }
 
 // ---------- EXPOE NO WINDOW PARA OS SCRIPTS ANTIGOS ----------
@@ -189,3 +261,6 @@ window.fsCriarTarefa = fsCriarTarefa;
 window.fsAtualizarTarefa = fsAtualizarTarefa;
 window.fsRegistrarGiroRoleta = fsRegistrarGiroRoleta;
 window.fsDeletarMovimentoHistorico = fsDeletarMovimentoHistorico;
+window.fsMarcarGiroRoletaConsumido = fsMarcarGiroRoletaConsumido;
+window.fsLimparGirosConsumidos = fsLimparGirosConsumidos;
+window.fsDeletarGiroRoleta = fsDeletarGiroRoleta;

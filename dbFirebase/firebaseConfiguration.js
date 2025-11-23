@@ -1,6 +1,8 @@
-// firebaseConfiguration.js (ou o nome que você estiver usando)
+// firebaseConfiguration.js
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js';
 import { getFirestore, collection, addDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js';
+
+// resto do arquivo pode ficar exatamente como está hoje
 
 // 🔴 config que o Firebase te deu (essa parte já está certa no seu arquivo)
 const firebaseConfig = {
