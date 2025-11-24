@@ -102,6 +102,68 @@ document.addEventListener('DOMContentLoaded', () => {
     return horas * 60 * 60 * 1000;
   }
 
+  // Reduz um certo tempo (msParaReduzir) em TODAS as tarefas bloqueadas
+  // exceto:
+  //  - nomes explícitos em excluirNomes
+  //  - todos os redutores (6h, 12h, 1d, 3d, 4d)
+  function aplicarReducaoGlobal(msParaReduzir, { excluirNomes = [], ignorarRedutores = true } = {}) {
+    if (!msParaReduzir || !Array.isArray(tarefasBloqueadas) || !tarefasBloqueadas.length) return;
+
+    const agora = Date.now();
+    const excluir = new Set(excluirNomes);
+    let alterou = false;
+
+    tarefasBloqueadas = (tarefasBloqueadas || [])
+      .map((t) => {
+        if (!t || typeof t.expiraEm !== 'number') return t;
+
+        // não mexe em quem está explicitamente excluído
+        if (excluir.has(t.nome)) return t;
+
+        // não mexe em NENHUM redutor
+        if (ignorarRedutores) {
+          if (
+            /^REDUZIR_BLOQUEIO_/.test(t.nome) || // 6h, 12h, 1d, 3d
+            t.nome === 'ACELERAR_GLOBAL_4D_1H' // 4 dias
+          ) {
+            return t;
+          }
+        }
+
+        const restanteAntes = t.expiraEm - agora;
+        if (restanteAntes <= 0) return t;
+
+        // novo restante depois da redução
+        const restanteDepois = Math.max(0, restanteAntes - msParaReduzir);
+        const novoExpiraEm = agora + restanteDepois;
+
+        if (novoExpiraEm !== t.expiraEm) {
+          alterou = true;
+          return { ...t, expiraEm: novoExpiraEm };
+        }
+        return t;
+      })
+      // remove itens que já venceram
+      .filter((t) => t.expiraEm > agora);
+
+    if (alterou) {
+      try {
+        if (typeof fsAtualizarUsuario === 'function') {
+          fsAtualizarUsuario({ tarefasBloqueadas });
+        }
+      } catch (e) {
+        console.warn('[aplicarReducaoGlobal] falha ao salvar no Firestore:', e);
+      }
+
+      try {
+        atualizarTarefasLimitadasUI();
+        atualizarBloqueiosNoSelectTarefa();
+      } catch (e) {
+        console.warn('[aplicarReducaoGlobal] falha ao atualizar UI:', e);
+      }
+    }
+  }
+
   function getRedutorIdFromOption(opt) {
     const h = parseInt(opt?.dataset?.reduzHoras || '0', 10);
     return REDUTOR_IDS_BY_HOURS[h] || null;
@@ -517,14 +579,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const agora = Date.now();
     lista.innerHTML = '';
 
-    // Remove expiradas e persiste no Firestore
-    const antes = tarefasBloqueadas.length;
+    // Aqui só limpamos para a UI – quem persiste é o clock / compra / criação
     tarefasBloqueadas = (tarefasBloqueadas || []).filter((t) => t.expiraEm > agora);
-
-    // se realmente removeu alguma, sincroniza com o usuário
-    if (tarefasBloqueadas.length !== antes && typeof fsAtualizarUsuario === 'function') {
-      fsAtualizarUsuario({ tarefasBloqueadas });
-    }
 
     if (tarefasBloqueadas.length === 0) {
       lista.innerHTML = '<p style="color:#aaa;">Nenhuma tarefa limitada ativa.</p>';
@@ -720,15 +776,33 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     if (expirados.length) {
+      let mudou = false;
+
       try {
         if (Array.isArray(tarefasBloqueadas)) {
           const now = Date.now();
           const nomes = new Set(expirados.map((w) => w.getAttribute('data-nome')).filter(Boolean));
-          const before = tarefasBloqueadas.length;
-          tarefasBloqueadas = tarefasBloqueadas.filter((t) => !(nomes.has(t.nome) || t.expiraEm <= now));
-        }
-      } catch {}
 
+          const antes = tarefasBloqueadas.length;
+
+          tarefasBloqueadas = tarefasBloqueadas.filter((t) => !(nomes.has(t.nome) || t.expiraEm <= now));
+
+          mudou = tarefasBloqueadas.length !== antes;
+        }
+      } catch (e) {
+        console.warn('[clock] erro ao limpar bloqueios expirados:', e);
+      }
+
+      // 🔥 aqui é onde realmente salvamos a remoção no Firestore
+      if (mudou && typeof fsAtualizarUsuario === 'function') {
+        try {
+          fsAtualizarUsuario({ tarefasBloqueadas });
+        } catch (e) {
+          console.warn('[clock] falha ao persistir tarefasBloqueadas:', e);
+        }
+      }
+
+      // Atualiza visual
       expirados.forEach((wrap) => {
         const b = wrap.querySelector('b')?.outerHTML ?? '';
         wrap.innerHTML = `🔓 ${b} — <strong>liberou!</strong>`;
@@ -870,6 +944,49 @@ document.addEventListener('DOMContentLoaded', () => {
             atualizarBloqueiosNoSelectTarefa();
             updateClocksOnce();
           } catch {}
+
+          // --------------------------------------------------
+          // CORREÇÃO: Ajuste final do tempo que faltou reduzir
+          // --------------------------------------------------
+          try {
+            const nowFix = Date.now();
+            tarefasBloqueadas = (tarefasBloqueadas || []).map((t) => {
+              // ignora acelerador e redutores
+              if (t.nome === 'ACELERAR_GLOBAL_4D_1H') return t;
+              if (/^REDUZIR_BLOQUEIO_/.test(t.nome)) return t;
+
+              // se ainda falta pouco tempo (até 40min)
+              const dif = t.expiraEm - nowFix;
+              // Se faltar até 3 horas, consideramos “restinho” de arredondamento
+              if (dif > 0 && dif <= 3 * 60 * 60 * 1000) {
+                return { ...t, expiraEm: nowFix };
+              }
+              return t;
+            });
+
+            salvarTarefasBloqueadasLocal();
+          } catch (e) {
+            console.warn('[AjusteFinalAceleracao] erro:', e);
+          }
+
+          // Agora sim salva no Firestore
+          try {
+            if (typeof fsAtualizarUsuario === 'function') {
+              fsAtualizarUsuario({ tarefasBloqueadas });
+            }
+          } catch (e) {
+            console.warn('[startGlobalAcceleration] falha ao salvar fim da aceleração', e);
+          }
+
+          // ✅ AGORA SIM: grava o estado final no Firestore
+          try {
+            if (typeof fsAtualizarUsuario === 'function') {
+              fsAtualizarUsuario({ tarefasBloqueadas });
+            }
+          } catch (e) {
+            console.warn('[startGlobalAcceleration] falha ao salvar fim da aceleração', e);
+          }
+
           return;
         }
 
@@ -895,8 +1012,9 @@ document.addEventListener('DOMContentLoaded', () => {
           tarefasBloqueadas = (tarefasBloqueadas || [])
             .map((t) => {
               if (t.expiraEm > now2) {
-                // não mexe no próprio item de aceleração nem nos redutores
+                // NÃO mexe no próprio acelerador global
                 if (t.nome === 'ACELERAR_GLOBAL_4D_1H') return t;
+                // NÃO mexe nos próprios redutores (6h, 12h, 1d, 3d)
                 if (/^REDUZIR_BLOQUEIO_/.test(t.nome)) return t;
 
                 const novo = Math.max(now2, t.expiraEm - stepInt);
@@ -912,16 +1030,7 @@ document.addEventListener('DOMContentLoaded', () => {
               atualizarTarefasLimitadasUI();
               atualizarBloqueiosNoSelectTarefa();
             } catch {}
-
-            // 🔄 salva os novos tempos de bloqueio no Firestore
-            if (typeof fsAtualizarUsuario === 'function') {
-              const agoraPersist = Date.now();
-              // limita pra, no máximo, 1 gravação a cada 2 segundos
-              if (agoraPersist - _lastPersistTarefasBloqueadas > 2000) {
-                _lastPersistTarefasBloqueadas = agoraPersist;
-                fsAtualizarUsuario({ tarefasBloqueadas });
-              }
-            }
+            // Aqui a gente NÃO salva ainda no Firestore.
           }
         }
 
@@ -993,17 +1102,23 @@ document.addEventListener('DOMContentLoaded', () => {
         if (stepInt > 0 && Array.isArray(tarefasBloqueadas)) {
           let changed = false;
           const now2 = Date.now();
+
           tarefasBloqueadas = (tarefasBloqueadas || [])
             .map((t) => {
               if (t.expiraEm > now2) {
+                // não mexe no próprio item de aceleração
                 if (t.nome === 'ACELERAR_GLOBAL_4D_1H') return t;
+
+                // ❌ não acelera nenhum redutor
                 if (/^REDUZIR_BLOQUEIO_/.test(t.nome)) return t;
+
                 const novo = Math.max(now2, t.expiraEm - stepInt);
                 if (novo !== t.expiraEm) changed = true;
                 return { ...t, expiraEm: novo };
               }
               return t;
             })
+
             .filter((t) => t.expiraEm > now2);
 
           if (changed) {
@@ -1011,6 +1126,15 @@ document.addEventListener('DOMContentLoaded', () => {
               atualizarTarefasLimitadasUI();
               atualizarBloqueiosNoSelectTarefa();
             } catch {}
+
+            // ✅ grava no Firestore no máx. a cada 2s
+            if (typeof fsAtualizarUsuario === 'function') {
+              const agoraPersist = Date.now();
+              if (agoraPersist - _lastPersistTarefasBloqueadas > 2000) {
+                _lastPersistTarefasBloqueadas = agoraPersist;
+                fsAtualizarUsuario({ tarefasBloqueadas });
+              }
+            }
           }
         }
 
@@ -1232,19 +1356,19 @@ document.addEventListener('DOMContentLoaded', () => {
           if (saldoDominadora < custo) return alert('Saldo insuficiente!');
 
           const REDUZ_TOTAL_MS = 4 * 24 * 60 * 60 * 1000; // 4 dias
-          const DURACAO_MS = 1 * 60 * 1000; // 5 minutos
+          const DURACAO_MS = 1 * 60 * 1000; // 1 minuto
           const perSecondMs = REDUZ_TOTAL_MS / (DURACAO_MS / 1000);
 
           saldoDominadora -= custo;
           atualizarSaldo();
 
-          // 🔥 Salva o novo saldo no Firestore
           if (typeof fsAtualizarUsuario === 'function') {
             fsAtualizarUsuario({ saldoDominadora });
           }
 
           adicionarHistorico('Aceleração global (− tempo cronometrado)', custo, 'gasto');
 
+          // ✅ volta a usar o motor cronometrado
           startGlobalAcceleration(perSecondMs, DURACAO_MS, REDUZ_TOTAL_MS, 'ACELERAR_GLOBAL_4D_1H');
 
           const agora2 = Date.now();
@@ -1269,12 +1393,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const horasReducao = optSel?.dataset?.reduzHoras ? parseInt(optSel.dataset.reduzHoras, 10) : 0;
 
-        // ===== REDUTORES: agora cronometrados =====
+        // ===== REDUTORES: cronometrados (mostram o tempo e reduzem tudo) =====
         if (horasReducao > 0) {
           const agora = Date.now();
           const redutorId = getRedutorIdFromOption(optSel) || 'REDUTOR';
           const cooldownMs = getBloqueioMsPorTarefa(redutorId);
 
+          // Checa cooldown do próprio redutor
           if (cooldownMs > 0) {
             const jaBloqueado = tarefasBloqueadas.find((t) => t.nome === redutorId && t.expiraEm > agora);
             if (jaBloqueado) {
@@ -1284,29 +1409,33 @@ document.addEventListener('DOMContentLoaded', () => {
           }
 
           if (saldoDominadora < valor) return alert('Saldo insuficiente!');
+
+          // paga pelo redutor
           saldoDominadora -= valor;
           atualizarSaldo();
-
           if (typeof fsAtualizarUsuario === 'function') {
             fsAtualizarUsuario({ saldoDominadora });
           }
 
+          // duração da animação (quanto tempo fica “comendo” os dias)
           const duracaoMs = (optSel?.dataset?.reduzDuracaoMs && parseInt(optSel.dataset.reduzDuracaoMs, 10)) || REDUTOR_DURACAO_MS[redutorId] || 60 * 1000;
 
+          // ✅ usa o motor de aceleração cronometrado
           startTimedReducer(redutorId, horasReducao, duracaoMs);
 
+          // cooldown do próprio redutor
           if (cooldownMs > 0) {
             tarefasBloqueadas.push({
               nome: redutorId,
               expiraEm: agora + cooldownMs,
             });
-
             if (typeof fsAtualizarUsuario === 'function') {
               fsAtualizarUsuario({ tarefasBloqueadas });
             }
           }
 
           adicionarHistorico(`Redução cronometrada (−${horasReducao}h em ${Math.round(duracaoMs / 1000)}s)`, valor, 'gasto');
+
           atualizarTarefasLimitadasUI();
           atualizarBloqueiosNoSelectTarefa();
           return;

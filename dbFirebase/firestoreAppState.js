@@ -250,6 +250,35 @@ async function fsLimparGirosConsumidos() {
   console.log('[debugRoleta] Giros consumidos apagados:', promises.length);
 }
 
+// Atualiza OU remove uma tarefaBloqueada pelo nome
+async function fsAtualizarTarefasBloqueadas({ nome, novoExpiraEmMs = null, remover = false }) {
+  const usuario = window.firestoreAppState?.usuario || {};
+  const listaAtual = Array.isArray(usuario.tarefasBloqueadas) ? [...usuario.tarefasBloqueadas] : [];
+
+  const idx = listaAtual.findIndex((t) => t && t.nome === nome);
+  if (idx === -1) {
+    console.warn('[fsAtualizarTarefasBloqueadas] tarefa não encontrada:', nome);
+    return;
+  }
+
+  if (remover) {
+    // remove do array
+    listaAtual.splice(idx, 1);
+  } else if (novoExpiraEmMs != null) {
+    // atualiza o expiraEm
+    listaAtual[idx] = {
+      ...listaAtual[idx],
+      expiraEm: Number(novoExpiraEmMs),
+    };
+  }
+
+  // grava array inteiro de volta no usuário
+  await setDoc(userRef, { tarefasBloqueadas: listaAtual }, { merge: true });
+}
+
+// deixa disponível pro resto da app
+window.fsAtualizarTarefasBloqueadas = fsAtualizarTarefasBloqueadas;
+
 // ---------- EXPOE NO WINDOW PARA OS SCRIPTS ANTIGOS ----------
 
 window.firestoreAppState = appState;
