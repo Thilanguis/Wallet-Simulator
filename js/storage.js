@@ -25,7 +25,7 @@ const BONUS_GANHO_MULTIPLIER = 1.15;
 /* DESCONTO em COMPRAS (-15%) — use só se quiser mesmo aplicar desconto nos gastos */
 const DESCONTO_COMPRA_MULTIPLIER = 0.85;
 
-const ELIGIBLE_TASKS = new Set(['Videogames Competitivos', 'Perfil', 'Jogos de tabuleiro com amigas', 'Buraco']);
+const ELIGIBLE_TASKS = new Set(['Videogames Competitivos', 'Perfil', 'Jogos de tabuleiro com amigas', 'Buraco', 'Sair para comer']);
 
 // Estado inicial agora vem do Firestore (ou começa zerado)
 let saldoDominadora = 0;

@@ -126,28 +126,31 @@
   const setores = [
     // ORGASMOS / MIMO / SERVIÇO
     { icon: '👙', label: 'LING', full: 'Ativar bônus lingerie hoje', cor: '#ffd27f' }, // amarelo
-    { icon: '🧼', label: 'CRAV', full: 'Tirar cravos — R$1.500', cor: '#b0ff8a' }, // verde
-    { icon: '🎬🚫🇰🇷', label: 'NO-KOR', full: 'Filme proibido 🇰🇷 — R$3.000', cor: '#8de8ff' }, // azul
+    { icon: '🧼', label: 'CRAVO', full: 'Tirar cravos — R$1.500', cor: '#b0ff8a' }, // verde
+    { icon: '🎬🚫🇰🇷', label: '', full: 'Filme proibido 🇰🇷 — R$3.000', cor: '#8de8ff' }, // azul
     { icon: '🦶', label: 'PÉS', full: 'Massagem nos pés — R$3.500', cor: '#ffb3e6' }, // rosa
 
     { icon: '☕', label: 'CAFÉ', full: 'Café na cama — R$4.000', cor: '#ffd27f' }, // amarelo
-    { icon: '🧽', label: 'LAV', full: 'Lavar/esfoliar os pés — R$4.500', cor: '#b0ff8a' }, // verde
+    { icon: '🧽', label: 'LAVAR', full: 'Lavar/esfoliar os pés — R$4.500', cor: '#b0ff8a' }, // verde
     { icon: '💆', label: 'MASS', full: 'Massagem — R$5.000', cor: '#8de8ff' }, // azul
-    { icon: '🍳', label: 'JANT', full: 'Cozinhar jantar — R$6.000', cor: '#ffb3e6' }, // rosa
+    { icon: '🍳', label: 'JANTAR', full: 'Cozinhar jantar — R$6.000', cor: '#ffb3e6' }, // rosa
 
-    { icon: '💃', label: 'SAIR', full: 'Sair com amiga — R$6.500', cor: '#ffd27f' }, // amarelo
-    { icon: '🛎️', label: 'SERV', full: 'Servir (2 tarefas) — R$6.500', cor: '#b0ff8a' }, // verde
+    { icon: '🛎️', label: 'SERVIR', full: 'Servir (2 tarefas) — R$6.500', cor: '#b0ff8a' }, // verde
     { icon: '🎬🇰🇷', label: 'K-OK', full: 'Filme 🇰🇷 permitido — R$12.250', cor: '#8de8ff' }, // azul
     { icon: '👑', label: 'DIA', full: 'Decide a agenda do dia — R$15.000', cor: '#ffb3e6' }, // rosa
 
+    { icon: '👆➡️', label: 'PEG 2x', full: 'Vale para ordenar pegar coisas 2x — R$ 2.000<', cor: '#b0ff8a' }, // verde
+    { icon: '👆➡️', label: 'PEG 3x', full: 'Vale para ordenar pegar coisas 3x — R$ 2.900<', cor: '#8de8ff' }, // azul
+    { icon: '👆➡️', label: 'PEG 5x', full: 'Vale para ordenar pegar coisas 5x — R$ 4.750<', cor: '#ffb3e6' }, // rosa
+
     { icon: '💵', label: '60', full: 'Ganha US$60 — R$25.000', cor: '#ffd27f' }, // amarelo
 
-    // REDUTORES DE TEMPO
-    { icon: '⌛', label: '-6H', full: 'Reduzir 6h — R$2.000', cor: '#b0ff8a' }, // verde
-    { icon: '⌛', label: '-12H', full: 'Reduzir 12h — R$3.500', cor: '#8de8ff' }, // azul
-    { icon: '📅', label: '-1D', full: 'Reduzir 1 dia — R$6.000', cor: '#ffb3e6' }, // rosa
-    { icon: '📅', label: '-3D', full: 'Reduzir 3 dias — R$11.000', cor: '#ffd27f' }, // amarelo
-    { icon: '📅', label: '-4D', full: 'Reduzir 4 dias — R$18.000', cor: '#b0ff8a' }, // verde
+    // // REDUTORES DE TEMPO
+    // { icon: '⌛', label: '-6H', full: 'Reduzir 6h — R$2.000', cor: '#b0ff8a' }, // verde
+    // { icon: '⌛', label: '-12H', full: 'Reduzir 12h — R$3.500', cor: '#8de8ff' }, // azul
+    // { icon: '📅', label: '-1D', full: 'Reduzir 1 dia — R$6.000', cor: '#ffb3e6' }, // rosa
+    // { icon: '📅', label: '-3D', full: 'Reduzir 3 dias — R$11.000', cor: '#ffd27f' }, // amarelo
+    // { icon: '📅', label: '-4D', full: 'Reduzir 4 dias — R$18.000', cor: '#b0ff8a' }, // verde
 
     // CASTIGO
     { icon: '😈', label: 'NADA', full: 'Nada hoje 😈', cor: '#8de8ff' }, // azul
@@ -157,23 +160,26 @@
   // chave = label do setor
   const CHANCES_POR_LABEL = {
     CRAV: 16.58, // Tirar cravos
-    '-6H': 12.44, // Reduzir 6h
+    // '-6H': 12.44, // Reduzir 6h
+    'PEG 2x': 10.67, // Vale para ordenar pegar coisas 2x
     LING: 8.29, // Ativar bônus lingerie hoje
-    'NO-KOR': 8.29, // Vale escolher filme/série 🚫🇰🇷
+    '': 8.29, // Vale escolher filme/série 🚫🇰🇷
     PÉS: 7.11, // Massagem nos pés
-    '-12H': 7.11, // Reduzir 12h
+    // '-12H': 7.11, // Reduzir 12h
     CAFÉ: 6.22, // Café da manhã na cama
+    'PEG 3x': 6.94, // Vale para ordenar pegar coisas 3x
+    'PEG 5x': 3.13, // Vale para ordenar pegar coisas 3x
     LAV: 5.53, // Lavar os pés e esfoliar
     MASS: 4.98, // Massagem
     JANT: 4.15, // Cozinhar jantar
-    '-1D': 4.15, // Reduzir 1 dia
+    // '-1D': 4.15, // Reduzir 1 dia
     NADA: 4.15, // Nada hoje 😈
     SAIR: 3.83, // Vale sair sozinha com amiga
     SERV: 3.83, // Obrigação de servir (2 tarefas)
-    '-3D': 2.26, // Reduzir 3 dias
+    // '-3D': 2.26, // Reduzir 3 dias
     'K-OK': 2.03, // Vale escolher FILME ✔️🇰🇷
     DIA: 1.66, // Ela decide toda a agenda do dia
-    '-4D': 1.38, // Reduzir 4 dias
+    // '-4D': 1.38, // Reduzir 4 dias
     60: 0.99, // Ganha 60 dólares
   };
 

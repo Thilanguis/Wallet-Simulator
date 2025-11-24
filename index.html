@@ -100,13 +100,15 @@
           <select id="selectTarefa">
             <option value="0" data-placeholder="1">-- Escolher tarefa --</option>
             <option value="1500|Tirar cravos|Aturar tudo mesmo que doa">Tirar cravos — R$ 1.500</option>
+            <option value="2000|Vale para ordenar pegar coisas 2x.|Levanta e pega/faz sem hesitar">Vale para ordenar pegar coisas 2x — R$ 2.000</option>
+            <option value="2900|Vale para ordenar pegar coisas 3x.|Levanta e pega/faz sem hesitar">Vale para ordenar pegar coisas 3x — R$ 2.900</option>
+            <option value="4750|Vale para ordenar pegar coisas 5x.|Levanta e pega/faz sem hesitar">Vale para ordenar pegar coisas 5x — R$ 4.750</option>
             <option value="3000|Vale escolher filme/série|Proibido Ásia">Vale escolher filme/série 🚫🇰🇷 — R$ 3.000</option>
             <option value="3500|Massagem nos pés|Sem creme se tiver chulé">Massagem nos pés — R$ 3.500</option>
             <option value="4000|Café da manhã na cama|Servir na cama">Café da manhã na cama — R$ 4.000</option>
             <option value="4500|Lavar os pés e esfoliar.|Ficar no chão">Lavar os pés e esfoliar — R$ 4.500</option>
             <option value="5000|Massagem|Relaxamento profundo">Massagem — R$ 5.000</option>
             <option value="6000|Cozinhar jantar|Dominado à disposição durante o jantar">Cozinhar jantar (cada amiga - R$ 500) — R$ 6.000</option>
-            <option value="6500|Vale sair sozinha com amiga|Liberdade social">Vale sair sozinha com amiga — R$ 6.500</option>
             <option value="6500|Obrigação de servir (2 tarefas)|Intensifica sensação de controle">Obrigação de servir (2 tarefas) — R$ 6.500</option>
             <option value="12250|Vale de escolha de FILME|Permitido Ásia">Vale escolher FILME ✔️🇰🇷 — R$ 12.250</option>
             <option value="15000|Ela decide toda a agenda do dia|Dominado obedece tudo">Ela decide toda a agenda do dia — R$ 15.000</option>
@@ -114,10 +116,10 @@
             <!-- Opções que reduzem o tempo dos bloqueios ativos -->
             <optgroup label="👑 Redução de Limite 👑">
               <option value="2000|REDUZIR_BLOQUEIO_6H|Aceleração ⏳ (Reduz 6h por 1mins)" data-reduz-horas="6">Reduzir 6h ⌛ — R$ 2.000</option>
-              <option value="3500|REDUZIR_BLOQUEIO_12H|Aceleração ⏳ (Reduz 12h por 1mins)" data-reduz-horas="12">Reduzir 12h ⌛ — R$ 3.500</option>
-              <option value="6000|REDUZIR_BLOQUEIO_1D|Aceleração ⏳ (Reduz 1d por 1mins)" data-reduz-horas="24">Reduzir 1 dia ⌛ — R$ 6.000</option>
-              <option value="11000|REDUZIR_BLOQUEIO_3D|Aceleração ⏳ (Reduz 3d por 1mins)" data-reduz-horas="72">Reduzir 3 dias ⌛ — R$ 11.000</option>
-              <option value="18000|ACELERAR_GLOBAL_4D_1H|Aceleração ⏳ (Reduz 4d por 1mins)">Reduzir 4 dias ⌛ — R$ 18.000</option>
+              <option value="3200|REDUZIR_BLOQUEIO_12H|Aceleração ⏳ (Reduz 12h por 1mins)" data-reduz-horas="12">Reduzir 12h ⌛ — R$ 3.200</option>
+              <option value="4000|REDUZIR_BLOQUEIO_1D|Aceleração ⏳ (Reduz 1d por 1mins)" data-reduz-horas="24">Reduzir 1 dia ⌛ — R$ 4.000</option>
+              <option value="5500|REDUZIR_BLOQUEIO_3D|Aceleração ⏳ (Reduz 3d por 1mins)" data-reduz-horas="72">Reduzir 3 dias ⌛ — R$ 5.500</option>
+              <option value="7000|ACELERAR_GLOBAL_4D_1H|Aceleração ⏳ (Reduz 4d por 1mins)">Reduzir 4 dias ⌛ — R$ 7.000</option>
             </optgroup>
           </select>
 
@@ -147,6 +149,7 @@
             <option value="Buraco">Buraco 💲</option>
             <option value="Perfil">Perfil 💲</option>
             <option value="Jogos de tabuleiro com amigas">Jogos de tabuleiro com amigas 💲</option>
+            <option value="Sair para comer">Sair para comer (+ R$ 1.000,00 Cada amiga)💲</option>
             <!-- <option value="Outro">Outro (Valor editável)</option> -->
           </select>
 
@@ -164,12 +167,23 @@
               <input type="checkbox" id="chkFrancesinha" data-value="300" onchange="calcularValorGanho()" />
               Francesinha (+ R$ 300)
             </label>
+            <label>
+              <input type="checkbox" id="_semBanho" data-value="150" onchange="calcularValorGanho()" />
+              24H sem banho (+ R$ 150)
+            </label>
           </div>
 
           <div id="comCatarro" class="checkbox-group" style="display: none">
             <label>
               <input type="checkbox" id="chkCatarro" data-value="500" onchange="calcularValorGanho()" />
               Cuspe com Catarro (+ R$ 500)
+            </label>
+          </div>
+
+          <div id="suja_Mijada" class="checkbox-group" style="display: none">
+            <label>
+              <input type="checkbox" id="sujaMijada" data-value="600" onchange="calcularValorGanho()" />
+              24H sem banho, suja e mijada (+ R$ 600)
             </label>
           </div>
 

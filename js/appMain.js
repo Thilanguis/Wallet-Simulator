@@ -79,7 +79,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const LIMITES_TAREFA_HORAS = {
     'Ela decide toda a agenda do dia': 24 * 14, // 15 dias
     'Vale de escolha de FILME': 24 * 10, // 10 dias
-    'Vale sair sozinha com amiga': 24 * 7, // 7 dias
+    'Vale para ordenar r coisas 2x': 24 * 1, // 1 dias
+    'Vale para ordenar r coisas 3x': 24 * 2, // 2 dias
+    'Vale para ordenar r coisas 5x': 24 * 3, // 3 dias
     'Ganha 60 dólares na vida real': 24 * 4, // 4 dias
     // redutores (IDs canônicos)
     REDUZIR_BLOQUEIO_6H: 6,
@@ -199,10 +201,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // -----------------------------
-  // CALLBACKS DO FIRESTORE
+  // CALLBACK DO FIRESTORE (doc do usuário)
   // -----------------------------
-
-  // Chamado pelo firestoreAppState.js quando o doc do usuário muda
   window.onUserStateChange = function (usuario) {
     usuario = usuario || {};
 
@@ -227,11 +227,53 @@ document.addEventListener('DOMContentLoaded', () => {
       tarefasBloqueadas = usuario.tarefasBloqueadas;
       console.log('[onUserStateChange] tarefasBloqueadas =', tarefasBloqueadas);
     } else {
-      // se não tiver no Firestore, começa vazio
       tarefasBloqueadas = [];
     }
 
-    // Atualiza a UI das tarefas com limite
+    // ---------- TIMER: espelho do Firestore ----------
+    // Se ESTE cliente NÃO estiver rodando o timer, ele é só "espectador"
+    if (!timerEmSessao) {
+      console.log('[onUserStateChange] timer vindo do Firestore', {
+        timerTempoSegundos: usuario.timerTempoSegundos,
+        timerValorPorMinuto: usuario.timerValorPorMinuto,
+        timerValorAtual: usuario.timerValorAtual,
+      });
+
+      // Tempo (00:MM:SS)
+      if (typeof usuario.timerTempoSegundos === 'number') {
+        const segundos = usuario.timerTempoSegundos;
+        const min = String(Math.floor(segundos / 60)).padStart(2, '0');
+        const sec = String(segundos % 60).padStart(2, '0');
+
+        const tempoEl = document.getElementById('tempoDisplay');
+        if (tempoEl) {
+          tempoEl.textContent = `${min}:${sec}`;
+        }
+      }
+
+      // Valor por minuto
+      if (typeof usuario.timerValorPorMinuto === 'number') {
+        const inputVPM = document.getElementById('valorPorMinuto');
+        if (inputVPM) {
+          // input type="number" espera PONTO, não vírgula
+          inputVPM.value = usuario.timerValorPorMinuto.toFixed(2);
+        }
+      }
+
+      // Valor atual (linha verde)
+      if (typeof usuario.timerValorAtual === 'number') {
+        const elValor = document.getElementById('valorAcumuladoDisplay');
+        if (elValor) {
+          if (typeof formatBR === 'function') {
+            elValor.textContent = formatBR(usuario.timerValorAtual);
+          } else {
+            elValor.textContent = 'R$ ' + Number(usuario.timerValorAtual).toFixed(2).replace('.', ',');
+          }
+        }
+      }
+    }
+
+    // ---------- Atualiza UI de tarefas ----------
     if (typeof atualizarTarefasLimitadasUI === 'function') {
       atualizarTarefasLimitadasUI();
     }
@@ -240,45 +282,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     atualizarSaldo();
-
-    window.onUserStateChange = function (usuario) {
-      usuario = usuario || {};
-
-      // ---------- Saldo ----------
-      if (typeof usuario.saldoDominadora === 'number') {
-        saldoDominadora = usuario.saldoDominadora;
-      } else if (typeof saldoDominadora !== 'number') {
-        saldoDominadora = 0;
-      }
-
-      // ---------- Bônus especial ----------
-      if (typeof usuario.bonusEspecialAtivo === 'boolean') {
-        bonusEspecialAtivo = usuario.bonusEspecialAtivo;
-        if (bonusCheckbox) {
-          bonusCheckbox.checked = bonusEspecialAtivo;
-          window.bonusEspecialAtivo = bonusCheckbox.checked;
-        }
-      }
-
-      // ---------- Tarefas com limite ativo ----------
-      if (Array.isArray(usuario.tarefasBloqueadas)) {
-        tarefasBloqueadas = usuario.tarefasBloqueadas;
-        console.log('[onUserStateChange] tarefasBloqueadas =', tarefasBloqueadas);
-      } else {
-        tarefasBloqueadas = [];
-      }
-
-      if (typeof atualizarTarefasLimitadasUI === 'function') {
-        atualizarTarefasLimitadasUI();
-      }
-      if (typeof atualizarBloqueiosNoSelectTarefa === 'function') {
-        atualizarBloqueiosNoSelectTarefa();
-      }
-
-      atualizarSaldo();
-
-      // 🔥 NÃO LÊ MAIS usuario.tarefasPendentes AQUI
-    };
   };
 
   // Chamado pelo firestoreAppState.js quando a subcoleção `tarefas` muda
@@ -1352,7 +1355,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // ⚡ Aceleração Global
         if (/ACELERAR_GLOBAL_4D_1H/.test((selectTarefaSelect && selectTarefaSelect.value) || '')) {
-          const custo = 18000;
+          const custo = 7000;
           if (saldoDominadora < custo) return alert('Saldo insuficiente!');
 
           const REDUZ_TOTAL_MS = 4 * 24 * 60 * 60 * 1000; // 4 dias
@@ -1558,12 +1561,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const chkChule = document.getElementById('chkChule');
             const chkFrancesinha = document.getElementById('chkFrancesinha');
+            const _semBanho = document.getElementById('_semBanho');
 
             if (chkChule && chkChule.checked) {
               extras.push('pés com chulé');
             }
             if (chkFrancesinha && chkFrancesinha.checked) {
               extras.push('francesinha');
+            }
+            if (_semBanho && _semBanho.checked) {
+              extras.push('24H sem banho');
             }
 
             if (extras.length) {
@@ -1572,6 +1579,44 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         } catch (e) {
           console.warn('Falha ao montar descrição detalhada de Pés na cara:', e);
+        }
+
+        // 🔥 Extra: detalhar "catarro" com os checkboxes marcados
+        try {
+          if (ganhoSelecionado && ganhoSelecionado.includes('Cuspir na cara')) {
+            const extras = [];
+
+            const chkCatarro = document.getElementById('chkCatarro');
+
+            if (chkCatarro && chkCatarro.checked) {
+              extras.push('catarro');
+            }
+
+            if (extras.length) {
+              tarefa = `${ganhoSelecionado} — ${extras.join(' + ')}`;
+            }
+          }
+        } catch (e) {
+          console.warn('Falha ao montar descrição detalhada catarro:', e);
+        }
+
+        // 🔥 Extra: detalhar "Suja e mijada" com os checkboxes marcados
+        try {
+          if (ganhoSelecionado && ganhoSelecionado.includes('Chupar buceta')) {
+            const extras = [];
+
+            const sujaMijada = document.getElementById('sujaMijada');
+
+            if (sujaMijada && sujaMijada.checked) {
+              extras.push('24H sem banho, suja e mijada');
+            }
+
+            if (extras.length) {
+              tarefa = `${ganhoSelecionado} — ${extras.join(' + ')}`;
+            }
+          }
+        } catch (e) {
+          console.warn('Falha ao montar descrição detalhada Suja e mijada:', e);
         }
 
         const multBonus = typeof getBonusEspecialMultiplier === 'function' ? getBonusEspecialMultiplier() : 1;
@@ -1644,8 +1689,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (typeof requestWakeLock === 'function') requestWakeLock();
 
-        const INCREMENT_INTERVAL_SECONDS = 3;
-        const INCREMENT_VALUE = 0.33;
+        const INCREMENT_INTERVAL_SECONDS = 5;
+        const INCREMENT_VALUE = 0.11;
 
         timerInterval = setInterval(() => {
           tempoSegundos = (typeof tempoSegundos === 'number' ? tempoSegundos : 0) + 1;
@@ -1707,6 +1752,16 @@ document.addEventListener('DOMContentLoaded', () => {
         timerEmSessao = false;
         sessionHasEligibleTask = false;
         tempoSegundos = 0;
+
+        // Zera o timer no Firestore também
+        if (typeof fsAtualizarUsuario === 'function') {
+          fsAtualizarUsuario({
+            timerTempoSegundos: 0,
+            timerValorAtual: 0,
+            timerValorPorMinuto: 1, // ou 0 se você preferir zerado
+            timerAtivo: false,
+          });
+        }
 
         if (typeof atualizarDisplay === 'function') atualizarDisplay();
         btnPlayPause.textContent = '▶️ Começar';

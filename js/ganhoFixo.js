@@ -7,6 +7,7 @@ function calcularValorGanho() {
   const valorGanhoInput = document.getElementById('valorGanho');
   const pesNaCaraOptions = document.getElementById('pesNaCaraOptions');
   const comCatarro = document.getElementById('comCatarro');
+  const suja_Mijada = document.getElementById('suja_Mijada');
   const quantidadeInput = document.getElementById('quantidadeMultiplicador');
   const labelQuantidade = document.getElementById('labelQuantidadeMultiplicador');
   const valorSelecionado = selectGanho.value;
@@ -16,6 +17,7 @@ function calcularValorGanho() {
   quantidadeInput.style.display = 'none';
   labelQuantidade.style.display = 'none';
   comCatarro.style.display = 'none';
+  suja_Mijada.style.display = 'none';
   valorGanhoInput.readOnly = false;
   // reset do campo valor para evitar confusões
   valorGanhoInput.value = '';
@@ -29,6 +31,7 @@ function calcularValorGanho() {
       pesNaCaraOptions.style.display = 'block';
       if (document.getElementById('chkChule').checked) valorBase += parseInt(document.getElementById('chkChule').dataset.value);
       if (document.getElementById('chkFrancesinha').checked) valorBase += parseInt(document.getElementById('chkFrancesinha').dataset.value);
+      if (document.getElementById('_semBanho').checked) valorBase += parseInt(document.getElementById('_semBanho').dataset.value);
       valorGanhoInput.value = valorBase;
       return;
     }
@@ -48,7 +51,14 @@ function calcularValorGanho() {
 
     if (valorSelecionado === 'Cuspir na cara') {
       comCatarro.style.display = 'block';
-      if (document.getElementById('chkCatarro').checked) valorBase += parseInt(document.getElementById('chkChule').dataset.value);
+      if (document.getElementById('chkCatarro').checked) valorBase += parseInt(document.getElementById('chkCatarro').dataset.value);
+      valorGanhoInput.value = valorBase;
+      return;
+    }
+
+    if (valorSelecionado === 'Chupar buceta') {
+      suja_Mijada.style.display = 'block';
+      if (document.getElementById('sujaMijada').checked) valorBase += parseInt(document.getElementById('sujaMijada').dataset.value);
       valorGanhoInput.value = valorBase;
       return;
     }

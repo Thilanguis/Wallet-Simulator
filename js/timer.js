@@ -14,6 +14,31 @@ let baseMultiplicadorSessao = 1;
 
 let sessionHasEligibleTask = false;
 
+// Evita flood: no máximo 3 escrita a cada 5s
+// --- SYNC DO TIMER COM FIRESTORE ---
+let lastTimerSync = 0;
+
+function syncTimerToFirestore() {
+  if (typeof window.fsAtualizarUsuario !== 'function') return;
+
+  const agora = Date.now();
+  // agora só escreve a cada 5 segundos
+  if (agora - lastTimerSync < 5000) return;
+  lastTimerSync = agora;
+
+  const valorPorMinutoInput = document.getElementById('valorPorMinuto');
+  const valorPorMinuto = valorPorMinutoInput ? parseFloat(valorPorMinutoInput.value.replace(',', '.')) || 0 : 0;
+
+  const valorTotal = calcularValorTotal(tempoSegundos, valorPorMinuto);
+
+  window.fsAtualizarUsuario({
+    timerTempoSegundos: tempoSegundos,
+    timerValorAtual: valorTotal,
+    timerValorPorMinuto: valorPorMinuto,
+    timerAtivo: timerEmSessao,
+  });
+}
+
 function ensureToastContainer() {
   let c = document.getElementById('toastContainer');
   if (!c) {
@@ -114,14 +139,30 @@ function aplicarBonusDeTarefaDuranteTimer(valorTarefa, tarefaName) {
 }
 
 function calcularValorTotal(segundos, valorPorMinuto) {
-  if (segundos === 0 || valorPorMinuto === 0) return 0;
-  return Math.round(segundos * (valorPorMinuto / 60));
+  if (!segundos || !valorPorMinuto) return 0;
+
+  const minutos = segundos / 60;
+  const bruto = minutos * valorPorMinuto;
+
+  // arredonda para 2 casas
+  return Math.round(bruto * 100) / 100;
 }
 
 function atualizarValorAcumulado() {
-  const valorPorMinuto = parseFloat(document.getElementById('valorPorMinuto').value) || 0;
-  const valorTotal = calcularValorTotal(tempoSegundos, valorPorMinuto);
-  document.getElementById('valorAcumuladoDisplay').textContent = formatBR(valorTotal);
+  const input = document.getElementById('valorPorMinuto');
+  if (!input) return;
+
+  const vpm = parseFloat(input.value.replace(',', '.')) || 0;
+  const valorTotal = calcularValorTotal(tempoSegundos, vpm);
+
+  const elValor = document.getElementById('valorAcumuladoDisplay');
+  if (!elValor) return;
+
+  if (typeof formatBR === 'function') {
+    elValor.textContent = formatBR(valorTotal);
+  } else {
+    elValor.textContent = 'R$ ' + valorTotal.toFixed(2).replace('.', ',');
+  }
 }
 
 const requestWakeLock = async () => {
@@ -147,6 +188,16 @@ const releaseWakeLock = async () => {
 function atualizarDisplay() {
   const min = String(Math.floor(tempoSegundos / 60)).padStart(2, '0');
   const sec = String(tempoSegundos % 60).padStart(2, '0');
-  document.getElementById('tempoDisplay').textContent = `${min}:${sec}`;
+  const elTempo = document.getElementById('tempoDisplay');
+
+  if (elTempo) {
+    elTempo.textContent = `${min}:${sec}`;
+  }
+
   atualizarValorAcumulado();
+
+  // Só sincroniza se este cliente estiver com o timer em sessão
+  if (timerEmSessao) {
+    syncTimerToFirestore();
+  }
 }
