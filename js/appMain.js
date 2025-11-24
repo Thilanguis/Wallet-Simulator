@@ -1689,8 +1689,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (typeof requestWakeLock === 'function') requestWakeLock();
 
-        const INCREMENT_INTERVAL_SECONDS = 5;
-        const INCREMENT_VALUE = 0.11;
+        const INCREMENT_INTERVAL_SECONDS = 3;
+        const INCREMENT_VALUE = 0.21;
 
         timerInterval = setInterval(() => {
           tempoSegundos = (typeof tempoSegundos === 'number' ? tempoSegundos : 0) + 1;

@@ -1,6 +1,6 @@
 // service-worker.js
 // Sempre que mudar JS/CSS/HTML, sobe o número aqui:
-const CACHE_NAME = 'simulador-cache-25';
+const CACHE_NAME = 'simulador-cache-26';
 
 const urlsToCache = [
   '.',
