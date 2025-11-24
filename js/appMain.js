@@ -79,9 +79,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const LIMITES_TAREFA_HORAS = {
     'Ela decide toda a agenda do dia': 24 * 14, // 15 dias
     'Vale de escolha de FILME': 24 * 10, // 10 dias
-    'Vale para ordenar r coisas 2x': 24 * 1, // 1 dias
-    'Vale para ordenar r coisas 3x': 24 * 2, // 2 dias
-    'Vale para ordenar r coisas 5x': 24 * 3, // 3 dias
+    'Vale para ordenar pegar coisas 2x': 24 * 1, // 1 dias
+    'Vale para ordenar pegar coisas 3x': 24 * 2, // 2 dias
+    'Vale para ordenar pegar coisas 5x': 24 * 3, // 3 dias
     'Ganha 60 dólares na vida real': 24 * 4, // 4 dias
     // redutores (IDs canônicos)
     REDUZIR_BLOQUEIO_6H: 6,
