@@ -41,33 +41,34 @@ function renderTarefasPendentes() {
 
     checkbox.addEventListener('change', function () {
       if (this.checked) {
-        // 1. INICIA A ANIMAÇÃO CSS (A classe 'tarefa-concluida' começa o desaparecimento)
+        // 1) animação de sumir
         div.classList.add('tarefa-concluida');
 
-        // 2. Espera o tempo da animação antes de mandar pro Firestore
+        // 2) depois da animação, apaga do Firestore
         setTimeout(async () => {
           try {
-            if (typeof fsAtualizarTarefa === 'function') {
-              // Marca a tarefa como concluída no Firestore.
-              // O onSnapshot lá no firestoreAppState.js vai disparar
-              // e chamar window.onTarefasChange, que atualiza a lista e re-renderiza.
+            if (typeof fsDeletarTarefa === 'function') {
+              // deleta definitivamente do banco
+              await fsDeletarTarefa(tarefa.id);
+            } else if (typeof fsAtualizarTarefa === 'function') {
+              // fallback: se não tiver delete, pelo menos marca como concluída
               await fsAtualizarTarefa(tarefa.id, {
                 status: 'concluida',
                 concluidaEm: new Date().toISOString(),
               });
             } else {
-              console.warn('fsAtualizarTarefa não está disponível no window.');
+              console.warn('Nenhuma função de remoção de tarefa disponível.');
             }
 
-            // Opcionalmente, remoção otimista da DIV (o snapshot vai redesenhar de qualquer forma)
+            // remove da UI (snapshot vai redesenhar de qualquer jeito)
             div.remove();
           } catch (erro) {
-            console.error('Erro ao atualizar tarefa no Firestore:', erro);
-            // volta visualmente, se deu ruim
+            console.error('Erro ao apagar tarefa no Firestore:', erro);
+            // volta visualmente
             this.checked = false;
             div.classList.remove('tarefa-concluida');
           }
-        }, 850); // tempo da animação
+        }, 2800);
       }
     });
 

@@ -1,31 +1,26 @@
-// service-worker.js
 // Sempre que mudar JS/CSS/HTML, sobe o número aqui:
-const CACHE_NAME = 'simulador-cache-26';
+const CACHE_NAME = 'simulador-cache-27';
 
 const urlsToCache = [
   '.',
   'index.html',
 
-  // --- CSS ---
+  // CSS
   'css/app.css',
   'css/bonusAtivoGPT.css',
   'css/bonusAtivoGPTold.css',
   'css/luzLateral.css',
 
-  // --- Firebase / Firestore ---
+  // Firebase / Firestore
   'dbFirebase/firebaseConfiguration.js',
   'dbFirebase/firestoreAppState.js',
-  'dbFirebase/firebaseStorageBridge.js',
   'dbFirebase/dbWallet.js',
 
-  // --- JS principal ---
+  // JS
   'js/appMain.js',
   'js/utils.js',
   'js/timer.js',
-  'js/storage.js', // legado (ok manter por enquanto)
-  'js/app.js', // se estiver sendo usado no index.html
-
-  // --- Efeitos / bônus / tarefas ---
+  'js/storage.js',
   'js/bonusEspecial.js',
   'js/ganhoFixo.js',
   'js/tarefasPendentes.js',
@@ -35,9 +30,8 @@ const urlsToCache = [
   'js/luzLateral.js',
   'js/splashAmimacao.js',
   'js/roleta.js',
-  'js/serviceWorker.js', // script de registro do SW (se existir)
 
-  // --- PWA / ícones ---
+  // PWA
   'manifest.json',
   'icon-192.png',
   'icon-512.jpg',

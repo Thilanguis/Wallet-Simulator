@@ -197,6 +197,11 @@ async function fsAtualizarTarefa(id, patch) {
   await updateDoc(doc(tarefasCol, String(id)), patch);
 }
 
+// 🧹 NOVO: deletar tarefa definitivamente
+async function fsDeletarTarefa(id) {
+  await deleteDoc(doc(tarefasCol, String(id)));
+}
+
 // roleta: registra giro só no debugRoleta + horário no usuário (pra cooldown)
 async function fsRegistrarGiroRoleta(premio, resultadoTexto) {
   const agoraIso = new Date().toISOString();
@@ -288,6 +293,7 @@ window.fsAtualizarUsuario = fsAtualizarUsuario;
 window.fsAdicionarMovimentoHistorico = fsAdicionarMovimentoHistorico;
 window.fsCriarTarefa = fsCriarTarefa;
 window.fsAtualizarTarefa = fsAtualizarTarefa;
+window.fsDeletarTarefa = fsDeletarTarefa;
 window.fsRegistrarGiroRoleta = fsRegistrarGiroRoleta;
 window.fsDeletarMovimentoHistorico = fsDeletarMovimentoHistorico;
 window.fsMarcarGiroRoletaConsumido = fsMarcarGiroRoletaConsumido;

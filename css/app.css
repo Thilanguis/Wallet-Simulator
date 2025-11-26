@@ -938,36 +938,64 @@ button:hover {
   }
 }
 
-/* Efeito de DESAPARECIMENTO LUXUOSO para Tarefa Concluída */
-.tarefa-concluida {
-  /* Define a animação: 800ms de duração, nome 'taskFadeOut' */
-  animation: taskFadeOut 800ms ease-in-out forwards;
-  /* Adiciona uma borda sutilmente vermelha/púrpura ao redor da div */
-  border: 1px solid rgba(139, 0, 0, 0.6); /* Vermelho escuro quase vinho */
-  border-radius: 8px;
-  padding: 8px;
-  margin: 5px 0;
+#tarefasPendentes .tarefa-item {
+  display: flex;
+  /* Alinha os itens ao topo do contêiner para que o checkbox não se desloque */
+  align-items: flex-start;
+  padding: 12px 0;
+  border-bottom: 1px solid #222;
+  font-size: 16px;
+
+  /* Agora também anima o sumiço bem devagar */
+  transition: background-color 0.3s, opacity 2500ms linear; /* 2.5 segundos sumindo */
 }
 
-@keyframes taskFadeOut {
-  0% {
-    opacity: 1;
-    /* Dá um leve pulso de crescimento (como uma explosão suave) */
-    transform: scale(1);
-  }
-  10% {
-    /* Brilho momentâneo: simula a energia sendo liberada/paga */
-    box-shadow: 0 0 10px rgba(255, 0, 0, 0.8);
-  }
-  100% {
-    opacity: 0;
-    /* Diminui de tamanho para desaparecer suavemente */
-    transform: scale(0.8);
-    height: 0;
-    padding: 0;
-    margin: 0;
-    /* O overflow: hidden no container garante que o texto não "vaze" */
-  }
+/* Tarefa concluída – some devagar, sem borda nenhuma */
+#tarefasPendentes .tarefa-item {
+  display: flex;
+  align-items: flex-start;
+  padding: 12px 0;
+  border-bottom: 1px solid #222;
+  font-size: 16px;
+  transition: background-color 0.3s, opacity 2500ms linear; /* sumiço bem devagar */
+}
+
+/* último item sem linha embaixo */
+#tarefasPendentes .tarefa-item:last-child {
+  border-bottom: none;
+}
+
+/* quando marca como concluída: só fade */
+#tarefasPendentes .tarefa-item.tarefa-concluida {
+  opacity: 0;
+  border: none;
+  box-shadow: none;
+}
+
+/* risca o texto e apaga um pouco a cor */
+#tarefasPendentes .tarefa-item.tarefa-concluida .tarefa-descricao {
+  text-decoration: line-through;
+  color: #777;
+}
+
+#tarefasPendentes .tarefa-item.tarefa-concluida .tarefa-valor {
+  color: #aa6a5a;
+}
+
+/* Tarefa concluída – só fade devagar, sem andar de lado */
+#tarefasPendentes .tarefa-item.tarefa-concluida {
+  opacity: 0; /* o transition lá em cima cuida do tempo */
+}
+
+/* Risca o texto quando a tarefa é concluída */
+#tarefasPendentes .tarefa-item.tarefa-concluida .tarefa-descricao {
+  text-decoration: line-through;
+  color: #777;
+}
+
+/* Valor um pouco mais apagado também (opcional) */
+#tarefasPendentes .tarefa-item.tarefa-concluida .tarefa-valor {
+  color: #aa6a5a;
 }
 
 #simuladorTitulo {

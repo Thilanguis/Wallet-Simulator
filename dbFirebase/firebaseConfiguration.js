@@ -6,7 +6,7 @@ import { getFirestore, collection, addDoc, serverTimestamp } from 'https://www.g
 
 // 🔴 config que o Firebase te deu (essa parte já está certa no seu arquivo)
 const firebaseConfig = {
-  apiKey: '...',
+  apiKey: 'AIzaSyDYR6gBdqiQWGBcbU0URo4zn2HtdJNyaKw',
   authDomain: 'walletsumilator.firebaseapp.com',
   projectId: 'walletsumilator',
   storageBucket: 'walletsumilator.firebasestorage.app',

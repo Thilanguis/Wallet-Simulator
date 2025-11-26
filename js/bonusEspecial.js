@@ -31,12 +31,70 @@
     return isNaN(num) ? 0 : num;
   }
 
+  function renderBonusVMP_tarefa() {
+    var mult = typeof window.BONUS_ESPECIAL_MULTIPLIER === 'number' ? window.BONUS_ESPECIAL_MULTIPLIER : 1;
+    var badge = document.getElementById('bonusEspecialInlineVPM');
+    var active = !!window.bonusEspecialAtivo;
+    var valorVPM = 'VPM +0,21 / 3s';
+
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.id = 'bonusEspecialInlineVPM';
+      badge.style.cssText = [
+        'margin-left:8px',
+        'margin-bottom:5px',
+        'margin-top:5px',
+        'font-size:12px',
+        'padding:3px 8px',
+        'border-radius:999px',
+        'background:#471147',
+        'color:#bbf7d0',
+        'display:flex',
+        'width:fit-content',
+        'gap:6px',
+        'align-items:center',
+        'vertical-align:middle',
+        'box-shadow:0 1px 3px rgba(0,0,0,.15)',
+      ].join(';');
+
+      var bolt = document.createElement('span');
+      bolt.textContent = '💲';
+      bolt.style.fontSize = '14px';
+
+      var text = document.createElement('span');
+      text.id = 'bonusEspecialInlineVPMText';
+
+      badge.appendChild(bolt);
+      badge.appendChild(text);
+
+      var label = document.querySelector('label[for="selectGanho"]');
+      if (label && label.parentElement) {
+        label.parentElement.insertBefore(badge, label.nextSibling);
+      } else {
+        var select = document.getElementById('selectGanho');
+        if (select && select.parentElement) {
+          select.parentElement.insertBefore(badge, select.nextSibling);
+        } else {
+          document.body.appendChild(badge);
+        }
+      }
+    }
+
+    var textNode = document.getElementById('bonusEspecialInlineVPMText');
+    if (textNode) {
+      // if (active) {
+      textNode.textContent = valorVPM;
+    }
+    // badge.style.opacity = active ? '1' : '.5';
+  }
+
   // ----------------- Badge ao lado do "Como ganhou" -----------------
   function renderBonusEspecialInlineBadge() {
     try {
       var mult = typeof window.BONUS_ESPECIAL_MULTIPLIER === 'number' ? window.BONUS_ESPECIAL_MULTIPLIER : 1;
       var badge = document.getElementById('bonusEspecialInline');
       var active = !!window.bonusEspecialAtivo;
+      var bonus15 = '15%';
 
       if (!badge) {
         badge = document.createElement('span');
@@ -46,8 +104,8 @@
           'font-size:12px',
           'padding:3px 8px',
           'border-radius:999px',
-          'background:#0f172a',
-          'color:#fff',
+          'background:#052e16',
+          'color:#bbf7d0',
           'display:inline-flex',
           'gap:6px',
           'align-items:center',
@@ -81,9 +139,11 @@
       var textNode = document.getElementById('bonusEspecialInlineText');
       if (textNode) {
         if (active) {
-          textNode.textContent = 'Bônus x' + mult.toLocaleString('pt-BR') + ' ativo (langerie especial)';
+          // textNode.textContent = 'Bônus x' + mult.toLocaleString('pt-BR') + ' ativo (langerie especial)';
+          textNode.textContent = 'Bônus ' + bonus15 + ' ativo (langerie especial)';
         } else {
-          textNode.textContent = 'Bônus x' + mult.toLocaleString('pt-BR') + ' desligado';
+          // textNode.textContent = 'Bônus x' + mult.toLocaleString('pt-BR') + ' desligado';
+          textNode.textContent = 'Bônus ' + bonus15 + ' desligado';
         }
       }
       badge.style.opacity = active ? '1' : '.5';
@@ -111,6 +171,19 @@
           opt.dataset.originalText = opt.textContent || '';
         }
 
+        // --- Verificação do dólar para aplicar o neon ---
+        // Verifica se o texto original ou atual contém o cifrão
+        const shouldHaveNeon = opt.dataset.originalText.includes('💲') || opt.textContent.includes('💲');
+
+        if (shouldHaveNeon) {
+          // Se a opção deve piscar, adiciona a classe
+          opt.classList.add('neon-text-select');
+        } else {
+          // Se a opção não deve piscar, remove a classe
+          opt.classList.remove('neon-text-select');
+        }
+        // ------------------------------------------------
+
         if (active) {
           // adiciona o (⚡) uma vez
           if (!opt.textContent.includes('⚡')) {
@@ -132,6 +205,7 @@
       var banner = document.getElementById('bonusEspecialBanner');
       var active = !!window.bonusEspecialAtivo;
       var mult = typeof window.BONUS_ESPECIAL_MULTIPLIER === 'number' ? window.BONUS_ESPECIAL_MULTIPLIER : 1;
+      var bonus15 = '15%';
 
       if (!active) {
         if (banner) banner.remove();
@@ -167,7 +241,8 @@
 
       var textNode = document.getElementById('bonusEspecialBannerText');
       if (textNode) {
-        textNode.textContent = 'Bônus x' + mult.toLocaleString('pt-BR') + ' aplicado em todos os créditos enquanto a langerie especial estiver ativa.';
+        // textNode.textContent = 'Bônus x' + mult.toLocaleString('pt-BR') + ' aplicado em todos os créditos enquanto a langerie especial estiver ativa.';
+        textNode.textContent = 'Bônus ' + bonus15 + ' aplicado em todos os créditos enquanto a langerie especial estiver ativa.';
       }
     } catch (e) {}
   }
@@ -374,6 +449,7 @@
   // ----------------- Função principal chamada de fora -----------------
   function updateBonusEspecialUI() {
     renderBonusEspecialInlineBadge();
+    renderBonusVMP_tarefa();
     decorateSelectGanhoForBonus();
     renderBonusEspecialBanner();
     renderBonusEspecialPreviewValorGanho();
