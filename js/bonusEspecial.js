@@ -58,7 +58,7 @@
       ].join(';');
 
       var bolt = document.createElement('span');
-      bolt.textContent = '💲';
+      bolt.textContent = '💸';
       bolt.style.fontSize = '14px';
 
       var text = document.createElement('span');
@@ -170,19 +170,6 @@
         if (!opt.dataset.originalText) {
           opt.dataset.originalText = opt.textContent || '';
         }
-
-        // --- Verificação do dólar para aplicar o neon ---
-        // Verifica se o texto original ou atual contém o cifrão
-        const shouldHaveNeon = opt.dataset.originalText.includes('💲') || opt.textContent.includes('💲');
-
-        if (shouldHaveNeon) {
-          // Se a opção deve piscar, adiciona a classe
-          opt.classList.add('neon-text-select');
-        } else {
-          // Se a opção não deve piscar, remove a classe
-          opt.classList.remove('neon-text-select');
-        }
-        // ------------------------------------------------
 
         if (active) {
           // adiciona o (⚡) uma vez

@@ -8,7 +8,7 @@
   // ==========================
   // CONFIGURAÇÕES
   // ==========================
-  const COOLDOWN_MS = 3 * 24 * 60 * 60 * 1000; // 3 dias
+  const COOLDOWN_MS = 4 * 24 * 60 * 60 * 1000; // 4 dias
 
   // id do giro atualmente exibido no card "Resultado da roleta"
   let idGiroAtual = null;
@@ -175,7 +175,6 @@
     // '-1D': 4.15, // Reduzir 1 dia
     NADA: 4.15, // Nada hoje 😈
     SAIR: 3.83, // Vale sair sozinha com amiga
-    SERV: 3.83, // Obrigação de servir (2 tarefas)
     // '-3D': 2.26, // Reduzir 3 dias
     'K-OK': 2.03, // Vale escolher FILME ✔️🇰🇷
     DIA: 1.66, // Ela decide toda a agenda do dia

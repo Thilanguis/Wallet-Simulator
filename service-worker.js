@@ -1,5 +1,5 @@
 // Sempre que mudar JS/CSS/HTML, sobe o número aqui:
-const CACHE_NAME = 'simulador-cache-28';
+const CACHE_NAME = 'simulador-cache-29';
 
 const urlsToCache = [
   '.',
@@ -8,7 +8,6 @@ const urlsToCache = [
   // CSS
   'css/app.css',
   'css/bonusAtivoGPT.css',
-  'css/bonusAtivoGPTold.css',
   'css/luzLateral.css',
 
   // Firebase / Firestore
