@@ -1690,7 +1690,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (typeof requestWakeLock === 'function') requestWakeLock();
 
         const INCREMENT_INTERVAL_SECONDS = 3;
-        const INCREMENT_VALUE = 0.21;
+        const INCREMENT_VALUE = 0.11;
 
         timerInterval = setInterval(() => {
           tempoSegundos = (typeof tempoSegundos === 'number' ? tempoSegundos : 0) + 1;

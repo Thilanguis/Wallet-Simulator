@@ -35,7 +35,7 @@
     var mult = typeof window.BONUS_ESPECIAL_MULTIPLIER === 'number' ? window.BONUS_ESPECIAL_MULTIPLIER : 1;
     var badge = document.getElementById('bonusEspecialInlineVPM');
     var active = !!window.bonusEspecialAtivo;
-    var valorVPM = 'VPM +0,21 / 3s';
+    var valorVPM = 'VPM +0,11 / 3s';
 
     if (!badge) {
       badge = document.createElement('span');

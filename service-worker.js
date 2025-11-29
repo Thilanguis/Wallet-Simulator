@@ -1,5 +1,5 @@
 // Sempre que mudar JS/CSS/HTML, sobe o número aqui:
-const CACHE_NAME = 'simulador-cache-29';
+const CACHE_NAME = 'simulador-cache-30';
 
 const urlsToCache = [
   '.',
