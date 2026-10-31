@@ -20,6 +20,13 @@ function renderTarefasPendentes() {
     const count = tarefa.taskCount || (tarefa.tarefa === 'Obrigação de servir (2 tarefas)' ? 2 : 1);
     const steps = document.createElement('span');
     steps.className = 'task-steps';
+    const completion = document.createElement('span');
+    completion.className = 'task-completion';
+    const completed = () => (tarefa.completedParts || []).filter(Boolean).length;
+    const updateCompletion = () => {
+      completion.textContent = completed() + ' de ' + count + ' concluída' + (count > 1 ? 's' : '');
+    };
+    updateCompletion();
     for (let part = 0; part < count; part++) {
       const label = document.createElement('label');
       const checkbox = document.createElement('input');
@@ -33,6 +40,10 @@ function renderTarefasPendentes() {
         tarefa.completedParts = Array.from({ length: count }, (_, i) => !!tarefa.completedParts?.[i]);
         tarefa.completedParts[part] = this.checked;
         AppStorage.setItem('tarefasPendentes', JSON.stringify(tarefasPendentes));
+        updateCompletion();
+        div.classList.remove('task-step-feedback');
+        void div.offsetWidth;
+        div.classList.add('task-step-feedback');
         if (tarefa.completedParts.every(Boolean)) {
           steps.querySelectorAll('input').forEach((input) => {
             input.disabled = true;
@@ -64,15 +75,22 @@ function renderTarefasPendentes() {
 
     const spanDescricao = document.createElement('span');
     spanDescricao.className = 'tarefa-descricao';
-    spanDescricao.textContent = `${tarefa.tarefa} (${tarefa.descricao}) - Comprada em ${formatDate(tarefa.timestamp)}`;
+    const isPrize = !!tarefa.rouletteAwardId || /prêmio gratuito da roleta/.test(tarefa.descricao || '');
+    const title = document.createElement('strong');
+    title.textContent = tarefa.tarefa;
+    const detail = document.createElement('span');
+    detail.className = 'task-description-detail';
+    detail.textContent = tarefa.descricao + ' · ' + (isPrize ? 'Recebida em ' : 'Comprada em ') + formatDate(tarefa.timestamp);
+    spanDescricao.append(title, detail);
 
     const spanValor = document.createElement('span');
     spanValor.className = 'tarefa-valor';
-    spanValor.textContent = formatBR(tarefa.valor);
+    spanValor.textContent = isPrize ? 'Prêmio gratuito' : formatBR(tarefa.valor);
 
     div.appendChild(steps);
     div.appendChild(spanDescricao);
     div.appendChild(spanValor);
+    div.appendChild(completion);
     tarefasContainer.appendChild(div);
   });
 }

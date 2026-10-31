@@ -5,7 +5,7 @@ test('classic prices/gains preserved, balanced nonuniform and catalog complete',
   const a = E.defaults('classic'),
     b = E.defaults('balanced');
   assert.equal(Object.keys(a.prices).length, 17);
-  assert.equal(Object.keys(a.gains).length, 12);
+  assert.equal(Object.keys(a.gains).length, 13);
   E.config.services.forEach((s) => assert.equal(a.prices[s.id], s.classic));
   assert.ok(new Set(E.config.services.map((s) => s.balanced / s.classic)).size > 5);
   assert.deepEqual(
@@ -73,4 +73,14 @@ test('dinner quote applies guest supplement before one discount and validates qu
   assert.throws(() => E.serviceCost(settings, item, -1));
   assert.throws(() => E.serviceCost(settings, item, 1.5));
   assert.throws(() => E.validate({ ...E.defaults('custom'), contractRules: { failurePenalty: -1, creamPenalty: 40, dinnerGuestPrice: 10 } }));
+});
+
+test('distinct dynamic activity count adds automatic increments without repricing past seconds', () => {
+  const s = E.defaults();
+  const one = E.step({ seconds: 0, earnedUnits: 0, rate: 0.5 }, 60, s, 1);
+  const two = E.step({ seconds: 0, earnedUnits: 0, rate: 0.5 }, 60, s, 2);
+  assert.equal(one.earnedUnits, two.earnedUnits);
+  assert.equal(one.rate, 0.51);
+  assert.equal(two.rate, 0.52);
+  assert.throws(() => E.step({ seconds: 0, earnedUnits: 0, rate: 0.5 }, 60, s, -1));
 });

@@ -17,6 +17,7 @@
     'economyBeforeBalanced',
     'economyCatalogBaseline',
     'economyCatalog',
+    'catalogExternalGamesSeparated',
     'timerSession',
     'archivedHistory',
     'rouletteSpin',

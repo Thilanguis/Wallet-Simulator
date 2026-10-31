@@ -464,7 +464,7 @@
       } catch {}
 
       marcarUso();
-      salvarResultado(premio.full);
+      settleSpin(spin);
 
       setTimeout(() => {
         overlay.remove();
@@ -508,73 +508,6 @@
     try {
       AppStorage.setItem(STORAGE_KEY_RESULT_TEXT, texto);
     } catch {}
-
-    const span = obterAreaResultadoTexto();
-    if (span) {
-      span.textContent = 'Resultado da roleta: ' + texto;
-      span.parentElement.style.display = 'flex';
-    }
-  }
-
-  function restaurarResultado() {
-    const texto = AppStorage.getItem(STORAGE_KEY_RESULT_TEXT);
-    if (!texto) return;
-
-    const span = obterAreaResultadoTexto();
-    if (span) {
-      span.textContent = 'Resultado da roleta: ' + texto;
-      span.parentElement.style.display = 'flex';
-    }
-  }
-
-  function obterAreaResultadoTexto() {
-    let area = document.getElementById('resultadoRoletaDia');
-    if (area) {
-      return document.getElementById('resultadoRoletaDiaTexto');
-    }
-
-    const tarefas = document.getElementById('tarefasPendentes');
-    if (!tarefas || !tarefas.parentElement) return null;
-
-    const container = tarefas.parentElement;
-
-    area = document.createElement('label');
-    area.id = 'resultadoRoletaDia';
-    area.style = `
-      display: flex;
-      gap: 10px;
-      margin-top: 10px;
-      padding: 12px;
-      background: #222;
-      border-radius: 10px;
-      border: 1px solid #ffd700;
-      color: #ffd700;
-      font-size: 13px;
-      align-items: center;
-      box-shadow: 0 0 12px rgba(0,0,0,.6);
-    `;
-
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    cb.style = 'cursor:pointer; width:16px; height:16px;';
-    cb.onchange = () => {
-      area.style.display = 'none';
-    };
-
-    const span = document.createElement('span');
-    span.id = 'resultadoRoletaDiaTexto';
-    span.style = 'flex:1;';
-
-    area.appendChild(cb);
-    area.appendChild(span);
-
-    if (tarefas.nextSibling) {
-      container.insertBefore(area, tarefas.nextSibling);
-    } else {
-      container.appendChild(area);
-    }
-
-    return span;
   }
 
   // ====================================================================
@@ -665,6 +598,5 @@
     criarBotaoFlutuante();
     const spin = JSON.parse(AppStorage.getItem('rouletteSpin') || 'null');
     if (spin && !spin.settled) settleSpin(spin);
-    restaurarResultado();
   });
 })();

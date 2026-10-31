@@ -14,7 +14,7 @@ async function open(page, seed = {}) {
   await page.goto('/');
   await expect(page.locator('#splash')).toHaveCount(0);
   await expect(page.locator('.splash-skip')).toHaveCount(0);
-  await expect(page.locator('#tipoTransacao')).toBeVisible();
+  await expect(page.locator('#tipoTransacao')).toBeHidden();
 
   await expect(page.locator('#selectTarefa option')).toHaveCount(18);
 }
@@ -157,7 +157,7 @@ test('real OCR runs from root vendor assets, creates only a suggestion and persi
 
   await expect(page.locator('#homeTotal')).toContainText('72,30');
   expect(requests.some((url) => url.includes('/vendor/lang/por.traineddata.gz'))).toBe(true);
-  expect(requests.some(url=>url===new URL('js/economy-ui.js',page.url()).href)).toBe(true);
+  expect(requests.some((url) => url === new URL('js/economy-ui.js', page.url()).href)).toBe(true);
 });
 test('Wallet shows internal money, real notes stay in their own panel, purple/gold title follows lingerie', async ({ page }) => {
   await open(page, { saldoDominadora: '123.45' });
@@ -168,12 +168,12 @@ test('Wallet shows internal money, real notes stay in their own panel, purple/go
   await expect(page.locator('#simulator')).not.toContainText('créditos');
   await expect(page.locator('#simulator')).not.toContainText('fictício');
   await expect(page.locator('#simuladorTitulo')).toHaveCSS('color', 'rgb(128, 0, 128)');
-  await page.locator('#bonusEspecialCheckbox').check();
+  await page.locator('#privilegeSeal').click();
   await expect(page.locator('#simuladorTitulo')).toHaveCSS('color', 'rgb(255, 215, 0)');
   await page.reload();
 
   await expect(page.locator('#simuladorTitulo')).toHaveCSS('color', 'rgb(255, 215, 0)');
-  await page.locator('#bonusEspecialCheckbox').uncheck();
+  await page.locator('#privilegeSeal').click();
   await expect(page.locator('#simuladorTitulo')).toHaveCSS('color', 'rgb(128, 0, 128)');
   await page.locator('[data-panel=financePanel]').click();
   await expect(page.locator('#groupedFinanceList')).toBeVisible();
@@ -195,7 +195,7 @@ test('catalog arrays add options without losing saved settings and timer markers
   await expect(page.locator('#economyFields')).toHaveCount(0);
   await expect(page.locator('#selectTarefa option').nth(1)).toContainText('31,25');
   await expect(page.locator('#selectGanho option[value="Atividade teste"]')).toContainText('7,00');
-  await expect(page.locator('#selectGanho option[value=Buraco]')).toContainText('💲');
+  await expect(page.locator('#selectGanho option[value="Videogames Competitivos"]')).toContainText('💲');
   await page.reload();
   await expect(page.locator('#selectTarefa option').nth(1)).toContainText('31,25');
 });
@@ -244,6 +244,8 @@ test('styled confirmations cancel safely, restore focus and execute only after a
     await dialog.dismiss();
   });
   await open(page, { saldoDominadora: '100' });
+  await page.locator('[data-panel=backupPanel]').click();
+  await page.locator('#walletMaintenance > summary').click();
   await page.locator('#resetSaldo').click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await expect(page.locator('[data-dialog-cancel]')).toBeFocused();
@@ -261,6 +263,7 @@ test('styled confirmations cancel safely, restore focus and execute only after a
   await page.screenshot({ path: '.local/confirmacao-mobile.png' });
   await page.locator('[data-dialog-confirm]').click();
   await expect(page.locator('#saldoDominadora')).toHaveText('R$ 0,00');
+  await page.locator('[data-panel=simulator]').click();
   await page.locator('#adicionar').click();
   await expect(page.getByRole('dialog')).toContainText('selecione uma tarefa');
   await expect(page.locator('[data-dialog-cancel]')).toBeHidden();
@@ -345,11 +348,11 @@ test('list controls edit in a modal, move between groups, persist order and dele
 
 test('eligible game increases session rate and enables automatic timer progression', async ({ page }) => {
   await open(page);
-  await page.locator('#tipoTransacao').selectOption('ganho');
+  await page.locator('[data-jump=ganho]').click();
   await page.clock.install();
   await page.locator('#btnPlayPauseTempo').click();
   const base = await page.locator('#valorPorMinuto').inputValue();
-  await page.locator('#selectGanho').selectOption('Buraco');
+  await page.locator('#selectGanho').selectOption('Videogames Competitivos');
   await page.locator('#adicionar').click();
   const rate = Number(await page.locator('#valorPorMinuto').inputValue());
   expect(rate).toBeGreaterThan(Number(base));
@@ -374,18 +377,17 @@ test('code editor creates catalog items, updates prices and persists safely', as
   await expect(page.locator('#selectTarefa option').nth(1)).toContainText('31,25');
   await expect(page.locator('#selectTarefa option').last()).toContainText('Serviço teste');
   await expect(page.locator('#selectGanho option[value="Ganho teste"]')).toContainText('💲');
+  await code.fill('{broken');
+  await page.locator('#saveCustomEconomy').click();
+  await expect(page.locator('#economyCodeMessage')).toContainText('JSON inválido');
+  await expect(code).toHaveValue('{broken');
   await page.locator('[data-panel=simulator]').click();
-  await page.locator('#tipoTransacao').selectOption('ganho');
+  await page.locator('[data-jump=ganho]').click();
   await page.locator('#selectGanho').selectOption('Tapa de pé na cara');
   await expect(page.locator('#quantidadeMultiplicador')).toBeVisible();
   await page.locator('#selectGanho').selectOption('Ganho teste');
   await expect(page.locator('#quantidadeMultiplicador')).toBeHidden();
   await expect(page.locator('#valorGanho')).toHaveValue('7.5');
-  await page.locator('[data-panel=backupPanel]').click();
-  await code.fill('{broken');
-  await page.locator('#saveCustomEconomy').click();
-  await expect(page.locator('#economyCodeMessage')).toContainText('JSON inválido');
-  await expect(code).toHaveValue('{broken');
   await page.reload();
   await expect(page.locator('#selectTarefa option').last()).toContainText('Serviço teste');
   await expect(page.locator('#selectTarefa option').nth(1)).toContainText('31,25');
@@ -395,7 +397,7 @@ test('code editor creates catalog items, updates prices and persists safely', as
 test('economy lives in settings and purchase bonus shows original final and savings', async ({ page }) => {
   await open(page);
   await expect(page.locator('#economySettingsPanel')).toBeHidden();
-  await page.locator('#bonusEspecialCheckbox').check();
+  await page.locator('#privilegeSeal').click();
   await page.locator('#selectTarefa').selectOption({ index: 3 });
   const preview = page.locator('#previewDescontoCompra');
   await expect(preview.locator('s')).toContainText('60,00');
@@ -404,7 +406,7 @@ test('economy lives in settings and purchase bonus shows original final and savi
   await expect(preview.locator('.purchase-bonus-saved')).toContainText('9,00');
   await preview.scrollIntoViewIfNeeded();
   await page.screenshot({ path: '.local/bonus-compra.png' });
-  await page.locator('#bonusEspecialCheckbox').uncheck();
+  await page.locator('#privilegeSeal').click();
   await expect(preview.locator('s')).toHaveCount(0);
   await expect(preview.locator('strong')).toContainText('60,00');
   await page.locator('[data-panel=backupPanel]').click();
@@ -413,8 +415,8 @@ test('economy lives in settings and purchase bonus shows original final and savi
 
 test('contract score calculator fills gain without registering it automatically', async ({ page }) => {
   await open(page);
-  await page.locator('#tipoTransacao').selectOption('ganho');
-  await page.locator('#selectGanho').selectOption('Buraco');
+  await page.locator('[data-jump=ganho]').click();
+  await page.locator('#selectGanho').selectOption('Videogames Competitivos');
   await expect(page.locator('#gameScoreCalculator')).toBeVisible();
   await page.locator('#gameScoreCalculator summary').click();
   await page.locator('#scoreWinner').fill('3500');
@@ -445,7 +447,7 @@ test('two-part service tracks separate progress and preserves legacy purchase af
 
 test('contract penalties require confirmation, use calibrated values and never affect real expenses', async ({ page }) => {
   await open(page, { saldoDominadora: '200' });
-  await page.locator('#bonusEspecialCheckbox').check();
+  await page.locator('#privilegeSeal').click();
   await page.locator('#contractOccurrences summary').click();
   await page.locator('#registerContractOccurrence').click();
   await page.locator('[data-dialog-cancel]').click();
@@ -453,7 +455,7 @@ test('contract penalties require confirmation, use calibrated values and never a
   await page.locator('#registerContractOccurrence').click();
   await page.locator('[data-dialog-confirm]').click();
   await expect(page.locator('#saldoDominadora')).toHaveText('R$ 360,00');
-  await page.locator('#contractOccurrenceType').selectOption('creamPenalty');
+  await page.locator('[data-contract-rule=creamPenalty]').click();
   await page.locator('#registerContractOccurrence').click();
   await page.locator('[data-dialog-confirm]').click();
   await expect(page.locator('#saldoDominadora')).toHaveText('R$ 320,00');
@@ -464,7 +466,7 @@ test('contract penalties require confirmation, use calibrated values and never a
 });
 test('dinner guest count changes preview and charge with exactly one lingerie discount', async ({ page }) => {
   await open(page, { saldoDominadora: '200' });
-  await page.locator('#bonusEspecialCheckbox').check();
+  await page.locator('#privilegeSeal').click();
   const value = await page.locator('#selectTarefa option').evaluateAll((opts) => opts.find((o) => o.value.includes('|Cozinhar jantar|')).value);
   await page.locator('#selectTarefa').selectOption(value);
   await page.locator('#dinnerGuestCount').fill('2');
@@ -501,4 +503,141 @@ test('screen contract follows catalog edits, preserves original link and prints 
   await page.emulateMedia({ media: 'screen' });
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('external game migration preserves history and adds variable conversation and cup gain', async ({ page }) => {
+  const E = require('../../js/economy.js'),
+    C = require('../../js/economy-catalog.js');
+  const settings = E.defaults('custom');
+  const catalog = C.document(settings);
+  catalog.games = catalog.games.filter((item) => item.scoreBased !== false);
+  catalog.gains = catalog.gains.filter((item) => item.id !== 'Cuspir no copo');
+  for (const id of ['Buraco', 'Perfil', 'Match Masters']) {
+    catalog.games.push({ id, amount: 10, timerEligible: true });
+    settings.games[id] = 10;
+  }
+  const old = [{ descricao: 'Ganho antigo preservado', valor: 10, saldoAtual: 10, tipo: 'ganho', timestamp: '2026-10-30T12:00:00Z' }];
+  await open(page, { economy: JSON.stringify(settings), economyCatalog: JSON.stringify(catalog), historico: JSON.stringify(old), saldoDominadora: '10' });
+  await page.locator('[data-jump=ganho]').click();
+  for (const id of ['Buraco', 'Perfil', 'Match Masters']) await expect(page.locator('#selectGanho option').filter({ hasText: new RegExp('^' + id + ' ') })).toHaveCount(0);
+  await page.locator('#selectGanho').selectOption('Conversar no grupo do WhatsApp sobre compras');
+  await expect(page.locator('#valorGanho')).toHaveValue('15');
+  await expect(page.locator('#valorGanho')).not.toHaveAttribute('readonly');
+  await expect(page.locator('#gameScoreCalculator')).toBeHidden();
+  await page.locator('#selectGanho').selectOption('Cuspir no copo');
+  await expect(page.locator('#valorGanho')).toHaveValue('5');
+  expect(await page.evaluate(() => JSON.parse(AppStorage.getItem('historico'))[0].descricao)).toBe('Ganho antigo preservado');
+  await page.reload();
+  await expect(page.locator('#selectGanho option[value="Cuspir no copo"]')).toHaveCount(1);
+  await expect(page.locator('#saldoDominadora')).toHaveText('R$ 10,00');
+});
+
+test('dynamic combo stacks unique activities, survives reload paused and resets on settlement', async ({ page }) => {
+  await open(page);
+  await page.locator('[data-jump=ganho]').click();
+  await page.clock.install();
+  await page.locator('#btnPlayPauseTempo').click();
+  for (const id of ['Conversar no grupo do WhatsApp sobre compras', 'Videogames Competitivos', 'Videogames Competitivos']) {
+    await page.locator('#selectGanho').selectOption(id);
+    await page.locator('#adicionar').click();
+  }
+  await expect(page.locator('#timerDynamicCombo .dynamic-combo-chip')).toHaveCount(2);
+  const before = Number(await page.locator('#valorPorMinuto').inputValue());
+  await page.clock.fastForward(60000);
+  expect(Number(await page.locator('#valorPorMinuto').inputValue())).toBeCloseTo(before + 0.02, 2);
+  await page.reload();
+  await page.locator('[data-jump=ganho]').click();
+  await expect(page.locator('#timerDynamicCombo .dynamic-combo-chip')).toHaveCount(2);
+  await expect(page.locator('#btnPlayPauseTempo')).toContainText('Retomar');
+  await page.locator('#timerDynamicCombo .dynamic-combo-chip').first().click();
+  await expect(page.locator('#timerDynamicCombo .dynamic-combo-chip')).toHaveCount(1);
+  await page.clock.install();
+  await page.locator('#btnPlayPauseTempo').click();
+  const remaining = Number(await page.locator('#valorPorMinuto').inputValue());
+  await page.clock.fastForward(60000);
+  expect(Number(await page.locator('#valorPorMinuto').inputValue())).toBeCloseTo(remaining + 0.01, 2);
+  await page.locator('#btnTerminarTempo').click();
+  await expect(page.locator('#timerDynamicCombo .dynamic-combo-chip')).toHaveCount(0);
+  for (const id of ['Cuspir no copo', 'Pés na cara']) await expect(page.locator('#selectGanho option').filter({ hasText: new RegExp('^' + id) })).toContainText('💲');
+});
+
+test('choosing a gain automatically starts time without crediting and preserves manual pause', async ({ page }) => {
+  await open(page);
+  await page.locator('[data-jump=ganho]').click();
+  await page.clock.install();
+  await expect(page.locator('#timerVisualStatus')).toContainText('Parado');
+  await page.locator('#selectGanho').selectOption('Conversar no grupo do WhatsApp sobre compras');
+  await expect(page.locator('#timerVisualStatus')).toContainText('Em andamento');
+  await expect(page.locator('#saldoDominadora')).toHaveText('R$ 0,00');
+  await page.clock.fastForward(10000);
+  await expect(page.locator('#tempoDisplay')).toHaveText('00:10');
+  await page.locator('#selectGanho').selectOption('Videogames Competitivos');
+  await expect(page.locator('#tempoDisplay')).toHaveText('00:10');
+  await page.locator('#adicionar').click();
+  await expect(page.locator('#saldoDominadora')).toHaveText('R$ 10,00');
+  await page.locator('#btnPlayPauseTempo').click();
+  const pausedTime = await page.locator('#tempoDisplay').textContent();
+  await page.locator('#selectGanho').selectOption('Pés na cara');
+  await expect(page.locator('#timerVisualStatus')).toContainText('Pausado');
+  await page.clock.fastForward(10000);
+  await expect(page.locator('#tempoDisplay')).toHaveText(pausedTime);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.locator('#contadorBloco').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: '.local/transacao-compacta-auto.png', animations: 'disabled' });
+  await page.locator('#btnTerminarTempo').click();
+  await expect(page.locator('#timerVisualStatus')).toContainText('Finalizado');
+  await page.locator('#selectGanho').selectOption('Cuspir no copo');
+  await expect(page.locator('#timerVisualStatus')).toContainText('Em andamento');
+});
+
+test('ordinary activity explains immediate rate increase and roulette hides provisional copy', async ({ page }) => {
+  await open(page);
+  await expect(page.locator('#roulettePrizeList')).toBeHidden();
+  await expect(page.locator('#rouletteSection')).not.toContainText('aparecerão aqui');
+  await page.locator('[data-jump=ganho]').click();
+  await page.locator('#selectGanho').selectOption('Tapa de pé na cara');
+  await expect(page.locator('#activityRateHint')).toContainText('mesmo sem 💲');
+  const text = await page.locator('#activityRateHint').textContent();
+  const expected = Number(text.match(/R\$\s*([\d,]+)/)[1].replace(',', '.'));
+  const before = Number(await page.locator('#valorPorMinuto').inputValue());
+  await page.locator('#adicionar').click();
+  expect(Number(await page.locator('#valorPorMinuto').inputValue())).toBeCloseTo(before + expected, 2);
+  await expect(page.locator('#timerDynamicCombo .dynamic-combo-chip')).toHaveCount(0);
+  expect(await page.evaluate(() => typeof window.__devNukeAll)).toBe('undefined');
+});
+
+test('wallet priorities, fixed mobile tabs and return to edited note', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open(page);
+  expect(
+    await page.locator('#simulator').evaluate((el) => {
+      const tx = el.querySelector('#transactionSection'),
+        balance = el.querySelector('#walletBalanceCard'),
+        tasks = el.querySelector('#tarefasPendentes');
+      return !!(balance.compareDocumentPosition(tx) & Node.DOCUMENT_POSITION_FOLLOWING) && !!(tx.compareDocumentPosition(tasks) & Node.DOCUMENT_POSITION_FOLLOWING);
+    }),
+  ).toBe(true);
+  await expect(page.locator('#simulator #resetSaldo')).toHaveCount(0);
+  expect(await page.locator('.app-nav').evaluate((el) => getComputedStyle(el).position)).toBe('fixed');
+  await page.locator('[data-panel=financePanel]').click();
+  await page.locator('#entryDescription').fill('Nota para conferir');
+  await page.locator('#entryAmount').fill('10,00');
+  await page.locator('#saveEntry').click();
+  const row = page.locator('#groupedFinanceList [data-note-ids]').filter({ hasText: 'Nota para conferir' });
+  await row.locator('[data-note-edit]').click();
+  await page.locator('#entryAmount').fill('12,00');
+  await page.locator('#saveEntry').click();
+  await page.locator('[data-dialog-confirm]').click();
+  await expect(row).toHaveClass(/note-just-edited/);
+  await expect(row).toBeInViewport();
+  await expect(row).toContainText('12,00');
+  await page.screenshot({ path: '.local/prioridades-nota-mobile.png', animations: 'disabled' });
+  await page.locator('[data-panel=backupPanel]').click();
+  await page.locator('#walletMaintenance > summary').click();
+  await expect(page.locator('#resetSaldo')).toBeVisible();
+  await expect(page.locator('#limparHistorico')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.locator('[data-panel=simulator]').click();
+  await page.screenshot({ path: '.local/prioridades-wallet-mobile.png', animations: 'disabled' });
 });

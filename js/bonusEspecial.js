@@ -29,61 +29,24 @@
 
   // ----------------- Badge ao lado do "Como ganhou" -----------------
   function renderBonusEspecialInlineBadge() {
-    try {
-      var mult = 1 + getEconomy().bonusPercent / 100;
-      var badge = document.getElementById('bonusEspecialInline');
-      var active = !!window.bonusEspecialAtivo;
-
-      if (!badge) {
-        badge = document.createElement('span');
-        badge.id = 'bonusEspecialInline';
-        badge.style.cssText = [
-          'margin-left:8px',
-          'font-size:12px',
-          'padding:3px 8px',
-          'border-radius:999px',
-          'background:#0f172a',
-          'color:#fff',
-          'display:inline-flex',
-          'gap:6px',
-          'align-items:center',
-          'vertical-align:middle',
-          'box-shadow:0 1px 3px rgba(0,0,0,.15)',
-        ].join(';');
-
-        var bolt = document.createElement('span');
-        bolt.textContent = '⚡';
-        bolt.style.fontSize = '14px';
-
-        var text = document.createElement('span');
-        text.id = 'bonusEspecialInlineText';
-
-        badge.appendChild(bolt);
-        badge.appendChild(text);
-
-        var label = document.querySelector('label[for="selectGanho"]');
-        if (label && label.parentElement) {
-          label.parentElement.insertBefore(badge, label.nextSibling);
-        } else {
-          var select = document.getElementById('selectGanho');
-          if (select && select.parentElement) {
-            select.parentElement.insertBefore(badge, select.nextSibling);
-          } else {
-            document.body.appendChild(badge);
-          }
-        }
-      }
-
-      var textNode = document.getElementById('bonusEspecialInlineText');
-      if (textNode) {
-        if (active) {
-          textNode.textContent = 'Bônus x' + mult.toLocaleString('pt-BR') + ' ativo (langerie especial)';
-        } else {
-          textNode.textContent = 'Bônus x' + mult.toLocaleString('pt-BR') + ' desligado';
-        }
-      }
-      badge.style.opacity = active ? '1' : '.5';
-    } catch (e) {}
+    const select = document.getElementById('selectGanho');
+    if (!select) return;
+    let badge = document.getElementById('bonusEspecialInline');
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.id = 'bonusEspecialInline';
+      badge.className = 'gain-bonus-note';
+      badge.setAttribute('role', 'status');
+      const text = document.createElement('span');
+      text.id = 'bonusEspecialInlineText';
+      badge.append(text);
+      select.after(badge);
+    }
+    const active = !!window.bonusEspecialAtivo;
+    badge.classList.toggle('is-active', active);
+    const caption = active ? 'Bônus lingerie ativo · +' + getEconomy().bonusPercent + '% nos ganhos elegíveis' : 'Bônus lingerie desligado';
+    const text = document.getElementById('bonusEspecialInlineText');
+    if (text.textContent !== caption) text.textContent = caption;
   }
 
   let bonusSelectDecoratedState = null;
@@ -225,7 +188,7 @@
 
         var contadorBloco = document.getElementById('contadorBloco');
         if (contadorBloco && contadorBloco.parentElement === ganhoFields) {
-          ganhoFields.insertBefore(bonusPreviewValorEl, contadorBloco);
+          valorInput.closest('label').insertAdjacentElement('afterend', bonusPreviewValorEl);
         } else {
           ganhoFields.appendChild(bonusPreviewValorEl);
         }

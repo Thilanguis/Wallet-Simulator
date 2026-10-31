@@ -71,7 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   const filters = () => ({ from: $('financeFrom').value, to: $('financeTo').value, category: $('financeCategory').value, store: $('financeStore').value, status: $('financeStatus').value });
   function entryHTML(e) {
-    return `<article class="finance-entry" data-entry="${esc(e.id)}"><header><label class="entry-select"><input type="checkbox" data-select-entry="${esc(e.id)}" aria-label="Selecionar ${esc(e.description)}" ${e.redemptionId ? 'disabled' : ''} /><strong>${esc(e.description)}</strong></label><strong>${F.format(e.amount, e.currency)}</strong></header><p>${esc(e.date || 'Data não informada')} · ${esc(e.category)}${e.store ? ' · ' + esc(e.store) : ''}</p>${e.note ? `<p class="hint finance-note">${esc(e.note)}</p>` : ''}<span class="status ${e.status}">${statusLabel(e)}</span>${e.redemptionId ? '<span class="status">Registro de integração anterior preservado</span>' : ''}<div><button data-action="edit">Editar / corrigir</button><button data-action="status">Alterar situação</button><button data-action="refund">Estornar</button><button data-action="delete" class="danger">Excluir</button></div></article>`;
+    return `<article class="finance-entry" data-entry="${esc(e.id)}"><header><label class="entry-select"><input type="checkbox" data-select-entry="${esc(e.id)}" aria-label="Selecionar ${esc(e.description)}" ${e.redemptionId ? 'disabled' : ''} /><strong>${esc(e.description)}</strong></label><strong>${F.format(e.amount, e.currency)}</strong></header><p>${esc(e.date || 'Data não informada')} · ${esc(e.category)}${e.store ? ' · ' + esc(e.store) : ''}</p>${e.note ? `<p class="hint finance-note">${esc(e.note)}</p>` : ''}<span class="status ${e.status}">${statusLabel(e)}</span>${e.redemptionId ? '<span class="status">Registro vinculado · protegido</span>' : ''}<div><button data-action="edit">Editar / corrigir</button><button data-action="status">Alterar situação</button><button data-action="refund">Estornar</button><button data-action="delete" class="danger">Excluir</button></div></article>`;
   }
   function notebookHTML(listEntries, editable = false) {
     const { groups, total } = FinanceList.calculate(listEntries);
@@ -196,6 +196,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('entryForm').onsubmit = async (event) => {
     event.preventDefault();
     $('entryFeedback').hidden = true;
+    const editedId = editing;
     try {
       const candidate = F.validate({
         category: $('entryCategory').value,
@@ -209,7 +210,7 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       if (editing) {
         const existing = state.entries.find((e) => e.id === editing);
-        if (existing.redemptionId) throw new Error('Este registro pertence à integração anterior e foi preservado. A integração com o Saldo Dominadora está desativada.');
+        if (existing.redemptionId) throw new Error('Este lançamento está vinculado a um registro anterior e não pode ser alterado por aqui.');
         if (!(await AppDialog.confirm('Confirmar correção de ' + existing.description + ' para ' + F.format(candidate.amount, candidate.currency) + ' · ' + statusLabels[candidate.status] + '?'))) return;
         save(F.update(state, { type: 'edit', id: editing, patch: candidate }));
       } else {
@@ -220,6 +221,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       resetForm();
       message('Lançamento salvo. Totais atualizados.');
+      if (editedId) requestAnimationFrame(() => requestAnimationFrame(() => highlightEditedNote(editedId)));
       $('entryFeedback').className = 'notice';
       $('entryFeedback').textContent = 'Lançamento salvo. Totais atualizados.';
       $('entryFeedback').hidden = false;
@@ -232,6 +234,20 @@ document.addEventListener('DOMContentLoaded', () => {
       message(error.message, true);
     }
   };
+  let noteHighlightTimer;
+  function highlightEditedNote(id) {
+    clearTimeout(noteHighlightTimer);
+    $('groupedFinanceList')
+      .querySelectorAll('.note-just-edited')
+      .forEach((row) => row.classList.remove('note-just-edited'));
+    const row = Array.from($('groupedFinanceList').querySelectorAll('[data-note-ids]')).find((row) => row.dataset.noteIds.split(',').includes(id));
+    if (!row) return;
+    row.classList.add('note-just-edited');
+    row.tabIndex = -1;
+    row.focus({ preventScroll: true });
+    row.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+    noteHighlightTimer = setTimeout(() => row.classList.remove('note-just-edited'), 3500);
+  }
   const entryHome = $('entryForm').parentElement;
   let editPopup = null,
     draftBeforeEdit = null;
@@ -284,7 +300,7 @@ document.addEventListener('DOMContentLoaded', () => {
         );
       if (button.hasAttribute('data-note-delete')) {
         const ids = row.dataset.noteIds.split(',');
-        if (!(await AppDialog.confirm('Excluir este item da lista? Os totais serão recalculados.'))) return;
+        if (!(await AppDialog.confirm(ids.length > 1 ? 'Excluir estes ' + ids.length + ' valores vinculados da lista? Os totais serão recalculados.' : 'Excluir este item da lista? Os totais serão recalculados.'))) return;
         save(F.update(state, { type: 'deleteMany', ids }));
       }
     } catch (error) {
@@ -410,7 +426,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const id = button.closest('[data-entry]').dataset.entry,
       entry = state.entries.find((e) => e.id === id);
     try {
-      if (entry.redemptionId) throw new Error('Este registro pertence à integração anterior e foi preservado. A integração com o Saldo Dominadora está desativada.');
+      if (entry.redemptionId) throw new Error('Este lançamento está vinculado a um registro anterior e não pode ser alterado por aqui.');
       if (button.dataset.action === 'edit') {
         receiptSuggestion = null;
         fill(entry, true);

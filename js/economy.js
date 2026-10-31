@@ -102,13 +102,15 @@
     return (tiers.find(([min]) => value >= min)?.[1] || 0.4) * settings.timer.taskScale;
   }
   function step(state, seconds, settings, eligible = false) {
+    const count = typeof eligible === 'boolean' ? Number(eligible) : eligible;
+    if (!Number.isSafeInteger(count) || count < 0 || count > 1000) throw new Error('Combo dinâmico inválido.');
     const result = { ...state };
     const end = result.seconds + Math.max(0, Math.floor(seconds));
     // Integrate each earned interval at its actual rate; increases never reprice past time.
     while (result.seconds < end) {
       result.earnedUnits = (result.earnedUnits || 0) + Math.round(result.rate * 100);
       result.seconds++;
-      if (eligible && result.seconds % settings.timer.autoEvery === 0) result.rate = round(result.rate + settings.timer.autoIncrement);
+      if (count && result.seconds % settings.timer.autoEvery === 0) result.rate = round(result.rate + settings.timer.autoIncrement * count);
     }
     return result;
   }

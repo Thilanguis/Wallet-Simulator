@@ -29,19 +29,36 @@
       </div>
       <div id="storageWarning" role="alert" hidden></div>
       <nav class="app-nav" aria-label="Seções">
-        <button type="button" data-panel="simulator" aria-pressed="true">Findom Wallet</button>
-        <button type="button" data-panel="financePanel" aria-pressed="false">Notas e gastos reais</button>
-        <button type="button" data-panel="contractPanel" aria-pressed="false">Contrato</button>
-        <button type="button" data-panel="backupPanel" aria-pressed="false">Configurações</button>
+        <button type="button" data-panel="simulator" aria-pressed="true" aria-label="Minha Carteira">
+          <svg class="nav-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10" /></svg>
+          <span class="nav-label-desktop">Minha Carteira</span>
+          <span class="nav-label-mobile">Wallet</span>
+        </button>
+        <button type="button" data-panel="financePanel" aria-pressed="false" aria-label="Notas e gastos reais">
+          <svg class="nav-glyph" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="5" y="3" width="14" height="18" rx="2" />
+            <path d="M8 8h8M8 12h8M8 16h5" />
+          </svg>
+          <span class="nav-label-desktop">Notas e gastos reais</span>
+          <span class="nav-label-mobile">Notas</span>
+        </button>
+        <button type="button" data-panel="contractPanel" aria-pressed="false" aria-label="Contrato">
+          <svg class="nav-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h7" /></svg>
+          <span class="nav-label-desktop">Contrato</span>
+          <span class="nav-label-mobile">Contrato</span>
+        </button>
+        <button type="button" data-panel="backupPanel" aria-pressed="false" aria-label="Configurações">
+          <svg class="nav-glyph" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 7h16M4 17h16" />
+            <circle cx="9" cy="7" r="3" />
+            <circle cx="15" cy="17" r="3" />
+          </svg>
+          <span class="nav-label-desktop">Configurações</span>
+          <span class="nav-label-mobile">Configurações</span>
+        </button>
       </nav>
       <main id="simulator" class="app-panel">
-        <nav class="quick-nav" aria-label="Atalhos do simulador">
-          <button type="button" data-jump="ganho">Ganho de Crédito</button>
-          <button type="button" data-jump="gasto">Loja de serviços</button>
-          <button type="button" data-jump="roleta">Roleta</button>
-        </nav>
-
-        <div class="section">
+        <div class="section" id="walletBalanceCard">
           <div class="bonusActiveBanner">
             <span class="bonus-text">BÔNUS 15% CRÉDITO</span>
             <span class="bonus-icon">✨</span>
@@ -55,83 +72,70 @@
 
           <!-- cabeçalho com título + botão do contrato à direita -->
           <div class="section-header">
-            <h2>Controle de Saldo</h2>
+            <h2>Resumo da Carteira</h2>
             <button type="button" id="abrirContrato" class="icon-btn" title="Abrir contrato">📜</button>
           </div>
 
           <!-- saldo em linha com o rótulo -->
           <div class="saldo-row">
-            <label class="saldo-label">Saldo Dominadora:</label>
+            <label class="saldo-label">
+              Saldo Dominadora:
+              <small class="balance-availability">Disponível para usar em serviços</small>
+            </label>
             <span id="saldoDominadora" class="saldo-badge">0,00</span>
           </div>
 
-          <!-- ações -->
-          <div class="btn-row">
-            <button type="button" id="resetSaldo">Resetar Saldo</button>
-            <button type="button" id="limparHistorico">Limpar Histórico</button>
-          </div>
-
           <div class="controle-saldo">
-            <div class="bonus-especial-toggle">
-              <label>
-                <input type="checkbox" id="bonusEspecialCheckbox" />
-                Bônus - lingerie
-              </label>
+            <div class="privilege-control">
+              <input type="checkbox" id="bonusEspecialCheckbox" hidden />
+              <button type="button" id="privilegeSeal" aria-pressed="false">
+                <span class="privilege-medal">
+                  <svg viewBox="0 0 64 64" aria-hidden="true">
+                    <circle cx="32" cy="32" r="28" />
+                    <circle cx="32" cy="32" r="24" />
+                    <path d="M19 25l7 6 6-12 6 12 7-6-4 18H23zM26 47h12" />
+                  </svg>
+                </span>
+                <span class="privilege-copy">
+                  <span class="privilege-eyebrow">Selo de Privilégio</span>
+                  <strong>Bônus Lingerie</strong>
+                  <span id="privilegeBenefits"></span>
+                  <span id="privilegeStatus">Ativar privilégio</span>
+                </span>
+              </button>
             </div>
           </div>
         </div>
 
-        <div class="section">
-          <h2>🎯 Tarefas Pendentes</h2>
-          <div id="tarefasPendentes">
-            <p style="color: #999; text-align: center" id="noTasksMessage">Nenhuma tarefa pendente. 👑</p>
-          </div>
-        </div>
-
-        <details class="section" id="contractOccurrences">
-          <summary>Registrar ocorrência do contrato</summary>
-          <p class="hint">Somente saldo interno. Registre quando uma regra for descumprida; nenhuma ocorrência é detectada automaticamente.</p>
-          <label>
-            Regra
-            <select id="contractOccurrenceType">
-              <option value="failurePenalty">Descumprimento de tarefa</option>
-              <option value="creamPenalty">Ocorrência da regra do creme</option>
-            </select>
-          </label>
-          <label>
-            Observação
-            <input id="contractOccurrenceNote" maxlength="500" placeholder="Descreva a ocorrência, se quiser" />
-          </label>
-          <p id="contractPenaltyPreview" class="hint"></p>
-          <button id="registerContractOccurrence" type="button">Registrar ocorrência</button>
-          <p id="contractOccurrenceMessage" class="hint" role="status"></p>
-        </details>
-        <div class="section" id="tarefasLimitadasSection">
-          <h2>⏳ Tarefas com Limite Ativo</h2>
-          <div id="tarefasLimitadasLista">
-            <p style="color: #aaa">Nenhuma tarefa limitada ativa.</p>
-            <span class="tempo-restante" data-expira="1699999999999"></span>
-          </div>
-        </div>
-
-        <div id="aceleracoesAtivas"></div>
-        <section class="section" id="rouletteSection">
-          <h2>Roleta e recompensas</h2>
-          <p class="hint">19 setores · uma rodada a cada 3 dias. Serviços e redutores sorteados são gratuitos e devem ser resgatados abaixo. Os benefícios do catálogo são comprados com o Saldo Dominadora. O botão 🎰 abre a roleta.</p>
-          <div id="roulettePrizeList"></div>
-        </section>
-
-        <div class="section">
+        <nav class="quick-nav operation-tabs" aria-label="Atalhos do simulador">
+          <button type="button" data-jump="ganho">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="8" />
+              <path d="M8 12h8M12 8v8" />
+            </svg>
+            <strong>Ganhar Créditos</strong>
+            <span class="operation-description">+ Entrada de saldo · registre atividades</span>
+            <span class="operation-selected">Selecionado</span>
+          </button>
+          <button type="button" data-jump="gasto">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h12l2 13H4zM9 8V6a3 3 0 0 1 6 0v2" /></svg>
+            <strong>Loja de Privilégios</strong>
+            <span class="operation-description">− Saída de saldo · compre serviços</span>
+            <span class="operation-selected">Selecionado</span>
+          </button>
+        </nav>
+        <div class="section" id="transactionSection">
           <h2 id="transactionTitle">Nova Transação</h2>
+          <p class="hint transaction-intro">Escolha a atividade para iniciar o tempo. Registrar adiciona o ganho; Calcular conclui a sessão.</p>
 
-          <label>Tipo de operação:</label>
-          <select id="tipoTransacao">
-            <option value="gasto">Compra de Serviço 📉</option>
-            <option value="ganho">Ganho de Crédito 📈</option>
+          <label for="tipoTransacao" hidden>Tipo de operação:</label>
+          <select id="tipoTransacao" hidden>
+            <option value="gasto">Resgatar Privilégio 📉</option>
+            <option value="ganho">Ganhar Créditos 📈</option>
           </select>
 
           <div id="compraFields">
-            <label>Tarefa (Compra):</label>
+            <label for="selectTarefa">Selecione um serviço</label>
             <select id="selectTarefa">
               <option value="0" data-placeholder="1">-- Escolher tarefa --</option>
 
@@ -149,15 +153,39 @@
           </div>
 
           <div id="ganhoFields" style="display: none">
-            <label>Como ganhou crédito:</label>
+            <div id="contadorBloco" style="background: #1a1a1a; padding: 15px; border-radius: 12px; border: 1px solid #444; margin-top: 20px">
+              <div class="session-heading">
+                <div>
+                  <span class="session-eyebrow">TEMPO DA SESSÃO</span>
+                  <h3>Tempo da sessão</h3>
+                </div>
+                <span id="timerVisualStatus" class="session-status" role="status">Parado</span>
+              </div>
+              <p class="session-help">Ao escolher uma atividade, o tempo começa. Registre o ganho; pause ou calcule quando terminar.</p>
+              <p id="timerStartReminder" class="session-reminder" hidden></p>
+              <label class="session-rate-label">Taxa atual · R$ por minuto</label>
+              <input type="number" id="valorPorMinuto" value="0" min="0.01" step="0.01" readonly />
+
+              <div id="contadorContainer" style="margin-top: 12px">
+                <span style="margin-right: 15px; font-size: 17px">
+                  Tempo:
+                  <strong id="tempoDisplay">00:00</strong>
+                </span>
+                <span style="font-size: 17px">
+                  Valor:
+                  <strong id="valorAcumuladoDisplay" style="color: #50b050">R$ 0,00</strong>
+                </span>
+                <button id="btnPlayPauseTempo">▶️ Começar</button>
+                <button id="btnTerminarTempo">⏹️ Calcular</button>
+              </div>
+            </div>
+
+            <h3 class="gain-entry-heading">Registrar Atividade</h3>
+            <label for="selectGanho">Como ganhou crédito:</label>
             <select id="selectGanho" onchange="calcularValorGanho()">
               <option value="">-- Escolher forma --</option>
-
-              <option value="Match Masters">Match Masters</option>
-              <!-- <option value="Buraco">Conversar no grupo sobre sair ou planejar comida compartilhado na TV 💲</option> -->
+              <!-- -->
               <option value="Videogames Competitivos">Videogames Competitivos 💲</option>
-              <option value="Buraco">Buraco 💲</option>
-              <option value="Perfil">Perfil 💲</option>
               <option value="Jogos de tabuleiro com amigas">Jogos de tabuleiro com amigas 💲</option>
               <option value="Outro">Outro (Valor editável)</option>
             </select>
@@ -186,65 +214,90 @@
               <input type="number" id="valorGanho" value="0" step="0.01" min="0.01" />
             </label>
 
-            <p class="hint">💲 Durante a sessão, estes itens ativam o aumento automático do valor por minuto. As atividades registradas também podem aumentar a taxa da sessão.</p>
-            <div id="pesNaCaraOptions" class="checkbox-group" style="display: none">
-              <label>
-                <input type="checkbox" id="chkChule" data-value="400" onchange="calcularValorGanho()" />
-                Pés com chulé (+ R$ 400)
-              </label>
-              <label>
-                <input type="checkbox" id="chkFrancesinha" data-value="300" onchange="calcularValorGanho()" />
-                Francesinha (+ R$ 300)
-              </label>
-            </div>
-
-            <div id="comCatarro" class="checkbox-group" style="display: none">
-              <label>
-                <input type="checkbox" id="chkCatarro" data-value="500" onchange="calcularValorGanho()" />
-                Cuspe com Catarro (+ R$ 500)
-              </label>
-            </div>
+            <p class="hint">Registrar atividades na sessão aumenta a taxa por minuto. As marcadas 💲 também somam aumentos automáticos ao combo.</p>
+            <p id="activityRateHint" class="activity-rate-hint" role="status" hidden></p>
+            <div id="gainExtras" class="checkbox-group" hidden></div>
 
             <label id="labelQuantidadeMultiplicador" style="display: none; margin-top: 12px">Quantidade (multiplicador):</label>
             <input type="number" id="quantidadeMultiplicador" value="1" min="1" style="display: none; margin-top: 8px" onchange="calcularValorGanho()" />
-
-            <div id="contadorBloco" style="background: #1a1a1a; padding: 15px; border-radius: 12px; border: 1px solid #444; margin-top: 20px">
-              <label>Valor por minuto (R$):</label>
-              <input type="number" id="valorPorMinuto" value="0" min="0.01" step="0.01" readonly />
-
-              <div id="contadorContainer" style="margin-top: 12px">
-                <span style="margin-right: 15px; font-size: 17px">
-                  Tempo:
-                  <strong id="tempoDisplay">00:00</strong>
-                </span>
-                <span style="font-size: 17px">
-                  Valor:
-                  <strong id="valorAcumuladoDisplay" style="color: #50b050">R$ 0,00</strong>
-                </span>
-                <button id="btnPlayPauseTempo">▶️ Começar</button>
-                <button id="btnTerminarTempo">⏹️ Calcular</button>
-              </div>
-            </div>
           </div>
 
           <button id="adicionar">Registrar</button>
         </div>
 
-        <div class="section">
-          <!-- ... -->
-          <h2>Histórico de Transações</h2>
-
-          <label>Filtrar por dia:</label>
-          <input type="date" id="filterDate" />
-          <div style="display: flex; gap: 10px; margin-top: 8px">
-            <button id="aplicarFiltro" style="background: #b8860b; color: #1e1e1e">Filtrar</button>
-            <button id="limparFiltro" style="background: #444; color: #ccc">Limpar</button>
+        <section id="walletActivities" aria-label="Compromissos e privilégios">
+          <div class="section task-section" id="pendingTasksSection">
+            <h2>🎯 Tarefas Pendentes</h2>
+            <div id="tarefasPendentes">
+              <p style="color: #999; text-align: center" id="noTasksMessage">Nenhuma tarefa pendente. 👑</p>
+            </div>
           </div>
 
+          <div class="section task-section" id="tarefasLimitadasSection">
+            <h2>⏳ Tarefas com Limite Ativo</h2>
+            <div id="tarefasLimitadasLista">
+              <p style="color: #aaa">Nenhuma tarefa limitada ativa.</p>
+            </div>
+          </div>
+
+          <div id="aceleracoesAtivas"></div>
+          <section class="section" id="rouletteSection">
+            <h2>Roleta e recompensas</h2>
+            <div class="roulette-compact">
+              <p class="hint">
+                Próximo giro
+                <strong id="rouletteNextSpin">Disponível</strong>
+              </p>
+              <button type="button" id="openRouletteCard">Abrir roleta</button>
+            </div>
+            <div id="roulettePrizeList"></div>
+          </section>
+          <details class="section" id="contractOccurrences">
+            <summary>Registrar ocorrência do contrato</summary>
+            <p class="hint">Escolha a regra e confirme a ocorrência para ajustar o saldo.</p>
+            <label hidden>
+              Regra
+              <select id="contractOccurrenceType" hidden>
+                <option value="failurePenalty">Descumprimento de tarefa</option>
+                <option value="creamPenalty">Ocorrência da regra do creme</option>
+              </select>
+            </label>
+            <div id="contractRuleChoices" class="rule-choices" aria-label="Regra do contrato">
+              <button type="button" data-contract-rule="failurePenalty" aria-pressed="true">
+                <span>Descumprimento de tarefa</span>
+                <small>Registre quando uma tarefa combinada não for cumprida.</small>
+                <strong data-rule-impact="failurePenalty"></strong>
+              </button>
+              <button type="button" data-contract-rule="creamPenalty" aria-pressed="false">
+                <span>Regra do creme nos pés</span>
+                <small>O contrato orienta evitar passar creme nos pés todos os dias. Registre aqui a ocorrência dessa regra.</small>
+                <strong data-rule-impact="creamPenalty"></strong>
+              </button>
+            </div>
+            <label>
+              Observação (opcional)
+              <input id="contractOccurrenceNote" maxlength="500" placeholder="Descreva a ocorrência, se quiser" />
+            </label>
+            <p id="contractPenaltyPreview" class="hint"></p>
+            <button id="registerContractOccurrence" type="button">Registrar ocorrência</button>
+            <p id="contractOccurrenceMessage" class="hint" role="status"></p>
+          </details>
+        </section>
+        <section class="section wallet-history" id="historySection">
+          <div class="history-heading">
+            <h2>Histórico de Transações</h2>
+            <button id="enviarHistoricoWhatsApp" type="button">Enviar por WhatsApp</button>
+          </div>
+          <div class="history-filters">
+            <label for="filterDate">
+              Dia
+              <input type="date" id="filterDate" />
+            </label>
+            <button id="aplicarFiltro" type="button">Filtrar</button>
+            <button id="limparFiltro" type="button">Limpar</button>
+          </div>
           <div id="historico"></div>
-          <button id="enviarHistoricoWhatsApp" style="background: #1e90ff; color: white; border-radius: 8px; border: none; margin-top: 10px">Enviar histórico por WhatsApp</button>
-          <!-- ... -->
-        </div>
+        </section>
       </main>
       <section id="financePanel" class="app-panel" hidden>
         <div class="section">
@@ -296,11 +349,11 @@
               </label>
               <label>
                 Loja / estabelecimento
-                <input id="entryStore" maxlength="200" placeholder="Ex.: Loja Aurora" />
+                <input id="entryStore" maxlength="200" placeholder="Nome da loja" />
               </label>
               <label>
                 Nota / descrição
-                <input id="entryDescription" required maxlength="1000" placeholder="Ex.: Compra (1)" />
+                <input id="entryDescription" required maxlength="1000" placeholder="Descrição do gasto" />
               </label>
               <label>
                 Data
@@ -308,7 +361,7 @@
               </label>
               <label>
                 Valor original
-                <input id="entryAmount" inputmode="decimal" required placeholder="511,22 ou 511.22" />
+                <input id="entryAmount" inputmode="decimal" required placeholder="0,00" />
               </label>
               <label>
                 Moeda
@@ -418,11 +471,11 @@
             <span id="financeSelectionCount" role="status" aria-live="polite">0 selecionados</span>
             <button type="button" id="deleteSelectedFinance" class="danger" disabled>Excluir selecionados</button>
           </div>
-          <p class="hint">“Selecionar todos” considera os filtros acima. Registros vinculados à integração anterior ficam protegidos.</p>
+          <p class="hint">A seleção considera os filtros aplicados.</p>
           <div id="financeHistory"></div>
           <details>
             <summary>Resumo para WhatsApp</summary>
-            <p class="hint">O resumo acompanha os filtros e usa o orçamento total informado. Copie e escolha com quem compartilhar.</p>
+            <p class="hint">Copie sua lista para compartilhar.</p>
             <label>
               Resumo
               <textarea id="shareText" readonly></textarea>
@@ -442,7 +495,10 @@
           <p id="timerLimits" class="hint" data-timer-summary></p>
           <details id="customEconomy">
             <summary>Editar preços, ganhos e limites</summary>
-            <p class="hint">Edite os arrays e salve. “price” é o preço do serviço; “amount” é o ganho, em R$. Acrescente um objeto para criar um item. “timerEligible”: true marca com 💲.</p>
+            <p class="hint">
+              Edite os arrays e salve. “price” é o preço do serviço; “amount” é o ganho, em R$. Acrescente um objeto para criar um item. “timerEligible”: true marca com 💲. Dentro de cada ganho, “extras” lista seus adicionais: id, label (nome na
+              tela) e amount (valor em R$).
+            </p>
             <label for="customEconomyJson">Código do catálogo (JSON)</label>
             <textarea id="customEconomyJson" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off"></textarea>
             <p id="economyCodeMessage" role="status" class="hint"></p>
@@ -450,8 +506,8 @@
           </details>
         </section>
 
-        <p>Os dados são salvos neste navegador e neste endereço do site. Exporte regularmente um backup privado para evitar perda ao limpar o navegador ou trocar de dispositivo.</p>
-        <p class="hint">O backup JSON contém o simulador, bloqueios, bônus, roleta, sessão pausada, configuração e os registros financeiros. Ele contém dados pessoais: guarde em local privado. Não há sincronização automática entre dispositivos.</p>
+        <p>Baixe um backup para guardar seus dados ou levá-los a outro dispositivo.</p>
+        <p class="hint">O backup inclui seu saldo, histórico, catálogo e gastos reais. Guarde-o em local privado.</p>
         <button type="button" id="exportBackup">Baixar backup JSON completo</button>
         <label>
           Restaurar backup JSON
@@ -461,6 +517,14 @@
         <div id="backupPreview" class="notice" hidden></div>
         <button type="button" id="confirmBackup" hidden>Confirmar substituição dos dados locais</button>
         <p id="backupMessage" role="status"></p>
+        <details id="walletMaintenance" class="wallet-maintenance">
+          <summary>Gerenciar saldo e histórico</summary>
+          <p class="hint">Zerar o saldo não apaga o histórico. Arquivar o histórico mantém o saldo e guarda os registros no backup.</p>
+          <div class="btn-row">
+            <button type="button" id="resetSaldo">Resetar Saldo</button>
+            <button type="button" id="limparHistorico">Limpar Histórico</button>
+          </div>
+        </details>
       </section>
       <section id="contractPanel" class="app-panel" hidden>
         <div class="contract-toolbar">
@@ -471,7 +535,7 @@
         <p class="hint">Valores e regras operacionais acompanham o catálogo atual. O PDF original permanece como referência.</p>
         <article id="contractDocument" class="contract-document"></article>
       </section>
-      <footer>Findom Wallet · dados no dispositivo · saldo interno e gastos reais em áreas separadas</footer>
+      <footer>Findom Wallet</footer>
     </div>
 
     <!-- Camada das chamas -->
@@ -498,6 +562,7 @@
     <script defer src="js/efeitoBonusAtivoGanhoCredito.js"></script>
     <script defer src="js/efeitoBonusAtivoCompraServico.js"></script>
     <script defer src="js/chovendoGrana.js"></script>
+    <script defer src="js/history-view.js"></script>
     <script defer src="js/appMain.js"></script>
     <script defer src="js/roleta.js"></script>
     <script defer src="js/roulette-rewards.js"></script>
@@ -508,5 +573,8 @@
     <script defer src="js/redemptions.js"></script>
     <script defer src="js/backup.js"></script>
     <script defer src="js/contract-view.js"></script>
+    <script defer src="js/transaction-presentation.js"></script>
+    <script defer src="js/navigation-presentation.js"></script>
+    <script defer src="js/wallet-presentation.js"></script>
   </body>
 </html>

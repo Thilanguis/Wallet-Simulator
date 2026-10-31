@@ -57,7 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
     update();
   });
   document.getElementById('dinnerGuestCount').addEventListener('input', update);
-  document.getElementById('bonusEspecialCheckbox').addEventListener('change', update);
+  document.getElementById('bonusEspecialCheckbox').addEventListener('change', () => queueMicrotask(update));
   window.addEventListener('economy:changed', update);
   update();
 });

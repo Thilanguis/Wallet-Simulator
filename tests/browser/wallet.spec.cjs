@@ -101,14 +101,14 @@ test('WhatsApp preview correctable, duplicate import and conflicting edits', asy
 test('classic migration, balanced prices, exact single discount, gains and archive', async ({ page }) => {
   await autoConfirm(page);
   await open(page, { saldoDominadora: '100', historico: '[{"descricao":"Legado","valor":12.25,"saldoAtual":100,"tipo":"ganho","timestamp":"2026-01-01T12:00:00.000Z"}]' });
-  await page.locator('#bonusEspecialCheckbox').check();
+  await page.locator('#privilegeSeal').click();
   await page.locator('#selectTarefa').selectOption({ index: 1 });
   await expect(page.locator('#previewDescontoCompra')).toContainText('25,5');
   await page.locator('#adicionar').click();
   await expect(page.locator('#saldoDominadora')).toHaveText('R$ 74,50');
   await expect(page.locator('#tarefasPendentes .tarefa-item')).toHaveCount(1);
-  await page.locator('#tipoTransacao').selectOption('ganho');
-  await page.locator('#selectGanho').selectOption('Buraco');
+  await page.locator('[data-jump=ganho]').click();
+  await page.locator('#selectGanho').selectOption('Videogames Competitivos');
   await page.locator('#valorGanho').fill('10');
   await page.locator('#adicionar').click();
   await expect(page.locator('#saldoDominadora')).toHaveText('R$ 86,00');
@@ -122,7 +122,7 @@ test('classic migration, balanced prices, exact single discount, gains and archi
 });
 test('timer resume after reload, elapsed integration and no duplicate settlement', async ({ page }) => {
   await open(page);
-  await page.locator('#tipoTransacao').selectOption('ganho');
+  await page.locator('[data-jump=ganho]').click();
   await page.clock.install();
   await page.locator('#btnPlayPauseTempo').click();
   await page.clock.fastForward(60000);
@@ -130,7 +130,7 @@ test('timer resume after reload, elapsed integration and no duplicate settlement
   await expect(page.locator('#tempoDisplay')).toHaveText('01:00');
   await page.reload();
 
-  await page.locator('#tipoTransacao').selectOption('ganho');
+  await page.locator('[data-jump=ganho]').click();
   await expect(page.locator('#tempoDisplay')).toHaveText('01:00');
   await page.locator('#btnTerminarTempo').click();
   await expect(page.locator('#saldoDominadora')).toHaveText('R$ 0,50');
@@ -165,8 +165,7 @@ test('roulette blocks concurrent spins, reload awards exactly once, free claim o
   await page.reload();
 
   await expect(page.locator('#btnRoletaFlutuante')).toBeDisabled();
-  await expect(page.locator('#roulettePrizeList [data-claim]')).toHaveCount(1);
-  await page.locator('#roulettePrizeList [data-claim]').click();
+  await expect(page.locator('#roulettePrizeList [data-claim]')).toHaveCount(0);
   await expect(page.locator('#tarefasPendentes .tarefa-item')).toHaveCount(1);
   await expect(page.locator('#roulettePrizeList [data-claim]')).toHaveCount(0);
   await page.reload();
@@ -275,7 +274,7 @@ test('PWA update waits for consent, Later preserves state, confirmed reload and 
   await open(page, { saldoDominadora: '321.45' });
   await finance(page);
   await manual(page);
-  await expect.poll(()=>page.evaluate(async()=>Boolean((await navigator.serviceWorker.getRegistration())?.active)),{timeout:15000}).toBe(true);
+  await expect.poll(() => page.evaluate(async () => Boolean((await navigator.serviceWorker.getRegistration())?.active)), { timeout: 15000 }).toBe(true);
   await page.reload();
 
   const fs = require('node:fs'),

@@ -2,7 +2,7 @@
 document.addEventListener('DOMContentLoaded', () => {
   const $ = (id) => document.getElementById(id);
   function isGame() {
-    return Object.hasOwn(getEconomy().games, $('selectGanho').value);
+    return Economy.config.games.some((item) => item.id === $('selectGanho').value && item.scoreBased !== false);
   }
   function calculate() {
     const winner = Number($('scoreWinner').value),
@@ -16,6 +16,11 @@ document.addEventListener('DOMContentLoaded', () => {
     return { difference, amount: cents / 100 };
   }
   function preview() {
+    if (!document.getElementById('scoreCoefficient').value.trim()) {
+      $('scorePreview').textContent = 'Informe o valor por ponto para calcular.';
+      $('useScoreGain').disabled = true;
+      return;
+    }
     try {
       const result = calculate();
       $('scorePreview').textContent = result.difference + ' pontos × valor por ponto = ' + formatBR(result.amount) + '. O registro continua dependendo de Registrar.';

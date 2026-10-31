@@ -48,6 +48,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (sim.bonusEspecialAtivo && typeof JSON.parse(sim.bonusEspecialAtivo) !== 'boolean') throw new Error('Estado do bônus inválido.');
     if (sim.timerSession) {
       const t = JSON.parse(sim.timerSession);
+      if (t.dynamicActivities !== undefined && (!Array.isArray(t.dynamicActivities) || t.dynamicActivities.length > 1000 || t.dynamicActivities.some((name) => typeof name !== 'string' || name.length > 200)))
+        throw new Error('Combo do cronômetro inválido.');
       if (![t.seconds, t.earnedUnits, t.rate, t.tasks].every((n) => Number.isFinite(n) && n >= 0)) throw new Error('Cronômetro inválido.');
     }
     return wallet;
@@ -62,7 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const t = Finance.totals(candidate.finance.entries, candidate.finance.budget);
       $('backupPreview').hidden = false;
       $('backupPreview').textContent =
-        `Backup válido: ${candidate.finance.entries.length} lançamentos financeiros, ${candidate.finance.redemptions.length} resgates e ${JSON.parse(candidate.simulator.historico || '[]').length} operações do jogo.\nTotal financeiro ativo: ${Finance.format(t.total)}. Saldo fictício: ${Number(candidate.simulator.saldoDominadora || 0).toLocaleString('pt-BR')} créditos.\nA restauração substituirá TODOS os dados atuais. Exporte um backup antes de continuar.`;
+        `Backup válido: ${candidate.finance.entries.length} lançamentos financeiros, ${candidate.finance.redemptions.length} resgates e ${JSON.parse(candidate.simulator.historico || '[]').length} operações do jogo.\nTotal financeiro ativo: ${Finance.format(t.total)}. Saldo Dominadora: ${formatBR(Number(candidate.simulator.saldoDominadora || 0))}.\nA restauração substituirá TODOS os dados atuais. Exporte um backup antes de continuar.`;
       $('confirmBackup').hidden = false;
     } catch (error) {
       $('backupMessage').textContent = error.message;

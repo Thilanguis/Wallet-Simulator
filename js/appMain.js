@@ -149,144 +149,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderHistorico() {
     if (!historicoElement) return;
-    historicoElement.innerHTML = '';
-
     const filtered = getFilteredHistorico();
-    if (enviarHistoricoWhatsAppBtn) {
-      enviarHistoricoWhatsAppBtn.style.display = filtered.length ? 'block' : 'none';
-    }
-    if (!filtered.length) {
-      historicoElement.innerHTML = '<div style="color:#999;border:1px dashed #444;padding:12px;border-radius:10px;text-align:center">Sem registros para o período.</div>';
-      return;
-    }
-
-    const byDay = {};
-    for (const h of filtered) {
-      const key = new Date(h.timestamp).toLocaleDateString('sv-SE');
-      (byDay[key] ||= []).push(h);
-    }
-
-    const days = Object.keys(byDay).sort((a, b) => new Date(b) - new Date(a));
-
-    for (const key of days) {
-      const d = new Date(key + 'T00:00:00');
-      const header = document.createElement('div');
-      header.style.cssText = 'margin:14px 0 6px; color:#ffd700; font-weight:900; letter-spacing:.5px; border-left:4px solid #8b0000; padding-left:10px; font-size:14px;';
-      header.textContent = d.toLocaleDateString('pt-BR', {
-        weekday: 'short',
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-      });
-      historicoElement.appendChild(header);
-
-      byDay[key].forEach((h) => {
-        const card = document.createElement('div');
-        card.style.cssText = 'background:#121212;border:1px solid #2e2e2e;border-radius:10px;padding:10px 12px;margin-bottom:8px;box-shadow:0 2px 8px rgba(0,0,0,.35), inset 0 0 8px rgba(184,134,11,.06)';
-
-        const isGanho = h.tipo === 'ganho';
-        const typeLabel = h.tipo === 'premio' ? 'Prêmio' : h.tipo === 'ajuste' ? 'Ajuste' : isGanho ? 'Ganho' : 'Gasto';
-
-        const valorHTML = `<strong style="min-width:120px;display:inline-block;text-align:right;color:${isGanho ? '#0fdc81' : '#ff6a5f'}">${
-          typeof formatBR === 'function' ? formatBR(h.valor) : 'R$ ' + (h.valor || 0).toLocaleString('pt-BR')
-        }</strong>`;
-
-        const badge = `<span style="font-size:12px;font-weight:800;padding:4px 8px;border-radius:999px;border:1px solid ${isGanho ? 'rgba(15,220,129,.6)' : 'rgba(255,106,95,.6)'};background:${
-          isGanho ? 'rgba(15,220,129,.1)' : 'rgba(255,106,95,.08)'
-        };color:${isGanho ? '#0fdc81' : '#ff6a5f'};text-transform:uppercase;letter-spacing:.5px;margin-right:10px">
-        ${typeLabel}
-      </span>`;
-
-        const hora = new Date(h.timestamp).toLocaleTimeString('pt-BR', {
-          hour: '2-digit',
-          minute: '2-digit',
-        });
-
-        // Cabeçalho do card + botão apagar
-        card.innerHTML = `
-        <div style="display:flex;align-items:center;gap:10px">
-          ${badge}
-          <div style="flex:1;color:#ddd">${escapeHTML(h.descricao)}</div>
-          ${valorHTML}
-          <button class="btn-del-hist" title="Apagar este registro" onclick="deletarItemHistorico('${h.timestamp}')">🗑</button>
-        </div>
-        <div style="margin-top:4px;display:flex;justify-content:space-between;color:#8d8d8d;font-size:12px">
-          <span>${hora}</span>
-          <span>Saldo: ${typeof formatBR === 'function' ? formatBR(h.saldoAtual) : 'R$ ' + (h.saldoAtual || 0).toLocaleString('pt-BR')}</span>
-        </div>
-      `;
-
-        // Linha bonitinha de bônus / desconto (se tiver dados)
-        if (typeof h.valorOriginal === 'number' && typeof h.valorFinal === 'number' && typeof h.diferenca === 'number' && typeof h.percentual === 'number') {
-          const perc = Math.round(h.percentual || 0);
-          const isBonusGanho = perc > 0;
-          const isDesconto = perc < 0;
-          const isNeutro = perc === 0;
-
-          const isGanhoLocal = h.tipo === 'ganho';
-
-          const percAbs = Math.abs(perc);
-          const difAbs = Math.abs(h.diferenca);
-
-          const chipBg = isBonusGanho ? 'rgba(15,220,129,.12)' : isDesconto ? 'rgba(255,106,95,.12)' : 'rgba(255,215,0,.16)'; // 0% -> amarelinho
-          const chipBorder = isBonusGanho ? 'rgba(15,220,129,.6)' : isDesconto ? 'rgba(255,106,95,.6)' : 'rgba(255,215,0,.8)';
-          const chipText = isBonusGanho ? '#0fdc81' : isDesconto ? '#ff6a5f' : '#ffd700';
-
-          const valorOriginalFmt = Math.abs(h.valorOriginal).toLocaleString('pt-BR', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          });
-          const valorFinalFmt = Math.abs(h.valorFinal).toLocaleString('pt-BR', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          });
-          const difFmt = difAbs.toLocaleString('pt-BR', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          });
-
-          let detalhesHtml = '';
-
-          if (isNeutro) {
-            detalhesHtml = '<span>Sem bônus aplicado: ' + valorFinalFmt + '</span>';
-          } else {
-            const labelPrefix = isBonusGanho ? 'Bônus:' : 'Desconto:';
-            const ajusteLabel = isBonusGanho ? 'ajuste de' : 'economia de';
-
-            detalhesHtml = `
-      <span style="flex:1;">
-        <span style="opacity:.8;">${labelPrefix}</span>
-        <span style="margin-left:4px;text-decoration:line-through;opacity:.6;">
-          ${valorOriginalFmt}
-        </span>
-        <span style="margin-left:4px;font-weight:800;color:${isBonusGanho ? '#0fdc81' : '#ff6a5f'};">
-          ${valorFinalFmt}
-        </span>
-        <span style="opacity:.75;margin-left:4px;">
-          (${ajusteLabel} ${difFmt})
-        </span>
-      </span>
-    `;
-          }
-
-          const bonusDiv = document.createElement('div');
-          bonusDiv.style.cssText = 'margin-top:6px;font-size:12px;color:#c9c9c9;padding-left:14px;border-left:2px solid rgba(255,215,0,.4);display:flex;align-items:center;gap:10px;';
-
-          const percLabel = perc > 0 ? `+${percAbs}%` : perc < 0 ? `-${percAbs}%` : '0%';
-
-          bonusDiv.innerHTML = `
-    <span style="padding:2px 10px;border-radius:999px;border:1px solid ${chipBorder};background:${chipBg};color:${chipText};font-weight:700;">
-      ${percLabel} Bônus lingerie
-    </span>
-    ${detalhesHtml}
-  `;
-
-          card.appendChild(bonusDiv);
-        }
-
-        historicoElement.appendChild(card);
-      });
-    }
+    if (enviarHistoricoWhatsAppBtn) enviarHistoricoWhatsAppBtn.hidden = !filtered.length;
+    WalletHistoryView.render(historicoElement, filtered, (timestamp) => window.deletarItemHistorico(timestamp));
   }
 
   function adicionarHistorico(descricao, valor, tipo, detalhesBonus = null) {
@@ -408,6 +273,16 @@ document.addEventListener('DOMContentLoaded', () => {
   </span>
   <hr>
 `;
+      const duration = getBloqueioMsPorTarefa(tarefa.nome);
+      if (duration > 0) {
+        const progress = document.createElement('progress');
+        progress.className = 'limit-progress';
+        progress.max = duration;
+        progress.value = Math.min(duration, diffMs0);
+        progress.dataset.duration = duration;
+        progress.setAttribute('aria-label', 'Tempo restante: ' + nomeBonito);
+        div.append(progress);
+      }
       lista.appendChild(div);
     });
   }
@@ -525,6 +400,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!el || !Number.isFinite(expira)) return;
 
       const targetMs = expira - agora;
+      const progress = wrap.parentElement.querySelector('.limit-progress');
+      if (progress) progress.value = Math.max(0, Math.min(Number(progress.dataset.duration), targetMs));
       if (targetMs <= SNAP_MS) {
         expirados.push(wrap);
         return;
@@ -911,16 +788,6 @@ document.addEventListener('DOMContentLoaded', () => {
       const ganhoFields = document.getElementById('ganhoFields');
       if (compraFields) compraFields.style.display = this.value === 'gasto' ? 'block' : 'none';
       if (ganhoFields) ganhoFields.style.display = this.value === 'ganho' ? 'block' : 'none';
-
-      if (this.value !== 'ganho') {
-        const quantidadeInput = document.getElementById('quantidadeMultiplicador');
-        const labelQuantidadeMultiplicador = document.getElementById('labelQuantidadeMultiplicador');
-        if (quantidadeInput) {
-          quantidadeInput.style.display = 'none';
-          if (labelQuantidadeMultiplicador) labelQuantidadeMultiplicador.style.display = 'none';
-          quantidadeInput.value = 1;
-        }
-      }
     });
   }
 
@@ -1170,29 +1037,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!(valor > 0) || (!getEconomy().gains[ganhoSelecionado] && valor > getEconomy().manualGainMax)) return AppDialog.alert('Ganho manual acima do limite configurado.');
         tarefa = ganhoSelecionado;
 
-        // 🔥 Extra: detalhar "Pés na cara" com os checkboxes marcados
-        try {
-          if (ganhoSelecionado && ganhoSelecionado.includes('Pés na cara')) {
-            const extras = [];
-
-            const chkChule = document.getElementById('chkChule');
-            const chkFrancesinha = document.getElementById('chkFrancesinha');
-
-            if (chkChule && chkChule.checked) {
-              extras.push('pés com chulé');
-            }
-            if (chkFrancesinha && chkFrancesinha.checked) {
-              extras.push('francesinha');
-            }
-
-            if (extras.length) {
-              tarefa = `${ganhoSelecionado} — ${extras.join(' + ')}`;
-            }
-          }
-        } catch (e) {
-          console.warn('Falha ao montar descrição detalhada de Pés na cara:', e);
-        }
-
+        const extraLabels = Array.from(document.querySelectorAll('#gainExtras input:checked'), (box) => Economy.config.extras[box.dataset.extraId]?.label || box.dataset.extraId);
+        if (extraLabels.length) tarefa += ' (' + extraLabels.join(' + ') + ')';
         const multBonus = typeof getBonusEspecialMultiplier === 'function' ? getBonusEspecialMultiplier() : 1;
 
         const valorOriginal = valor;
@@ -1212,6 +1058,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (selectGanhoSelect) selectGanhoSelect.value = '';
+        renderGainExtras('', getEconomy());
         if (valorGanhoInput) valorGanhoInput.value = '0';
         atualizarSaldo();
 
@@ -1237,6 +1084,11 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnPlayPause && btnTerminar && tempoDisplay && valorAcumuladoDisplay && valorPorMinutoInput) {
     if (typeof atualizarDisplay === 'function') atualizarDisplay();
 
+    selectGanhoSelect.addEventListener('change', () => {
+      if (tipoTransacaoSelect.value !== 'ganho' || timerEmSessao) return;
+      const id = selectGanhoSelect.value;
+      if (id && (id === 'Outro' || Object.hasOwn(getEconomy().gains, id) || Object.hasOwn(getEconomy().games, id))) btnPlayPause.click();
+    });
     btnPlayPause.addEventListener('click', () => {
       try {
         if (!timerEmSessao) {
@@ -1246,10 +1098,15 @@ document.addEventListener('DOMContentLoaded', () => {
           valorPorMinutoInput.value = baseMultiplicadorSessao;
           timerEmSessao = true;
           sessionHasEligibleTask = false;
+          sessionDynamicActivities.clear();
+          legacyDynamicActivity = false;
+          renderDynamicCombo();
           if (typeof atualizarValorAcumulado === 'function') atualizarValorAcumulado();
         }
 
         if (timerInterval) {
+          syncTimer();
+          atualizarDisplay();
           clearInterval(timerInterval);
           timerInterval = null;
           btnPlayPause.textContent = '▶️ Continuar';
@@ -1277,6 +1134,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!timerEmSessao) return;
 
         if (timerInterval) {
+          syncTimer();
+          atualizarDisplay();
           clearInterval(timerInterval);
           timerInterval = null;
         }
@@ -1308,12 +1167,16 @@ document.addEventListener('DOMContentLoaded', () => {
         baseMultiplicadorSessao = 1;
         timerEmSessao = false;
         sessionHasEligibleTask = false;
+        sessionDynamicActivities.clear();
+        legacyDynamicActivity = false;
+        renderDynamicCombo();
         tempoSegundos = 0;
         timerEarnedUnits = 0;
         persistTimer();
 
         if (typeof atualizarDisplay === 'function') atualizarDisplay();
         btnPlayPause.textContent = '▶️ Começar';
+        window.dispatchEvent(new CustomEvent('timer:settled', { detail: { amount: valorCredito } }));
       } catch (e) {
         console.error('Erro ao finalizar timer:', e);
       }
@@ -1360,89 +1223,3 @@ document.addEventListener('DOMContentLoaded', () => {
     atualizarBloqueiosNoSelectTarefa();
   }, 60000);
 });
-
-/* ===================================================================
-   DEV TOOLS (atalhos de console) — seguro para colar no final do arquivo
-   =================================================================== */
-(function () {
-  const DEV_TOOLS_VERSION = 'v2';
-  if (window.__DEV_TOOLS_VERSION__ === DEV_TOOLS_VERSION) return;
-  window.__DEV_TOOLS_VERSION__ = DEV_TOOLS_VERSION;
-
-  function logOk(msg) {
-    try {
-      console.log('%c' + msg, 'color:#0fdc81;font-weight:700');
-    } catch {}
-  }
-  function logWarn(msg) {
-    try {
-      console.warn('%c' + msg, 'color:#ffb347;font-weight:700');
-    } catch {}
-  }
-  function logErr(msg) {
-    try {
-      console.error('%c' + msg, 'color:#ff6a5f;font-weight:700');
-    } catch {}
-  }
-
-  function hardRefresh() {
-    try {
-      location.reload();
-    } catch {}
-  }
-
-  function stopAcceleration() {
-    try {
-      if (window.__AppCtl && typeof window.__AppCtl.stopAccel === 'function') {
-        window.__AppCtl.stopAccel();
-        logOk('⚡ Aceleração cancelada via __AppCtl.stopAccel().');
-      } else {
-        AppStorage.setItem('accelBoosts', '[]');
-        try {
-          window.dispatchEvent(new CustomEvent('accel:stop-all'));
-        } catch {}
-        logOk('⚡ Aceleração cancelada (fallback). Forçando refresh rápido.');
-        setTimeout(hardRefresh, 50);
-      }
-    } catch (e) {
-      logErr('Falha ao parar aceleração: ' + (e && e.message));
-    }
-  }
-
-  function clearBlocks() {
-    try {
-      if (window.__AppCtl && typeof window.__AppCtl.setBlocks === 'function') {
-        window.__AppCtl.setBlocks([]);
-        logOk('🔓 Bloqueios removidos via __AppCtl.setBlocks([]).');
-      } else {
-        AppStorage.setItem('tarefasBloqueadas', '[]');
-        logOk('🔓 Bloqueios removidos (fallback). Atualizando…');
-        setTimeout(hardRefresh, 50);
-      }
-    } catch (e) {
-      logErr('Falha ao limpar bloqueios: ' + (e && e.message));
-    }
-  }
-
-  function nukeAll() {
-    try {
-      if (window.__AppCtl && typeof window.__AppCtl.nukeAll === 'function') {
-        window.__AppCtl.nukeAll();
-        logWarn('🧨 Tudo limpo via __AppCtl.nukeAll().');
-      } else {
-        AppStorage.setItem('accelBoosts', '[]');
-        AppStorage.setItem('tarefasBloqueadas', '[]');
-        logWarn('🧨 Tudo limpo (fallback). Atualizando…');
-        setTimeout(hardRefresh, 50);
-      }
-    } catch (e) {
-      logErr('Falha no nukeAll: ' + (e && e.message));
-    }
-  }
-
-  window.__devStopAcceleration = stopAcceleration;
-  window.__devClearBlocks = clearBlocks;
-  window.__devNukeAll = nukeAll;
-
-  logOk('✅ Dev tools prontos: __devStopAcceleration(), __devClearBlocks(), __devNukeAll()');
-})();

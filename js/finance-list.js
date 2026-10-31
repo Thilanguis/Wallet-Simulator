@@ -41,6 +41,11 @@
       return { category, title: titles[index], number: index + 1, rows, total: totals.total, foreign: totals.foreign.USD };
     });
   }
+  function parts(row, shopping) {
+    const status = row.entries[0].status;
+    const mark = ['paid', 'pending'].includes(status) ? ' ✅' : status === 'cancelled' ? ' (cancelado)' : ' (reembolsado)';
+    return { description: row.noteOnly ? row.note : row.label ? row.label + (shopping ? mark : '') + ':' : '', amount: row.noteOnly ? '' : row.entries.map(value).join(' + '), note: row.noteOnly ? '' : row.note };
+  }
   function rowText(row, shopping) {
     const status = row.entries[0].status;
     const mark = ['paid', 'pending'].includes(status) ? ' ✅' : status === 'cancelled' ? ' (cancelado)' : ' (reembolsado)';
@@ -64,5 +69,5 @@
     lines.push('---', '', '9. Resumo Final dos Itens 📊', '', ...groups.map((group) => group.number + '. ' + group.category + ' ... ' + money(group.total, 'BRL')), '', 'Total Geral Atualizado 🔥 = ' + money(total, 'BRL'));
     return lines.join('\n');
   }
-  return { calculate, sections, rowText, money, text };
+  return { calculate, sections, rowText, parts, money, text };
 });

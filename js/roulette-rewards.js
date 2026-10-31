@@ -1,26 +1,66 @@
 document.addEventListener('DOMContentLoaded', () => {
   const container = document.getElementById('roulettePrizeList');
-  function render() {
+  function registerFreeServices() {
     const awards = JSON.parse(AppStorage.getItem('rouletteAwards') || '[]');
-    container.innerHTML =
-      awards
-        .slice()
-        .reverse()
-        .map(
-          (a) =>
-            `<article class="finance-entry"><strong>${escapeHTML(a.label)}</strong><p class="hint">${escapeHTML(a.createdAt)} · ${a.claimed ? 'Resultado registrado' : 'Prêmio gratuito disponível'}</p>${!a.claimed ? `<button data-claim="${escapeHTML(a.id)}">Resgatar prêmio gratuito</button>` : ''}</article>`,
-        )
-        .join('') || '<p class="hint">Seus resultados aparecerão aqui.</p>';
+    const tasks = JSON.parse(AppStorage.getItem('tarefasPendentes') || '[]');
+    const history = JSON.parse(AppStorage.getItem('historico') || '[]');
+    const archived = JSON.parse(AppStorage.getItem('archivedHistory') || '[]');
+    const blocks = JSON.parse(AppStorage.getItem('tarefasBloqueadas') || '[]');
+    let changed = false;
+    for (const award of awards) {
+      if (award.claimed || award.kind !== 'freeService') continue;
+      const item = Economy.config.services.find((service) => service.id === award.serviceId);
+      if (!item) continue;
+      const recorded = tasks.some((task) => String(task.id) === String(award.id) || task.rouletteAwardId === award.id) || [...history, ...archived].some((entry) => entry.id === 'prize:' + award.id);
+      if (!recorded) {
+        tasks.unshift({ id: award.id, rouletteAwardId: award.id, tarefa: item.id, descricao: item.description + ' · prêmio gratuito da roleta', valor: 0, timestamp: award.createdAt || new Date().toISOString() });
+        history.unshift({ id: 'prize:' + award.id, tipo: 'premio', descricao: 'Prêmio gratuito da roleta: ' + award.label, valor: 0, saldoAtual: saldoDominadora, timestamp: new Date().toISOString() });
+        const cooldown = Economy.config.cooldowns[item.id];
+        if (cooldown && !blocks.some((block) => block.nome === item.id && block.expiraEm > Date.now())) blocks.push({ nome: item.id, expiraEm: Date.now() + cooldown * 3600000 });
+      }
+      award.claimed = true;
+      changed = true;
+    }
+    if (!changed) return;
+    // Persist task, receipt marker and prize history together, so reload cannot duplicate a reward.
+    const snapshot = WalletStore.snapshot();
+    WalletStore.commitBoth(snapshot.finance, { ...snapshot.simulator, rouletteAwards: JSON.stringify(awards), tarefasPendentes: JSON.stringify(tasks), historico: JSON.stringify(history), tarefasBloqueadas: JSON.stringify(blocks) });
+    tarefasPendentes = tasks;
+    historico = history;
+    window.__AppCtl.setBlocks(blocks);
+    renderTarefasPendentes();
+    window.dispatchEvent(new Event('wallet:credits'));
+  }
+  function render() {
+    try {
+      registerFreeServices();
+    } catch (error) {
+      storageFailure(error);
+    }
+    const awards = JSON.parse(AppStorage.getItem('rouletteAwards') || '[]');
+    const available = awards.filter((award) => !award.claimed && ['bonus', 'reducer'].includes(award.kind));
+    container.hidden = !available.length;
+    container.innerHTML = available
+      .map((award) => {
+        const item = Economy.config.services.find((service) => service.id === award.serviceId);
+        const label = award.kind === 'bonus' ? 'Ativar bônus lingerie' : 'Ativar redutor: ' + (item?.label || 'redução de prazo');
+        return '<button type="button" data-claim="' + escapeHTML(award.id) + '">' + escapeHTML(label) + '</button>';
+      })
+      .join('');
   }
   container.onclick = async (event) => {
     const button = event.target.closest('[data-claim]');
     if (!button) return;
-    const awards = JSON.parse(AppStorage.getItem('rouletteAwards') || '[]'),
+    let awards = JSON.parse(AppStorage.getItem('rouletteAwards') || '[]'),
       award = awards.find((a) => a.id === button.dataset.claim);
-    if (!award || award.claimed) return;
-    const blocks = JSON.parse(AppStorage.getItem('tarefasBloqueadas') || '[]');
+    if (!award || award.claimed || !['bonus', 'reducer'].includes(award.kind)) return;
+    let blocks = JSON.parse(AppStorage.getItem('tarefasBloqueadas') || '[]');
     if (award.serviceId && blocks.some((b) => b.nome === award.serviceId && b.expiraEm > Date.now())) return AppDialog.alert('O serviço ainda está bloqueado. O prêmio ficará disponível para resgatar após o cooldown.');
     if (!(await AppDialog.confirm('Resgatar este prêmio gratuito? Nenhum valor será descontado do Saldo Dominadora.'))) return;
+    awards = JSON.parse(AppStorage.getItem('rouletteAwards') || '[]');
+    award = awards.find((a) => a.id === button.dataset.claim);
+    if (!award || award.claimed) return;
+    blocks = JSON.parse(AppStorage.getItem('tarefasBloqueadas') || '[]');
     if (award.kind === 'bonus') {
       AppStorage.setItem('rouletteBonusUntil', Date.now() + Economy.config.bonusDurationHours * 3600000);
       const checkbox = document.getElementById('bonusEspecialCheckbox');
@@ -34,16 +74,6 @@ document.addEventListener('DOMContentLoaded', () => {
       window.startGlobalAcceleration(total / (duration / 1000), duration, total, item.id);
       blocks.push({ nome: item.id, expiraEm: Date.now() + Economy.config.cooldowns[item.id] * 3600000 });
       window.__AppCtl.setBlocks(blocks);
-    } else if (award.kind === 'freeService') {
-      const item = Economy.config.services.find((s) => s.id === award.serviceId);
-      tarefasPendentes.unshift({ id: award.id, tarefa: item.id, descricao: item.description + ' · prêmio gratuito da roleta', valor: 0, timestamp: new Date().toISOString() });
-      AppStorage.setItem('tarefasPendentes', JSON.stringify(tarefasPendentes));
-      renderTarefasPendentes();
-      const cooldown = Economy.config.cooldowns[item.id];
-      if (cooldown) {
-        blocks.push({ nome: item.id, expiraEm: Date.now() + cooldown * 3600000 });
-        window.__AppCtl.setBlocks(blocks);
-      }
     }
     award.claimed = true;
     AppStorage.setItem('rouletteAwards', JSON.stringify(awards));

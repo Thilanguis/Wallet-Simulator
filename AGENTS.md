@@ -39,3 +39,15 @@
 - Atualizações: detectar automaticamente, oferecer confirmação e mostrar progresso de aplicação; sem botão Verificar atualização. Live Server continua sem cache de desenvolvimento. Contrato na tela deriva do catálogo e regras atuais; manter o PDF original como referência e permitir imprimir. Não criar Git na raiz sem autorização.
 
 - Migração autorizada pelo usuário: arquivos atuais copiados para o repositório existente Simulator, sem operações de escrita no Git. Configurações deve ser a última aba; Contrato vem antes. Não voltar a editar as cópias antigas de js/css da raiz.
+
+- Ganhos: Buraco, Perfil e Match Masters pertencem aos aplicativos próprios e saem do catálogo ativo (incluindo migração dos catálogos salvos), sem apagar históricos nem categorias de gastos reais. Manter videogames competitivos e jogos com amigas. Conversa no WhatsApp sobre compras tem sugestão editável R$15 e marcador 💲, usando apenas o cronômetro manual; sem monitorar mensagens nem calculadora de pontos para essa atividade.
+
+- Combo dinâmico: atividades 💲 diferentes registradas durante a sessão somam incrementos automáticos; repetir a mesma não duplica seu slot. Chips permitem encerrar cada dinâmica sem reprecificar o passado. Preservar combo ao recarregar pausado e zerar ao concluir sessão. Cuspir no copo e Pés na cara também são dinâmicos.
+
+- Tela Nova Transação: destacar cronômetro no topo de Ganho de Crédito, com estados visuais e lembrete discreto para atividade 💲 parada. Alterações de apresentação não iniciam automaticamente o tempo, não bloqueiam registros e não mudam cálculos/combos.
+
+- Atualização autorizada do fluxo: escolher uma atividade válida em Ganho de Crédito inicia automaticamente a sessão se ainda não existe. Não creditar saldo ao selecionar. Trocar atividade mantém tempo; pausa manual e sessão restaurada pausada exigem Continuar. Manter apresentação compacta anterior, sem ampliar os elementos.
+
+- Manter linguagem de uso, sem textos provisórios/testes na interface. Explicar que registrar qualquer atividade na sessão aumenta a taxa, mesmo sem 💲; 💲 também contribui para aumentos automáticos do combo. Não apagar dados para limpar textos.
+
+- Wallet: Saldo → atalhos → Nova Transação antes de tarefas, ocorrências e roleta. Abas compactas fixas no celular, Configurações por último. Zerar saldo/arquivar histórico ficam em Configurações. Ao salvar edição de nota, voltar à linha e destacar brevemente, inclusive após mudança de grupo.

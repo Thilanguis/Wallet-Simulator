@@ -152,6 +152,8 @@
     gains: [
       {
         id: 'Pés na cara',
+        extras: ['chkChule', 'chkFrancesinha'],
+        timerEligible: true,
         classic: 400,
         balanced: 20,
       },
@@ -167,9 +169,11 @@
       },
       {
         id: 'Cuspir na cara',
+        extras: ['chkCatarro'],
         classic: 320,
         balanced: 15,
       },
+      { id: 'Cuspir no copo', classic: 5, balanced: 5, timerEligible: true },
       {
         id: 'Mijar na boca',
         classic: 350,
@@ -213,23 +217,24 @@
     ],
     extras: {
       chkChule: {
+        label: 'Pés com chulé',
         classic: 400,
         balanced: 12,
       },
       chkFrancesinha: {
+        label: 'Francesinha',
         classic: 300,
         balanced: 8,
       },
       chkCatarro: {
+        label: 'Cuspe com catarro',
         classic: 500,
         balanced: 20,
       },
     },
     games: [
-      { id: 'Match Masters', amount: 8, timerEligible: false },
+      { id: 'Conversar no grupo do WhatsApp sobre compras', amount: 15, timerEligible: true, scoreBased: false },
       { id: 'Videogames Competitivos', amount: 10, timerEligible: true },
-      { id: 'Buraco', amount: 10, timerEligible: true },
-      { id: 'Perfil', amount: 12, timerEligible: true },
       { id: 'Jogos de tabuleiro com amigas', amount: 10, timerEligible: true },
     ],
     cooldowns: {

@@ -1,0 +1,65 @@
+const { test, expect } = require('@playwright/test');
+async function open(page, seed = {}) {
+  await page.route('**/firebaseConfiguration.js', (r) => r.fulfill({ contentType: 'text/javascript', body: 'export {};' }));
+  await page.addInitScript((seed) => {
+    if (!localStorage.getItem('findom.wallet.v2')) for (const [k, v] of Object.entries(seed)) localStorage.setItem(k, v);
+  }, seed);
+  await page.goto('/');
+}
+test('seal persists real bonus, keeps gain quantity and discounts services exactly once', async ({ page }) => {
+  await open(page, { saldoDominadora: '100' });
+  await page.locator('#privilegeSeal').click();
+  await expect(page.locator('#privilegeSeal')).toHaveAttribute('aria-pressed', 'true');
+  await page.reload();
+  expect(await page.evaluate(() => window.bonusEspecialAtivo)).toBe(true);
+  await page.locator('[data-jump=ganho]').click();
+  await page.locator('#selectGanho').selectOption('Tapa de pé na cara');
+  await page.locator('#quantidadeMultiplicador').fill('3');
+  await page.locator('#quantidadeMultiplicador').dispatchEvent('change');
+  const amount = await page.locator('#valorGanho').inputValue();
+  await page.locator('[data-jump=gasto]').click();
+  await page.locator('[data-jump=ganho]').click();
+  await expect(page.locator('#quantidadeMultiplicador')).toBeVisible();
+  await expect(page.locator('#quantidadeMultiplicador')).toHaveValue('3');
+  await expect(page.locator('#valorGanho')).toHaveValue(amount);
+  await page.locator('#adicionar').click();
+  const balance = await page.evaluate(() => Number(AppStorage.getItem('saldoDominadora')));
+  expect(balance).toBeCloseTo(100 + Number(amount) * 1.15, 2);
+  await page.locator('[data-jump=gasto]').click();
+  await page.locator('#selectTarefa').selectOption({ index: 1 });
+  await expect(page.locator('#previewDescontoCompra')).toContainText('25,50');
+  await page.locator('#privilegeSeal').click();
+  await expect(page.locator('#previewDescontoCompra')).toContainText('30,00');
+  await page.locator('#privilegeSeal').click();
+  await expect(page.locator('#previewDescontoCompra')).toContainText('25,50');
+  await page.locator('#adicionar').click();
+  await page.locator('[data-dialog-confirm]').click();
+  await expect(page.locator('#saldoDominadora')).toHaveText('R$ 81,40');
+  expect(await page.evaluate(() => Number(AppStorage.getItem('saldoDominadora')))).toBeCloseTo(balance - 25.5, 2);
+  expect(await page.evaluate(() => JSON.parse(AppStorage.getItem('historico')).map((h) => h.percentual))).toEqual([-15, 15]);
+  expect(await page.evaluate(() => FinanceUI.getState().entries)).toEqual([]);
+});
+test('timer synchronizes on pause and finish, applies bonus once, restored session stays paused', async ({ page }) => {
+  await open(page);
+  await page.clock.install();
+  const start = new Date('2026-10-31T12:00:00Z');
+  await page.clock.pauseAt(start);
+  await page.locator('#privilegeSeal').click();
+  await page.locator('[data-jump=ganho]').click();
+  await page.locator('#selectGanho').selectOption('Tapa de pé na cara');
+  await expect(page.locator('#timerVisualStatus')).toContainText('Em andamento');
+  await page.clock.setSystemTime(new Date(start.getTime() + 60000));
+  await page.locator('#btnPlayPauseTempo').click();
+  await expect(page.locator('#tempoDisplay')).toHaveText('01:00');
+  await expect(page.locator('#timerVisualStatus')).toContainText('Pausado');
+  await page.reload();
+  await page.locator('[data-jump=ganho]').click();
+  await expect(page.locator('#timerVisualStatus')).toContainText('Pausado');
+  await page.locator('#btnTerminarTempo').click();
+  await expect(page.locator('#timerVisualStatus')).toContainText('Finalizado');
+  expect(await page.evaluate(() => Number(AppStorage.getItem('saldoDominadora')))).toBe(Math.round(0.5 * 1.15 * 100) / 100);
+  await page.locator('#btnTerminarTempo').click();
+  expect(await page.evaluate(() => JSON.parse(AppStorage.getItem('historico')).length)).toBe(1);
+  await page.locator('#selectGanho').selectOption('Pés na cara');
+  await expect(page.locator('#timerVisualStatus')).toContainText('Em andamento');
+});

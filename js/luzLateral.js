@@ -2,6 +2,7 @@
 (function (global) {
   const IS_MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const DPR_MAX = 2;
+  const compactScreen = matchMedia('(max-width: 760px)');
 
   // Aparência (igual à versão que você gostou)
   const EDGE_WIDTH_PX = IS_MOBILE ? 28 : 42;
@@ -248,5 +249,9 @@
   }
 
   // expõe
+  compactScreen.addEventListener('change', () => {
+    if (compactScreen.matches) EdgeFire.disable();
+    else if (document.getElementById('bonusEspecialCheckbox')?.checked) EdgeFire.enable();
+  });
   global.EdgeFire = EdgeFire;
 })(window);

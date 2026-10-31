@@ -3,12 +3,28 @@ let economySettings;
 try {
   const stored = AppStorage.getItem('economy');
   const previous = stored ? JSON.parse(stored) : null;
-  const catalog = AppStorage.getItem('economyCatalog');
+  let catalog = AppStorage.getItem('economyCatalog');
+  if (AppStorage.getItem('catalogExternalGamesSeparated') !== '3') {
+    const external = new Set(['Buraco', 'Perfil', 'Match Masters']);
+    if (previous?.games) for (const id of external) delete previous.games[id];
+    if (catalog) {
+      const data = JSON.parse(catalog);
+      data.games = data.games.filter((item) => !external.has(item.id));
+      const conversation = Economy.config.games.find((item) => item.scoreBased === false);
+      if (!data.games.some((item) => item.id === conversation.id)) data.games.push({ ...conversation });
+      const cup = Economy.config.gains.find((item) => item.id === 'Cuspir no copo');
+      if (!data.gains.some((item) => item.id === cup.id)) data.gains.push({ ...cup });
+      for (const gain of data.gains) if (['Cuspir no copo', 'Pés na cara'].includes(gain.id)) gain.timerEligible = true;
+      catalog = JSON.stringify(data);
+    }
+  }
   if (catalog) EconomyCatalog.apply(EconomyCatalog.prepare(JSON.parse(catalog), previous || Economy.defaults()).catalog);
   economySettings = Economy.syncCatalog(previous, JSON.parse(AppStorage.getItem('economyCatalogBaseline') || 'null'));
   AppStorage.setItem('economyCatalogBaseline', JSON.stringify(Economy.defaults('custom')));
   if (previous?.mode === 'classic') AppStorage.setItem('economyBeforeBalanced', stored);
   AppStorage.setItem('economy', JSON.stringify(economySettings));
+  if (catalog) AppStorage.setItem('economyCatalog', catalog);
+  AppStorage.setItem('catalogExternalGamesSeparated', '3');
 } catch {
   economySettings = Economy.defaults('balanced');
   storageFailure(new Error('Configuração econômica inválida. Valores equilibrados carregados para conferência.'));
@@ -37,17 +53,25 @@ document.addEventListener('DOMContentLoaded', () => {
     for (const name of Object.keys(Economy.config.gameRewards)) gains.add(new Option(name + marker(name) + ' — sugestão ' + formatBR(economySettings.games[name]), name));
     gains.add(new Option('Outro (valor editável)', 'Outro'));
     gains.value = gainSelected;
-    for (const key of Object.keys(Economy.config.extras)) {
-      const checkbox = document.getElementById(key);
-      checkbox.dataset.value = economySettings.extras[key];
-      checkbox.parentElement.lastChild.textContent = ' ' + { chkChule: 'Pés com chulé', chkFrancesinha: 'Francesinha', chkCatarro: 'Cuspe com catarro' }[key] + ' (+' + formatBR(economySettings.extras[key]) + ')';
-    }
     document.getElementById('quantidadeMultiplicador').max = economySettings.quantityMax;
-    const timerSummary =
-      'Base: ' + formatBR(economySettings.timer.base) + '/min · 💲 +' + formatBR(economySettings.timer.autoIncrement) + ' a cada ' + economySettings.timer.autoEvery + ' segundos após uma atividade elegível. Sem teto de tempo ou taxa.';
-
+    const rules = [
+      ['Base', formatBR(economySettings.timer.base) + '/min'],
+      ['Por registro', 'Calculando faixa…'],
+      ['Dinâmico 💲', '+' + formatBR(economySettings.timer.autoIncrement) + '/min a cada ' + economySettings.timer.autoEvery + 's por atividade'],
+    ];
     document.querySelectorAll('[data-timer-summary]').forEach((el) => {
-      el.textContent = timerSummary;
+      el.replaceChildren();
+      for (const [label, value] of rules) {
+        const rule = document.createElement('span');
+        rule.className = 'timer-rule';
+        const name = document.createElement('span');
+        name.textContent = label;
+        const amount = document.createElement('strong');
+        amount.textContent = value;
+        if (label === 'Por registro') amount.dataset.registrationRate = '';
+        rule.append(name, amount);
+        el.append(rule);
+      }
     });
 
     document.getElementById('customEconomyJson').value = EconomyCatalog.format(EconomyCatalog.document(economySettings));
@@ -88,7 +112,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const select = document.getElementById('tipoTransacao');
         select.value = button.dataset.jump;
         select.dispatchEvent(new Event('change'));
-        document.getElementById('transactionTitle').scrollIntoView();
       }),
   );
   render();
