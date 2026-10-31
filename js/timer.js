@@ -57,6 +57,7 @@ function persistTimer() {
       eligible: activeDynamicCount() > 0,
       dynamicActivities: Array.from(sessionDynamicActivities),
       legacyDynamicActivity,
+      running: !!timerInterval,
     }),
   );
 }
@@ -145,3 +146,33 @@ window.addEventListener('pagehide', () => {
   persistTimer();
   AppStorage.flush();
 });
+// A mirrored device displays the controller's session without integrating it twice.
+window.freezeWalletTimer = function () {
+  syncTimer();
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = null;
+  timerLastTick = 0;
+  releaseWakeLock();
+  persistTimer();
+  document.getElementById('btnPlayPauseTempo').textContent = timerEmSessao ? '▶️ Continuar' : '▶️ Começar';
+  atualizarDisplay();
+};
+window.addEventListener('wallet:remote', (event) => {
+  if (event.detail && !event.detail.initial && !event.detail.changedKeys.includes('timerSession')) return;
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = null;
+  timerLastTick = 0;
+  const saved = JSON.parse(AppStorage.getItem('timerSession') || 'null');
+  tempoSegundos = saved?.seconds || 0;
+  timerEarnedUnits = saved?.earnedUnits || 0;
+  contadorTarefasTimer = saved?.tasks || 0;
+  timerEmSessao = !!saved?.active;
+  sessionDynamicActivities = new Set(saved?.dynamicActivities || []);
+  legacyDynamicActivity = !!saved?.legacyDynamicActivity;
+  sessionHasEligibleTask = activeDynamicCount() > 0;
+  document.getElementById('valorPorMinuto').value = saved?.rate ?? getEconomy().timer.base;
+  document.getElementById('btnPlayPauseTempo').textContent = timerEmSessao ? '▶️ Continuar' : '▶️ Começar';
+  atualizarDisplay();
+  renderDynamicCombo();
+});
+window.addEventListener('wallet:control', () => persistTimer());

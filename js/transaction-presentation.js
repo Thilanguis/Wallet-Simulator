@@ -8,7 +8,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const reminder = document.getElementById('timerStartReminder');
   let finished = false;
   function update() {
-    const state = timerInterval ? 'running' : timerEmSessao ? 'paused' : finished ? 'finished' : 'idle';
+    const mirrored = !WalletStore.isWritable() && JSON.parse(AppStorage.getItem('timerSession') || 'null')?.running;
+    const state = timerInterval || mirrored ? 'running' : timerEmSessao ? 'paused' : finished ? 'finished' : 'idle';
     const label = { running: '● Em andamento', paused: 'Ⅱ Pausado', idle: '○ Parado', finished: '✓ Finalizado' }[state];
     card.dataset.sessionState = state;
     if (status.textContent !== label) status.textContent = label;
@@ -64,5 +65,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('ganhoFields').addEventListener('change', update);
   document.getElementById('adicionar').addEventListener('click', () => queueMicrotask(update));
   window.addEventListener('economy:changed', update);
+  window.addEventListener('wallet:remote', () => queueMicrotask(update));
   update();
 });

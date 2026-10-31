@@ -568,6 +568,51 @@ dialog button {
   color: #b9afa0;
   font: 12px/1.5 system-ui;
 }
+
+/* Acceleration updates the existing rows; only the indicator is animated. */
+.acceleration-status {
+  margin: 0 0 14px;
+  padding: 8px 10px;
+  border-left: 2px solid #ba9855;
+  background: #b3934820;
+  color: #ddc794;
+  font: 12px/1.5 system-ui;
+  font-variant-numeric: tabular-nums;
+}
+#walletActivities .acceleration-row-tag {
+  color: #e2c77e;
+  font: 600 10px/1.6 system-ui;
+  letter-spacing: 0.03em;
+}
+#walletActivities .is-accelerated .relogio {
+  color: #e6cc88;
+  min-width: 150px;
+}
+.is-accelerated .limit-progress {
+  accent-color: #e0b458;
+}
+.is-accelerated .limit-progress::-webkit-progress-value {
+  background: linear-gradient(90deg, #9c3744, #e5c97d);
+  transition: none;
+}
+.is-accelerated .limit-progress::-moz-progress-bar {
+  background: #e5c97d;
+  transition: none;
+}
+.acceleration-source-note {
+  color: #c3b293;
+  font: 11px/1.6 system-ui;
+}
+.acceleration-source-note:not([hidden]) {
+  padding: 2px 7px;
+  background: #b3934817;
+  border-radius: 5px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .limit-progress::-webkit-progress-value {
+    transition: none;
+  }
+}
 .photo-container {
   overflow: hidden;
 }
@@ -2530,4 +2575,39 @@ body {
     right: 16px !important;
     font-size: 20px !important;
   }
+}
+.cloud-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 16px 0;
+  padding: 10px 14px;
+  border: 1px solid #665b43;
+  border-radius: 9px;
+  background: #201e19;
+  color: #cfc3a9;
+  font: 12px/1.5 system-ui;
+}
+.cloud-status-bar[hidden] {
+  display: none;
+}
+.cloud-status-bar button {
+  margin: 0;
+  padding: 7px 12px;
+  font-size: 11px;
+}
+.cloud-status-bar.is-error {
+  border-color: #986463;
+}
+.cloud-settings {
+  margin-bottom: 24px;
+}
+.cloud-settings input {
+  font: 12px/1.6 monospace;
+}
+.cloud-readonly #transactionSection,
+.cloud-readonly #customEconomy {
+  opacity: 0.8;
 }

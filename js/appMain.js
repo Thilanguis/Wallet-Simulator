@@ -50,15 +50,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Aceleração global — boosters ativos
   let accelBoosts = JSON.parse(AppStorage.getItem('accelBoosts') || '[]');
-  let _accelLoop = null; // requestAnimationFrame id
-  let lastAccelSave = 0;
-  let lastBlocksFrameSave = 0;
-  function saveAccelBoosts() {
-    if (accelBoosts.length && Date.now() - lastAccelSave < 1000) return;
-    lastAccelSave = Date.now();
-    AppStorage.setItem('accelBoosts', JSON.stringify(accelBoosts));
-  }
-
+  let _tickHandle = null,
+    lastCheckpointAt = 0;
+  let lastCheckpointBlocks = AppStorage.getItem('tarefasBloqueadas') || '[]';
+  let lastCheckpointBoosts = AppStorage.getItem('accelBoosts') || '[]';
+  let clockRows = [],
+    renderedBlockKey = '',
+    countdownVisible = true;
+  window._tickHandle = null;
   // -----------------------------
   // HELPERS / TABELAS
   // -----------------------------
@@ -215,30 +214,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const lista = document.getElementById('tarefasLimitadasLista');
     if (!lista) return;
 
+    settleAcceleration();
     const agora = Date.now();
     lista.innerHTML = '';
+    clockRows = [];
+    renderedBlockKey = tarefasBloqueadas.map((t) => t.nome).join('|');
 
     // Remove expiradas e persiste
     tarefasBloqueadas = (tarefasBloqueadas || []).filter((t) => t.expiraEm > agora);
-    AppStorage.setItem('tarefasBloqueadas', JSON.stringify(tarefasBloqueadas));
 
     if (tarefasBloqueadas.length === 0) {
       lista.innerHTML = '<p style="color:#aaa;">Nenhuma tarefa limitada ativa.</p>';
       return;
-    }
-
-    function getBoostRestForSource(src) {
-      const nowA = Date.now();
-      let rem = 0;
-      if (Array.isArray(accelBoosts)) {
-        for (const b of accelBoosts) {
-          if ((b?.source || '') === src) {
-            const r = (b.endsAt || 0) - nowA;
-            if (r > rem) rem = r;
-          }
-        }
-      }
-      return Math.max(0, rem);
     }
 
     tarefasBloqueadas.forEach((tarefa) => {
@@ -254,22 +241,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const pad2local = (n) => String(n).padStart(2, '0');
       const inicioCD = `${d0}d ${pad2local(h0)}h ${pad2local(m0)}m ${pad2local(s0)}s`;
 
-      const srcName = tarefa.nome;
-      let extra = '';
-      const restForSrc = getBoostRestForSource(srcName);
-      if (restForSrc > 0) {
-        const hh = Math.floor(restForSrc / 3600000);
-        const mm = Math.floor((restForSrc % 3600000) / 60000);
-        const ss = Math.floor((restForSrc % 60000) / 1000);
-        const pad2a = (n) => String(n).padStart(2, '0');
-        const txt = `${pad2a(hh)}:${pad2a(mm)}:${pad2a(ss)}`;
-        extra = ` <span style="color:#aaa">| aceleração ativa: <span class="boost-inline" data-source="${srcName}">${txt}</span></span>`;
-      }
-
       div.innerHTML = `
   <span class="tempo-restante" data-expira="${tarefa.expiraEm}" data-nome="${tarefa.nome}">
-    🔒 <b>${nomeBonito}</b> —
-    <span class="relogio">${inicioCD}</span>${extra}
+    🔒 <b>${nomeBonito}</b> <span class="acceleration-source-note" hidden></span> —
+    <span class="relogio">${inicioCD}</span><span class="acceleration-row-tag" hidden>Acelerado</span>
   </span>
   <hr>
 `;
@@ -284,231 +259,105 @@ document.addEventListener('DOMContentLoaded', () => {
         div.append(progress);
       }
       lista.appendChild(div);
+      clockRows.push({
+        name: tarefa.nome,
+        row: div,
+        wrap: div.querySelector('.tempo-restante'),
+        time: div.querySelector('.relogio'),
+        progress: div.querySelector('.limit-progress'),
+        tag: div.querySelector('.acceleration-row-tag'),
+        sourceNote: div.querySelector('.acceleration-source-note'),
+      });
     });
   }
 
-  // ===== Relógio global =====
-  const pad2 = (n) => String(n).padStart(2, '0');
   function formatDiff(ms) {
-    const d = Math.floor(ms / 86400000);
-    const h = Math.floor((ms % 86400000) / 3600000);
-    const m = Math.floor((ms % 3600000) / 60000);
-    const s = Math.floor((ms % 60000) / 1000);
-    return `${d}d ${pad2(h)}h ${pad2(m)}m ${pad2(s)}s`;
+    let seconds = Math.max(0, Math.ceil(ms / 1000));
+    const days = Math.floor(seconds / 86400);
+    seconds %= 86400;
+    const hours = Math.floor(seconds / 3600);
+    seconds %= 3600;
+    const minutes = Math.floor(seconds / 60);
+    seconds %= 60;
+    const pad = (n) => String(n).padStart(2, '0');
+    return days + 'd ' + pad(hours) + 'h ' + pad(minutes) + 'm ' + pad(seconds) + 's';
   }
-
-  /* ===================================================================
-   CLOCK SMOOTH ENGINE
-   =================================================================== */
-  (function () {
-    if (window.__clockSmooth) return;
-
-    function pad2(n) {
-      return String(n).padStart(2, '0');
-    }
-    function fmtDHMS(ms) {
-      const d = Math.max(0, Math.floor(ms / 86400000));
-      const h = Math.max(0, Math.floor((ms % 86400000) / 3600000));
-      const m = Math.max(0, Math.floor((ms % 3600000) / 60000));
-      const s = Math.max(0, Math.floor((ms % 60000) / 1000));
-      return `${d}d ${pad2(h)}h ${pad2(m)}m ${pad2(s)}s`;
-    }
-
-    function setInstant(wrap, ms) {
-      const el = wrap.querySelector('.relogio');
-      if (!el) return;
-      const v = Math.max(0, Math.floor(ms));
-      el.textContent = fmtDHMS(v);
-      wrap.dataset.displayMs = String(v);
-    }
-
-    function startFromTo(wrap, fromMs, toMs) {
-      const el = wrap.querySelector('.relogio');
-      if (!el) return setInstant(wrap, toMs);
-
-      if (wrap.__smoothCancel) {
-        try {
-          wrap.__smoothCancel();
-        } catch {}
-        wrap.__smoothCancel = null;
-      }
-
-      const fromS = Math.floor(Math.max(0, fromMs) / 1000);
-      const toS = Math.floor(Math.max(0, toMs) / 1000);
-      const steps = Math.max(0, fromS - toS);
-      if (steps <= 1) {
-        setInstant(wrap, toMs);
-        return;
-      }
-
-      const TARGET_MS = 450;
-      let stepDelay = Math.floor(TARGET_MS / steps);
-      if (stepDelay < 4) stepDelay = 4;
-      if (stepDelay > 50) stepDelay = 50;
-
-      let cur = fromS;
-      let timerId = 0;
-
-      function tick() {
-        cur -= 1;
-        const curMs = Math.max(0, cur * 1000);
-        el.textContent = fmtDHMS(curMs);
-        wrap.dataset.displayMs = String(curMs);
-        if (cur <= toS) {
-          clearInterval(timerId);
-          timerId = 0;
-          setInstant(wrap, toMs);
-          wrap.__smoothCancel = null;
-        }
-      }
-
-      timerId = setInterval(tick, stepDelay);
-      wrap.__smoothCancel = () => {
-        if (timerId) clearInterval(timerId);
-      };
-    }
-
-    window.__clockSmooth = {
-      JUMP_THRESHOLD: 1100,
-      setInstant,
-      startFromTo,
-    };
-  })();
-
+  function formatEffectTime(ms) {
+    const seconds = Math.ceil(Math.max(0, ms) / 1000);
+    return (seconds >= 3600 ? String(Math.floor(seconds / 3600)).padStart(2, '0') + ':' : '') + String(Math.floor(seconds / 60) % 60).padStart(2, '0') + ':' + String(seconds % 60).padStart(2, '0');
+  }
   function updateClocksOnce() {
-    const agora = Date.now();
-    const SNAP_MS = 250;
-    const smooth = window.__clockSmooth || null;
-
-    const expirados = [];
-
-    function setInstantFallback(wrap, ms) {
-      const el = wrap.querySelector('.relogio');
-      if (!el) return;
-      const d = Math.max(0, Math.floor(ms / 86400000));
-      const h = Math.max(0, Math.floor((ms % 86400000) / 3600000));
-      const m = Math.max(0, Math.floor((ms % 3600000) / 60000));
-      const s = Math.max(0, Math.floor((ms % 60000) / 1000));
-      const p2 = (n) => String(n).padStart(2, '0');
-      el.textContent = `${d}d ${p2(h)}h ${p2(m)}m ${p2(s)}s`;
-      wrap.dataset.displayMs = String(Math.max(0, Math.floor(ms)));
+    settleAcceleration();
+    const key = tarefasBloqueadas.map((t) => t.nome).join('|');
+    if (key !== renderedBlockKey) {
+      atualizarTarefasLimitadasUI();
+      atualizarBloqueiosNoSelectTarefa();
     }
-
-    document.querySelectorAll('.tempo-restante').forEach((wrap) => {
-      const expira = Number(wrap.dataset.expira);
-      const el = wrap.querySelector('.relogio');
-      if (!el || !Number.isFinite(expira)) return;
-
-      const targetMs = expira - agora;
-      const progress = wrap.parentElement.querySelector('.limit-progress');
-      if (progress) progress.value = Math.max(0, Math.min(Number(progress.dataset.duration), targetMs));
-      if (targetMs <= SNAP_MS) {
-        expirados.push(wrap);
-        return;
+    const now = Date.now(),
+      rate = WalletAcceleration.rate(accelBoosts, now);
+    const byName = new Map(tarefasBloqueadas.map((t) => [t.nome, t]));
+    for (const row of clockRows) {
+      const block = byName.get(row.name);
+      if (!block) continue;
+      const remaining = Math.max(0, block.expiraEm - now);
+      if (row.wrap.dataset.expira !== String(block.expiraEm)) row.wrap.dataset.expira = String(block.expiraEm);
+      const caption = formatDiff(remaining);
+      if (row.time.textContent !== caption) row.time.textContent = caption;
+      const accelerated = rate > 0 && WalletAcceleration.eligible(row.name);
+      if (row.row.classList.contains('is-accelerated') !== accelerated) row.row.classList.toggle('is-accelerated', accelerated);
+      row.tag.hidden = !accelerated;
+      const sources = accelBoosts.filter((boost) => boost.source === row.name);
+      row.sourceNote.hidden = WalletAcceleration.eligible(row.name) && !sources.length;
+      let sourceText = 'Bloqueio do redutor';
+      if (sources.length) {
+        const end = Math.max(...sources.map((boost) => boost.endsAt));
+        const budgets = sources.map((boost) => (Number.isFinite(boost.startedAt) ? (boost.perSecondMs * (boost.endsAt - boost.startedAt)) / 1000 : null));
+        const totalHours = budgets.every(Number.isFinite) ? budgets.reduce((sum, n) => sum + n, 0) / 3600000 : null;
+        const reduction = totalHours !== null ? '−' + Number(totalHours.toFixed(2)).toLocaleString('pt-BR') + 'h · ' : '';
+        sourceText = 'Efeito ativo: ' + reduction + 'termina em ' + formatEffectTime(end - now);
       }
-
-      const shownMs = Number(wrap.dataset.displayMs);
-      const haveShown = Number.isFinite(shownMs);
-      const fromMs = haveShown ? shownMs : targetMs;
-
-      const canSmooth = !!smooth && typeof smooth.startFromTo === 'function' && typeof smooth.setInstant === 'function' && typeof smooth.JUMP_THRESHOLD === 'number';
-      const jump = fromMs - targetMs;
-
-      if (canSmooth && jump > smooth.JUMP_THRESHOLD) {
-        smooth.startFromTo(wrap, fromMs, targetMs);
-      } else {
-        if (canSmooth) smooth.setInstant(wrap, targetMs);
-        else setInstantFallback(wrap, targetMs);
-      }
-    });
-
-    if (expirados.length) {
-      try {
-        if (Array.isArray(tarefasBloqueadas)) {
-          const now = Date.now();
-          const nomes = new Set(expirados.map((w) => w.getAttribute('data-nome')).filter(Boolean));
-          const before = tarefasBloqueadas.length;
-          tarefasBloqueadas = tarefasBloqueadas.filter((t) => !(nomes.has(t.nome) || t.expiraEm <= now));
-          if (tarefasBloqueadas.length !== before) {
-            AppStorage.setItem('tarefasBloqueadas', JSON.stringify(tarefasBloqueadas));
-          }
-        }
-      } catch {}
-
-      expirados.forEach((wrap) => {
-        const b = wrap.querySelector('b')?.outerHTML ?? '';
-        wrap.innerHTML = `🔓 ${b} — <strong>liberou!</strong>`;
-      });
-
-      try {
-        atualizarTarefasLimitadasUI();
-        atualizarBloqueiosNoSelectTarefa();
-      } catch {}
+      if (row.sourceNote.textContent !== sourceText) row.sourceNote.textContent = sourceText;
+      if (row.progress) row.progress.value = Math.min(row.progress.max, remaining);
     }
-
-    // contador de aceleração por fonte
-    try {
-      const now3 = Date.now();
-      document.querySelectorAll('.boost-inline').forEach((el) => {
-        const src = el.getAttribute('data-source') || '';
-        let rem = 0;
-        if (Array.isArray(accelBoosts)) {
-          for (const b of accelBoosts) {
-            if ((b?.source || '') === src) {
-              const r = (b.endsAt || 0) - now3;
-              if (r > rem) rem = r;
-            }
-          }
-        }
-        if (rem < 0) rem = 0;
-        const hh = Math.floor(rem / 3600000);
-        const mm = Math.floor((rem % 3600000) / 60000);
-        const ss = Math.floor((rem % 60000) / 1000);
-        const p2 = (n) => String(n).padStart(2, '0');
-        el.textContent = `${p2(hh)}:${p2(mm)}:${p2(ss)}`;
-      });
-    } catch {}
+    const status = document.getElementById('accelerationStatus');
+    if (status) {
+      status.hidden = !accelBoosts.length;
+      const affected = tarefasBloqueadas.filter((block) => WalletAcceleration.eligible(block.nome)).length;
+      const text = accelBoosts.length + (accelBoosts.length === 1 ? ' efeito ativo' : ' efeitos ativos') + ' · ' + affected + (affected === 1 ? ' prazo acelerado' : ' prazos acelerados');
+      status.title = 'Os serviços marcados como Acelerado recebem a redução. O bloqueio dos próprios redutores continua no ritmo normal.';
+      if (status.textContent !== text) status.textContent = text;
+    }
   }
-
-  let _tickHandle = null;
-  window._tickHandle = null;
-
   function scheduleNextTick() {
-    if (window.__ClockTicker) {
-      if (window._tickHandle) {
-        clearTimeout(window._tickHandle);
-        window._tickHandle = null;
-      }
-      return;
-    }
-    const now = Date.now();
-    const delay = 1000 - (now % 1000) + 5;
-    _tickHandle = setTimeout(() => {
-      updateClocksOnce();
-      scheduleNextTick();
-    }, delay);
+    if (_tickHandle !== null) clearTimeout(_tickHandle);
+    _tickHandle = null;
+    window._tickHandle = null;
+    if (document.hidden) return;
+    const fast = accelBoosts.length && clockRows.some((row) => WalletAcceleration.eligible(row.name)) && countdownVisible && !document.getElementById('simulator').hidden;
+    _tickHandle = setTimeout(
+      () => {
+        _tickHandle = null;
+        updateClocksOnce();
+        scheduleNextTick();
+      },
+      fast ? 50 : 1000,
+    );
     window._tickHandle = _tickHandle;
   }
-
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-      if (_tickHandle) {
-        clearTimeout(_tickHandle);
-        _tickHandle = null;
-        window._tickHandle = null;
-      }
-      updateClocksOnce();
-      scheduleNextTick();
-    }
+    settleAcceleration(true);
+    if (!document.hidden) updateClocksOnce();
+    scheduleNextTick();
   });
-
-  updateClocksOnce();
-  scheduleNextTick();
+  window.addEventListener('pageshow', () => {
+    updateClocksOnce();
+    scheduleNextTick();
+  });
 
   function atualizarBloqueiosNoSelectTarefa() {
     const agora = Date.now();
 
-    const bloqueadas = JSON.parse(AppStorage.getItem('tarefasBloqueadas') || '[]').filter((t) => t.expiraEm > agora);
+    const bloqueadas = tarefasBloqueadas.filter((t) => t.expiraEm > agora);
     const map = new Map(bloqueadas.map((t) => [t.nome, t.expiraEm]));
 
     Array.from(selectTarefaSelect.options).forEach((opt) => {
@@ -538,185 +387,48 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // ===== Motor de aceleração com orçamento + "source"
-  function startGlobalAcceleration(perSecondMs, durationMs, totalToReduceMs, sourceTag = 'GLOBAL') {
-    const nowWall = Date.now();
-    const endsAt = nowWall + durationMs;
-
-    const boost = {
-      id: String(nowWall) + '-' + Math.floor(Math.random() * 1e6),
-      perSecondMs: Number(perSecondMs),
-      startedAt: nowWall,
-      endsAt: endsAt,
-      budgetLeftMs: Math.max(0, Math.round(totalToReduceMs)),
-      source: String(sourceTag || 'GLOBAL'),
-    };
-
-    accelBoosts.push(boost);
-    saveAccelBoosts();
-
-    if (_accelLoop == null) {
-      let lastPerf = performance.now();
-      let carryFrac = 0;
-
-      const tick = () => {
-        _accelLoop = null;
-        const nowPerf = performance.now();
-        let dtMs = nowPerf - lastPerf;
-        lastPerf = nowPerf;
-
-        const wallNow = Date.now();
-
-        accelBoosts = (accelBoosts || []).filter((b) => b.endsAt > wallNow && b.budgetLeftMs > 0);
-
-        if (!accelBoosts.length) {
-          saveAccelBoosts();
-          try {
-            atualizarTarefasLimitadasUI();
-            atualizarBloqueiosNoSelectTarefa();
-            updateClocksOnce();
-          } catch {}
-          return;
-        }
-
-        let toReduceFloat = carryFrac;
-        for (const b of accelBoosts) {
-          const remainTime = Math.max(0, b.endsAt - wallNow);
-          if (remainTime <= 0 || b.budgetLeftMs <= 0) continue;
-
-          const effectiveDt = Math.min(dtMs, remainTime);
-          const contrib = (b.perSecondMs * effectiveDt) / 1000;
-          const contribClamped = Math.min(contrib, b.budgetLeftMs);
-          toReduceFloat += contribClamped;
-          b.budgetLeftMs -= contribClamped;
-        }
-
-        const stepInt = Math.floor(toReduceFloat);
-        carryFrac = toReduceFloat - stepInt;
-
-        if (stepInt > 0 && Array.isArray(tarefasBloqueadas)) {
-          let changed = false;
-          const now2 = Date.now();
-          tarefasBloqueadas = (tarefasBloqueadas || [])
-            .map((t) => {
-              if (t.expiraEm > now2) {
-                if (t.nome === 'ACELERAR_GLOBAL_4D_1H') return t;
-                if (/^REDUZIR_BLOQUEIO_/.test(t.nome)) return t;
-                const novo = Math.max(now2, t.expiraEm - stepInt);
-                if (novo !== t.expiraEm) changed = true;
-                return { ...t, expiraEm: novo };
-              }
-              return t;
-            })
-            .filter((t) => t.expiraEm > now2);
-
-          if (changed && Date.now() - lastBlocksFrameSave >= 1000) {
-            lastBlocksFrameSave = Date.now();
-            AppStorage.setItem('tarefasBloqueadas', JSON.stringify(tarefasBloqueadas));
-            try {
-              atualizarTarefasLimitadasUI();
-              atualizarBloqueiosNoSelectTarefa();
-            } catch {}
-          }
-        }
-
-        saveAccelBoosts();
-        _accelLoop = requestAnimationFrame(tick);
-      };
-
-      _accelLoop = requestAnimationFrame(tick);
-    }
-  }
-
-  function startTimedReducer(redutorId, horasReducao, duracaoMs) {
-    const totalMs = Math.max(0, (horasReducao || 0) * 60 * 60 * 1000);
-    if (!totalMs || !duracaoMs) return;
-
-    const perSecondMs = totalMs / (duracaoMs / 1000);
-    startGlobalAcceleration(perSecondMs, duracaoMs, totalMs, redutorId);
-  }
-
-  function resumeAccelerationIfNeeded() {
-    const agora = Date.now();
-    accelBoosts = (accelBoosts || []).filter((b) => b.endsAt > agora);
-
-    for (const b of accelBoosts) {
-      if (typeof b.budgetLeftMs !== 'number') {
-        const remainTime = Math.max(0, b.endsAt - agora);
-        b.budgetLeftMs = Math.max(0, Math.round((b.perSecondMs || 0) * (remainTime / 1000)));
+  function settleAcceleration(force = false) {
+    const now = Date.now();
+    const state = WalletAcceleration.advance(tarefasBloqueadas, accelBoosts, now);
+    tarefasBloqueadas = state.blocks;
+    accelBoosts = state.boosts;
+    if (force || now - lastCheckpointAt >= 1000) {
+      const blocks = JSON.stringify(tarefasBloqueadas),
+        boosts = JSON.stringify(accelBoosts);
+      if (blocks !== lastCheckpointBlocks || boosts !== lastCheckpointBoosts) {
+        AppStorage.setItem('tarefasBloqueadas', blocks);
+        AppStorage.setItem('accelBoosts', boosts);
+        AppStorage.flush();
+        lastCheckpointBlocks = blocks;
+        lastCheckpointBoosts = boosts;
       }
+      lastCheckpointAt = now;
     }
-    saveAccelBoosts();
-
-    if (accelBoosts.length && _accelLoop == null) {
-      let lastPerf = performance.now();
-      let carryFrac = 0;
-
-      const tick = () => {
-        _accelLoop = null;
-
-        const nowPerf = performance.now();
-        let dtMs = nowPerf - lastPerf;
-        lastPerf = nowPerf;
-
-        const wallNow = Date.now();
-
-        accelBoosts = (accelBoosts || []).filter((b) => b.endsAt > wallNow && b.budgetLeftMs > 0);
-        if (!accelBoosts.length) {
-          saveAccelBoosts();
-          try {
-            atualizarTarefasLimitadasUI();
-            atualizarBloqueiosNoSelectTarefa();
-            updateClocksOnce();
-          } catch {}
-          return;
-        }
-
-        let toReduceFloat = carryFrac;
-        for (const b of accelBoosts) {
-          const remainTime = Math.max(0, b.endsAt - wallNow);
-          if (remainTime <= 0 || b.budgetLeftMs <= 0) continue;
-          const effectiveDt = Math.min(dtMs, remainTime);
-          const contrib = (b.perSecondMs * effectiveDt) / 1000;
-          const contribClamped = Math.min(contrib, b.budgetLeftMs);
-          toReduceFloat += contribClamped;
-          b.budgetLeftMs -= contribClamped;
-        }
-        const stepInt = Math.floor(toReduceFloat);
-        carryFrac = toReduceFloat - stepInt;
-
-        if (stepInt > 0 && Array.isArray(tarefasBloqueadas)) {
-          let changed = false;
-          const now2 = Date.now();
-          tarefasBloqueadas = (tarefasBloqueadas || [])
-            .map((t) => {
-              if (t.expiraEm > now2) {
-                if (t.nome === 'ACELERAR_GLOBAL_4D_1H') return t;
-                if (/^REDUZIR_BLOQUEIO_/.test(t.nome)) return t;
-                const novo = Math.max(now2, t.expiraEm - stepInt);
-                if (novo !== t.expiraEm) changed = true;
-                return { ...t, expiraEm: novo };
-              }
-              return t;
-            })
-            .filter((t) => t.expiraEm > now2);
-
-          if (changed && Date.now() - lastBlocksFrameSave >= 1000) {
-            lastBlocksFrameSave = Date.now();
-            AppStorage.setItem('tarefasBloqueadas', JSON.stringify(tarefasBloqueadas));
-            try {
-              atualizarTarefasLimitadasUI();
-              atualizarBloqueiosNoSelectTarefa();
-            } catch {}
-          }
-        }
-
-        saveAccelBoosts();
-        _accelLoop = requestAnimationFrame(tick);
-      };
-
-      _accelLoop = requestAnimationFrame(tick);
-    }
+  }
+  function replaceBlocks(incoming) {
+    const previous = new Map(JSON.parse(lastCheckpointBlocks).map((t) => [t.nome, t.expiraEm]));
+    settleAcceleration();
+    const live = new Map(tarefasBloqueadas.map((t) => [t.nome, t]));
+    tarefasBloqueadas = (Array.isArray(incoming) ? incoming : []).flatMap((t) => (previous.get(t.nome) === t.expiraEm ? (live.has(t.nome) ? [live.get(t.nome)] : []) : [t]));
+    settleAcceleration(true);
+  }
+  function startGlobalAcceleration(perSecondMs, durationMs, totalToReduceMs, sourceTag = 'GLOBAL') {
+    if (![perSecondMs, durationMs, totalToReduceMs].every((n) => Number.isFinite(n) && n > 0)) throw new Error('Redutor inválido.');
+    settleAcceleration(true);
+    const now = Date.now();
+    accelBoosts.push({ id: crypto.randomUUID(), perSecondMs, startedAt: now, endsAt: now + durationMs, lastAppliedAt: now, budgetLeftMs: totalToReduceMs, source: String(sourceTag) });
+    settleAcceleration(true);
+    updateClocksOnce();
+    scheduleNextTick();
+  }
+  function startTimedReducer(id, hours, duration) {
+    const total = hours * 3600000;
+    startGlobalAcceleration(total / (duration / 1000), duration, total, id);
+  }
+  function resumeAccelerationIfNeeded() {
+    settleAcceleration(true);
+    updateClocksOnce();
+    scheduleNextTick();
   }
 
   // -----------------------------
@@ -725,12 +437,10 @@ document.addEventListener('DOMContentLoaded', () => {
   window.__AppCtl = {
     stopAccel() {
       try {
+        settleAcceleration(true);
         accelBoosts = [];
-        saveAccelBoosts();
-        if (_accelLoop != null) {
-          cancelAnimationFrame(_accelLoop);
-          _accelLoop = null;
-        }
+        settleAcceleration(true);
+        scheduleNextTick();
         try {
           atualizarTarefasLimitadasUI();
           atualizarBloqueiosNoSelectTarefa();
@@ -743,8 +453,7 @@ document.addEventListener('DOMContentLoaded', () => {
     },
     setBlocks(arr) {
       try {
-        tarefasBloqueadas = Array.isArray(arr) ? arr : [];
-        AppStorage.setItem('tarefasBloqueadas', JSON.stringify(tarefasBloqueadas));
+        replaceBlocks(arr);
         try {
           atualizarTarefasLimitadasUI();
           atualizarBloqueiosNoSelectTarefa();
@@ -882,6 +591,7 @@ document.addEventListener('DOMContentLoaded', () => {
       let valor, tarefa, descricao;
 
       if (tipo === 'gasto') {
+        settleAcceleration(true);
         const tarefaSelecionada = (selectTarefaSelect && selectTarefaSelect.value) || '';
         if (!tarefaSelecionada || tarefaSelecionada === '0') return AppDialog.alert('Por favor, selecione uma tarefa.');
         ({ valor, tarefa, descricao } = parseTarefa(tarefaSelecionada));
@@ -901,6 +611,7 @@ document.addEventListener('DOMContentLoaded', () => {
         valor = quote.final;
         if (!(await AppDialog.confirm('Confirmar compra de ' + catalogItem.label + ' por ' + formatBR(valor) + ' do Saldo Dominadora?'))) return;
 
+        settleAcceleration(true);
         // ⚡ Aceleração Global
         if (/ACELERAR_GLOBAL_4D_1H/.test((selectTarefaSelect && selectTarefaSelect.value) || '')) {
           const custo = valor;
@@ -1110,6 +821,7 @@ document.addEventListener('DOMContentLoaded', () => {
           clearInterval(timerInterval);
           timerInterval = null;
           btnPlayPause.textContent = '▶️ Continuar';
+          persistTimer();
           if (typeof releaseWakeLock === 'function') releaseWakeLock();
           return;
         }
@@ -1188,13 +900,47 @@ document.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('wallet:credits', () => {
     saldoDominadora = Number(AppStorage.getItem('saldoDominadora') || 0);
     historico = JSON.parse(AppStorage.getItem('historico') || '[]');
-    tarefasBloqueadas = JSON.parse(AppStorage.getItem('tarefasBloqueadas') || '[]');
+    replaceBlocks(JSON.parse(AppStorage.getItem('tarefasBloqueadas') || '[]'));
     atualizarSaldo();
     renderHistorico();
     atualizarTarefasLimitadasUI();
     atualizarBloqueiosNoSelectTarefa();
   });
+  window.addEventListener('wallet:remote', (event) => {
+    const changed = (key) => !event.detail || event.detail.initial || event.detail.changedKeys.includes(key);
+    if (changed('saldoDominadora')) {
+      saldoDominadora = Number(AppStorage.getItem('saldoDominadora') || 0);
+      atualizarSaldo();
+    }
+    if (changed('historico')) {
+      historico = JSON.parse(AppStorage.getItem('historico') || '[]');
+      renderHistorico();
+    }
+    if (changed('tarefasPendentes')) {
+      tarefasPendentes = JSON.parse(AppStorage.getItem('tarefasPendentes') || '[]');
+      renderTarefasPendentes();
+    }
+    if (changed('bonusEspecialAtivo')) {
+      window.bonusEspecialAtivo = JSON.parse(AppStorage.getItem('bonusEspecialAtivo') || 'false');
+      bonusCheckbox.checked = window.bonusEspecialAtivo;
+      bonusCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    if (changed('tarefasBloqueadas') || changed('accelBoosts')) {
+      tarefasBloqueadas = JSON.parse(AppStorage.getItem('tarefasBloqueadas') || '[]');
+      accelBoosts = JSON.parse(AppStorage.getItem('accelBoosts') || '[]');
+      lastCheckpointBlocks = AppStorage.getItem('tarefasBloqueadas') || '[]';
+      lastCheckpointBoosts = AppStorage.getItem('accelBoosts') || '[]';
+      lastCheckpointAt = Date.now();
+      updateClocksOnce();
+      atualizarBloqueiosNoSelectTarefa();
+      scheduleNextTick();
+    }
+  });
   window.addEventListener('pagehide', () => {
+    if (_tickHandle !== null) clearTimeout(_tickHandle);
+    _tickHandle = null;
+    window._tickHandle = null;
+    settleAcceleration(true);
     AppStorage.setItem('tarefasBloqueadas', JSON.stringify(tarefasBloqueadas));
     AppStorage.setItem('accelBoosts', JSON.stringify(accelBoosts));
     AppStorage.flush();
@@ -1218,8 +964,11 @@ document.addEventListener('DOMContentLoaded', () => {
     resumeAccelerationIfNeeded,
   });
 
-  setInterval(() => {
-    atualizarTarefasLimitadasUI();
-    atualizarBloqueiosNoSelectTarefa();
-  }, 60000);
+  if (typeof IntersectionObserver === 'function') {
+    new IntersectionObserver((entries) => {
+      countdownVisible = entries[0].isIntersecting;
+      updateClocksOnce();
+      scheduleNextTick();
+    }).observe(document.getElementById('tarefasLimitadasSection'));
+  }
 });

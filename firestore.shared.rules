@@ -1,0 +1,39 @@
+// Merge this match block into the existing database rules. Do not replace rules
+// used by other apps. This collection stores encrypted Wallet v3 envelopes only.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /walletsCompartilhadas/{room} {
+      function pairedPath() {
+        return request.auth != null && room.matches('[a-f0-9]{64}');
+      }
+      function owns(controller) {
+        return controller is string && controller.matches(request.auth.uid + '[.][a-f0-9-]{36}');
+      }
+      function valid() {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['schema', 'revision', 'controller', 'leaseUntil', 'iv', 'payload', 'updatedAt'])
+          && d.schema == 3 && d.revision is int && d.revision > 0
+          && d.controller is string && d.leaseUntil is int
+          && d.iv is string && d.iv.size() == 16
+          && d.payload is string && d.payload.size() > 20 && d.payload.size() < 900000
+          && d.updatedAt == request.time;
+      }
+      function leased() {
+        return owns(request.resource.data.controller)
+          && request.resource.data.leaseUntil > request.time.toMillis()
+          && request.resource.data.leaseUntil <= request.time.toMillis() + 60000;
+      }
+      allow get: if pairedPath();
+      allow list, delete: if false;
+      allow create: if pairedPath() && valid() && request.resource.data.revision == 1 && leased();
+      allow update: if pairedPath() && valid()
+        && request.resource.data.revision == resource.data.revision + 1
+        && (
+          (leased() && request.resource.data.controller == resource.data.controller && resource.data.leaseUntil > request.time.toMillis())
+          || (leased() && resource.data.leaseUntil <= request.time.toMillis())
+          || (owns(resource.data.controller) && request.resource.data.controller == '' && request.resource.data.leaseUntil == 0)
+        );
+    }
+  }
+}

@@ -68,6 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('openRouletteCard').onclick = () => document.getElementById('btnRoletaFlutuante')?.click();
   window.addEventListener('roulette:awards', roulette);
   window.addEventListener('wallet:credits', roulette);
+  window.addEventListener('wallet:remote', roulette);
   new MutationObserver(roulette).observe($('roulettePrizeList'), { childList: true, subtree: true });
   setInterval(roulette, 1000);
   roulette();

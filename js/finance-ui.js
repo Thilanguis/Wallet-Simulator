@@ -645,5 +645,11 @@ document.addEventListener('DOMContentLoaded', () => {
     state = F.validateState(WalletStore.finance());
     render();
   });
+  window.addEventListener('wallet:remote', (event) => {
+    if (event.detail && !event.detail.initial && !event.detail.financeChanged) return;
+    state = F.validateState(WalletStore.finance());
+    selectedFinance.clear();
+    render();
+  });
   render();
 });

@@ -96,15 +96,19 @@
       write(storage, key, state);
     }
     if (state.version !== 2 || !state.simulator || !state.finance || !Number.isSafeInteger(state.revision)) throw new Error('Armazenamento estruturado inválido.');
+    let writable = true;
+    const listeners = new Set();
     let dirty = false,
       queued = false;
     function commit(next) {
+      if (!writable) throw new Error('Este aparelho acompanha a carteira. Assuma o controle antes de alterar dados.');
       const disk = read(storage, key, null);
       if (disk && disk.revision !== state.revision) throw new Error('Outra aba alterou os dados. Exporte o backup e recarregue antes de continuar.');
       const candidate = { ...structuredClone(next), revision: state.revision + 1 };
       write(storage, key, candidate);
       state = candidate;
       dirty = false;
+      for (const listener of listeners) listener(structuredClone(state));
     }
     function flush() {
       queued = false;
@@ -113,6 +117,7 @@
     const sim = {
       getItem: (k) => state.simulator[k] ?? null,
       setItem(k, value) {
+        if (!writable) return;
         if (!keys.includes(k)) throw new Error('Chave desconhecida: ' + k);
         state.simulator[k] = String(value);
         dirty = true;
@@ -134,6 +139,20 @@
       sim,
       flush,
       snapshot: () => structuredClone(state),
+      isWritable: () => writable,
+      setWritable(value) {
+        writable = !!value;
+      },
+      subscribe(listener) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      acceptRemote(next) {
+        const candidate = { ...structuredClone(next), revision: state.revision + 1 };
+        write(storage, key, candidate);
+        state = candidate;
+        dirty = false;
+      },
       finance: () => structuredClone(state.finance),
       commitFinance(finance) {
         flush();

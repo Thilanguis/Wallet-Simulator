@@ -73,6 +73,7 @@
     }
   }
   function settleSpin(spin) {
+    if (!WalletStore.isWritable()) return;
     const saved = JSON.parse(AppStorage.getItem('rouletteSpin') || 'null');
     if (!saved || saved.id !== spin.id || saved.settled) return;
     refreshPrizeLabels();
@@ -596,6 +597,10 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     criarBotaoFlutuante();
+    const spin = JSON.parse(AppStorage.getItem('rouletteSpin') || 'null');
+    if (spin && !spin.settled) settleSpin(spin);
+  });
+  window.addEventListener('wallet:control', () => {
     const spin = JSON.parse(AppStorage.getItem('rouletteSpin') || 'null');
     if (spin && !spin.settled) settleSpin(spin);
   });

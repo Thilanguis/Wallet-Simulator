@@ -53,6 +53,7 @@ function renderTarefasPendentes() {
 
           // 2. CRONÔMETRO: Espera 850ms (tempo da animação) para fazer a remoção de fato
           setTimeout(() => {
+            if (!WalletStore.isWritable()) return;
             // --- ESTA PARTE É EXECUTADA SÓ DEPOIS DA ANIMAÇÃO ---
 
             // Remove a tarefa do array de dados (tarefasPendentes)
@@ -92,5 +93,10 @@ function renderTarefasPendentes() {
     div.appendChild(spanValor);
     div.appendChild(completion);
     tarefasContainer.appendChild(div);
+    if (WalletStore.isWritable() && completed() === count) {
+      // Finish a completion whose animation was interrupted by a controller handoff.
+      setTimeout(() => steps.querySelector('input')?.dispatchEvent(new Event('change')), 0);
+    }
   });
 }
+window.addEventListener('wallet:control', renderTarefasPendentes);

@@ -10,6 +10,7 @@ window.storageFailure = function (error) {
 try {
   window.WalletStore = Vault.wallet(localStorage, Finance.empty(), storageFailure);
   window.AppStorage = WalletStore.sim;
+  if (/^[a-f0-9]{128}$/.test(localStorage.getItem('findom.cloud.pair.v3') || '')) WalletStore.setWritable(false);
 } catch (error) {
   storageFailure(error);
   // Do not overwrite a corrupt primary copy with an empty state.

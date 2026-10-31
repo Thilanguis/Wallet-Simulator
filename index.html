@@ -57,6 +57,10 @@
           <span class="nav-label-mobile">Configurações</span>
         </button>
       </nav>
+      <aside id="cloudStatusBar" class="cloud-status-bar" hidden aria-live="polite">
+        <span id="cloudStatusText"></span>
+        <button id="cloudControl" type="button" hidden>Assumir controle</button>
+      </aside>
       <main id="simulator" class="app-panel">
         <div class="section" id="walletBalanceCard">
           <div class="bonusActiveBanner">
@@ -235,6 +239,7 @@
 
           <div class="section task-section" id="tarefasLimitadasSection">
             <h2>⏳ Tarefas com Limite Ativo</h2>
+            <p id="accelerationStatus" class="acceleration-status" role="status" aria-live="off" hidden></p>
             <div id="tarefasLimitadasLista">
               <p style="color: #aaa">Nenhuma tarefa limitada ativa.</p>
             </div>
@@ -490,6 +495,26 @@
       </section>
       <section id="backupPanel" class="app-panel section" hidden>
         <h2>Configurações e backup</h2>
+        <details id="cloudSettings" class="cloud-settings">
+          <summary>Carteira compartilhada</summary>
+          <p class="hint">Vocês acompanham a mesma carteira, sem tela de login. Um aparelho controla a sessão por vez.</p>
+          <p id="cloudSettingsStatus" role="status">Este navegador ainda usa uma carteira local.</p>
+          <div class="btn-row">
+            <button type="button" id="createSharedWallet">Compartilhar esta carteira</button>
+            <button type="button" id="showPairCode" hidden>Mostrar código de vínculo</button>
+            <button type="button" id="reconnectCloud" hidden>Reconectar</button>
+            <button type="button" id="disconnectCloud" hidden>Desconectar este aparelho</button>
+          </div>
+          <label for="cloudPairCode">Código privado do outro aparelho</label>
+          <input id="cloudPairCode" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" />
+          <button type="button" id="joinSharedWallet">Vincular este aparelho</button>
+          <div id="cloudPairShare" hidden>
+            <p class="hint">Cole este código no outro aparelho. Ele dá acesso à carteira: guarde-o somente com vocês.</p>
+            <input id="cloudShareCode" type="password" readonly aria-label="Código de vínculo desta carteira" autocomplete="off" />
+            <button type="button" id="copyPairCode">Copiar código</button>
+          </div>
+          <button type="button" id="exportCloudRecovery" hidden>Baixar cópia local antes da sincronização</button>
+        </details>
         <section id="economySettingsPanel" class="section">
           <h2>Economia do simulador</h2>
           <p id="timerLimits" class="hint" data-timer-summary></p>
@@ -563,6 +588,7 @@
     <script defer src="js/efeitoBonusAtivoCompraServico.js"></script>
     <script defer src="js/chovendoGrana.js"></script>
     <script defer src="js/history-view.js"></script>
+    <script defer src="js/acceleration.js"></script>
     <script defer src="js/appMain.js"></script>
     <script defer src="js/roleta.js"></script>
     <script defer src="js/roulette-rewards.js"></script>
@@ -576,5 +602,8 @@
     <script defer src="js/transaction-presentation.js"></script>
     <script defer src="js/navigation-presentation.js"></script>
     <script defer src="js/wallet-presentation.js"></script>
+    <script defer src="js/cloud-sync.js"></script>
+    <script defer src="js/cloud-cipher.js"></script>
+    <script defer src="js/cloud-ui.js"></script>
   </body>
 </html>

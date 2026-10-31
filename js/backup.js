@@ -41,6 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (key === 'tarefasBloqueadas' && (!Object.hasOwn(Economy.config.cooldowns, item.nome) || !Number.isFinite(item.expiraEm))) throw new Error('Bloqueio inválido.');
         if (key === 'accelBoosts' && !['endsAt', 'perSecondMs', 'budgetLeftMs'].every((k) => Number.isFinite(item[k]) && item[k] >= 0)) throw new Error('Aceleração inválida.');
+        if (key === 'accelBoosts' && item.lastAppliedAt !== undefined && (!Number.isFinite(item.lastAppliedAt) || item.lastAppliedAt < 0)) throw new Error('Checkpoint de aceleração inválido.');
       }
     }
     if (sim.economyCatalog) EconomyCatalog.prepare(JSON.parse(sim.economyCatalog), JSON.parse(sim.economy));
@@ -72,9 +73,18 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   $('confirmBackup').onclick = async () => {
     if (!candidate) return;
-    if (!(await AppDialog.confirm('Substituir todos os dados locais pelo backup conferido?'))) return;
+    const shared = window.SharedWallet?.state().mode === 'controlling';
+    if (!(await AppDialog.confirm(shared ? 'Substituir a carteira compartilhada pelo backup conferido? A alteração chegará ao outro aparelho.' : 'Substituir todos os dados locais pelo backup conferido?'))) return;
     try {
+      if (window.SharedWallet?.state().mode === 'controlling') freezeWalletTimer();
       WalletStore.restore(candidate);
+      if (window.SharedWallet?.state().mode === 'controlling') {
+        // Hold background checkpoints until the restored envelope is acknowledged.
+        WalletStore.setWritable(false);
+        await window.SharedWallet.flush();
+        if (window.SharedWallet.state().pending || window.SharedWallet.state().mode !== 'controlling')
+          throw new Error('Backup preservado neste navegador, mas ainda não confirmado no Firebase. Baixe a cópia de recuperação e confira a conexão antes de continuar.');
+      }
       location.reload();
     } catch (error) {
       $('backupMessage').textContent = error.message;

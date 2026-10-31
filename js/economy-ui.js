@@ -102,6 +102,16 @@ document.addEventListener('DOMContentLoaded', () => {
       feedback.textContent = error instanceof SyntaxError ? 'JSON inválido: confira vírgulas, aspas e colchetes. ' + error.message : error.message;
     }
   };
+  window.addEventListener('wallet:remote', (event) => {
+    if (event.detail && !event.detail.initial && !event.detail.changedKeys.some((key) => ['economy', 'economyCatalog', 'economyCatalogBaseline'].includes(key))) return;
+    const saved = JSON.parse(AppStorage.getItem('economy') || 'null');
+    const catalog = AppStorage.getItem('economyCatalog');
+    if (catalog) EconomyCatalog.apply(EconomyCatalog.prepare(JSON.parse(catalog), saved || Economy.defaults()).catalog);
+    economySettings = Economy.validate(saved || Economy.defaults());
+    ELIGIBLE_TASKS.clear();
+    Economy.config.eligible.forEach((id) => ELIGIBLE_TASKS.add(id));
+    render();
+  });
   document.querySelectorAll('[data-jump]').forEach(
     (button) =>
       (button.onclick = () => {

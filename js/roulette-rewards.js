@@ -1,6 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
   const container = document.getElementById('roulettePrizeList');
   function registerFreeServices() {
+    if (!WalletStore.isWritable()) return;
     const awards = JSON.parse(AppStorage.getItem('rouletteAwards') || '[]');
     const tasks = JSON.parse(AppStorage.getItem('tarefasPendentes') || '[]');
     const history = JSON.parse(AppStorage.getItem('historico') || '[]');
@@ -83,6 +84,7 @@ document.addEventListener('DOMContentLoaded', () => {
     render();
   };
   function expireBonus() {
+    if (!WalletStore.isWritable()) return;
     const until = Number(AppStorage.getItem('rouletteBonusUntil') || 0);
     if (until && until <= Date.now()) {
       AppStorage.setItem('rouletteBonusUntil', '0');
@@ -92,6 +94,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
   window.addEventListener('roulette:awards', render);
+  window.addEventListener('wallet:remote', (event) => {
+    if (!event.detail || event.detail.initial || event.detail.changedKeys.includes('rouletteAwards')) render();
+  });
+  window.addEventListener('wallet:control', render);
   setInterval(expireBonus, 1000);
   expireBonus();
   render();
