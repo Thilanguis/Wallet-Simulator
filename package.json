@@ -19,6 +19,9 @@
     "pdfjs-dist": "6.4.299",
     "tesseract.js": "7.0.0"
   },
+  "overrides": {
+    "@grpc/grpc-js": "1.13.6"
+  },
   "devDependencies": {
     "@firebase/rules-unit-testing": "5.0.2",
     "@playwright/test": "1.64.1",

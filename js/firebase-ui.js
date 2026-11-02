@@ -64,6 +64,10 @@ document.addEventListener('DOMContentLoaded', () => {
     $('reconnectCloud').hidden = mode !== 'error';
     $('retryFirebaseConnection').hidden = !currentUser || mode !== 'error';
     document.body.classList.toggle('cloud-readonly', !WalletStore.isWritable());
+    if (mode === 'error' && next.error?.code === 'permission-denied') {
+      document.body.classList.add('firebase-required');
+      $('firebaseAuthMessage').textContent = text;
+    }
     if (received && ['watching', 'controlling'].includes(mode)) document.body.classList.remove('firebase-required');
     if (!received && mode === 'error') $('firebaseAuthMessage').textContent = text;
     window.dispatchEvent(new Event('cloud:state'));

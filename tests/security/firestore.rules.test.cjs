@@ -63,3 +63,17 @@ test('task completion and history archival can be saved without allowing destruc
   await assertFails(deleteDoc(doc(db, root + '/tarefas/existing')));
   await assertFails(deleteDoc(doc(db, root + '/historico/example')));
 });
+
+test('editing the private allowlist in Firebase revokes access without changing the wallet', async () => {
+  const partner = signed('partner@example.invalid');
+  await assertSucceeds(getDoc(doc(partner, root)));
+  try {
+    await environment.withSecurityRulesDisabled(async (context) => updateDoc(doc(context.firestore(), root + '/config/acesso'), { emails: ['owner@example.invalid'] }));
+    await assertFails(getDoc(doc(partner, root)));
+    await assertFails(getDocs(collection(partner, root + '/historico')));
+    await assertFails(updateDoc(doc(partner, root), { saldoDominadora: 0 }));
+    await assertSucceeds(getDoc(doc(signed('owner@example.invalid'), root)));
+  } finally {
+    await environment.withSecurityRulesDisabled(async (context) => updateDoc(doc(context.firestore(), root + '/config/acesso'), { emails: ['owner@example.invalid', 'partner@example.invalid'] }));
+  }
+});

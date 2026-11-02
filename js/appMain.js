@@ -243,8 +243,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const inicioCD = `${d0}d ${pad2local(h0)}h ${pad2local(m0)}m ${pad2local(s0)}s`;
 
       div.innerHTML = `
-  <span class="tempo-restante" data-expira="${tarefa.expiraEm}" data-nome="${tarefa.nome}">
-    🔒 <b>${nomeBonito}</b> <span class="acceleration-source-note" hidden></span> —
+  <span class="tempo-restante" data-expira="${Number(tarefa.expiraEm)}" data-nome="${escapeHTML(tarefa.nome)}">
+    🔒 <b>${escapeHTML(nomeBonito)}</b> <span class="acceleration-source-note" hidden></span> —
     <span class="relogio">${inicioCD}</span><span class="acceleration-row-tag" hidden>Acelerado</span>
   </span>
   <hr>

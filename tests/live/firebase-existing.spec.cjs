@@ -113,3 +113,27 @@ test('Google sign-out hides the wallet and a fresh sign-in reloads the existing 
   await expect(page.locator('#saldoDominadora')).toHaveText('R$ 1.000,00');
   await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
 });
+
+test('revoked Firebase permission hides the cached wallet without deleting recovery data', async ({ page }) => {
+  const server = await hub();
+  await server.attach(page, '0');
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  await page.evaluate(() => SharedWallet.suspend(Object.assign(new Error('Acesso revogado'), { code: 'permission-denied' })));
+  await expect(page.locator('#firebaseAuthPanel')).toBeVisible();
+  await expect(page.locator('#saldoDominadora')).toBeHidden();
+  await expect(page.locator('#financePanel')).toBeHidden();
+  expect(await page.evaluate(() => WalletStore.isWritable())).toBe(false);
+  expect(await page.evaluate(() => WalletStore.snapshot().simulator.saldoDominadora)).toBe('1000');
+  expect(server.docs.get(root).saldoDominadora).toBe(1000);
+});
+
+test('a blocked task name from Firebase is rendered as text, never as executable HTML', async ({ page }) => {
+  const payload = '\"><img src=x onerror="window.__securityInjected=1">';
+  const server = await hub({ [root]: { saldoDominadora: 1000, bonusEspecialAtivo: false, tarefasBloqueadas: [{ nome: payload, expiraEm: Date.now() + 86400000 }], accelBoosts: [] } });
+  await server.attach(page, '0');
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  await expect(page.locator('#tarefasLimitadasLista')).toContainText(payload);
+  await expect(page.locator('#tarefasLimitadasLista img')).toHaveCount(0);
+  expect(await page.evaluate(() => window.__securityInjected)).toBeUndefined();
+  expect(await page.locator('#tarefasLimitadasLista .tempo-restante').getAttribute('data-nome')).toBe(payload);
+});
