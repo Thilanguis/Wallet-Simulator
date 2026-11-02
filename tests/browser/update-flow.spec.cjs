@@ -26,6 +26,8 @@ test('automatic update asks consent and shows progress before preserving data an
   await expect(page.locator('#updateBanner')).toBeHidden();
   // A second pending version is not required: the ready banner remains actionable.
   await page.evaluate(() => (document.getElementById('updateBanner').hidden = false));
+  // Updating must still activate when the browser suspends visual frames.
+  await page.evaluate(() => (window.requestAnimationFrame = () => 0));
   await page.locator('#updateNow').click();
   await expect(page.locator('#updateProgress')).toBeVisible();
   await expect(page.locator('#updateProgress')).toHaveAttribute('value', '50');

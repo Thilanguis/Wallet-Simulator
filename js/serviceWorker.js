@@ -35,7 +35,8 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
           AppStorage.flush();
           progress.value = 50;
           label.textContent = 'Ativando a versão já baixada…';
-          await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          // Activation must not depend on animation frames: background tabs and
+          // suspended mobile rendering can stop them indefinitely.
           if (registration.waiting) registration.waiting.postMessage({ type: 'SKIP_WAITING' });
           else {
             progress.value = 100;

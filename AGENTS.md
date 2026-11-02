@@ -1,5 +1,7 @@
 # Fluxo local obrigatório
 
+- Repositório remoto oficial e único destino de desenvolvimento: `https://github.com/Thilanguis/Wallet-Simulator.git`, branch main. A pasta local permanece Simulator/ para preservar o VS Code/Live Server. A autorização de publicação desta unificação não autoriza operações Git automáticas em pedidos futuros.
+
 - A pasta de trabalho do VS Code é `D:\Sistemas DEV\dominação`.
 - A fonte ativa agora é `D:\Sistemas DEV\dominação\Simulator`, o repositório Git local. Faça as edições futuras dentro de Simulator/. A raiz contém cópias antigas preservadas e um index.html que encaminha para a aplicação.
 - Não crie branches, não faça staging, commits, reset, push, Pull Requests ou merge sem autorização expressa do usuário. Não inicialize outro repositório.

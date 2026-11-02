@@ -296,7 +296,9 @@ test('PWA update waits for consent, Later preserves state, confirmed reload and 
     await expect(page.locator('#updateBanner')).toBeHidden();
     await expect(page.locator('#saldoDominadora')).toHaveText('R$ 321,45');
     await page.evaluate(() => (document.getElementById('updateBanner').hidden = false));
-    await page.locator('#updateNow').click();
+    // Wait for the automatic reload before navigating or taking the browser offline.
+    // The old balance remains visible while the new worker is activating.
+    await Promise.all([page.waitForEvent('load'), page.locator('#updateNow').click()]);
 
     await expect(page.locator('#saldoDominadora')).toHaveText('R$ 321,45');
     await finance(page);

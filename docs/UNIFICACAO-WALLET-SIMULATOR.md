@@ -16,7 +16,7 @@ repositório; o nome da pasta local não define o banco nem a publicação.
 - Backups anteriores e desta preparação permanecem em `.local-backups/`, fora
   da publicação e do Git. Não é necessário duplicar a aplicação local.
 
-## Estado constatado em 01/11/2026
+## Estado na preparação, antes da publicação
 
 - O remoto local ainda é `Thilanguis/Simulator`. Não foi trocado silenciosamente.
 - `Wallet-Simulator/main` ainda está em `278fa677ebc3fad33e2841c92722f017701c8137`.
@@ -47,3 +47,32 @@ ancestral: a unificação conserva ambos os históricos e mantém integralmente 
 árvore moderna, sem tentar substituir arquivos atuais pela implementação antiga.
 O histórico local anterior também está preservado em bundle privado no backup.
 O resultado da publicação deve ser confirmado pelo Pages antes de ser anunciado.
+
+## Unificação executada em 01/11/2026
+
+O remoto local foi alinhado com `Thilanguis/Wallet-Simulator`. Os commits
+`8ad63f4` (adaptação Firebase e build) e `9e79e3c` (preservação dos históricos)
+foram enviados à main sem force push. A primeira publicação pelo workflow foi
+aprovada. A fonte do Pages foi corrigida de `legacy` para `workflow`, evitando
+que uma publicação da raiz sobrescrevesse o pacote completo gerado em dist/.
+
+Na conferência final também foram encontrados os commits `324502f` e `5ed4be0`
+no repositório antigo Simulator. Suas mudanças foram comparadas com a versão
+atual: a interface já estava contemplada; a configuração por apiKey em cada
+aparelho é substituída pela conexão atual ao projeto existente; o worker
+precompilado na raiz é substituído pelo build de produção. Esses commits também
+ficam preservados no histórico unificado e em bundle privado, sem reintroduzir
+o seletor de operação ou as opções antigas de roleta/ganhos.
+
+Uma falha intermitente do fluxo de atualização foi identificada: a ativação
+aguardava quadros de animação, que podem ficar suspensos. A ativação agora segue
+sem depender deles, mantendo a confirmação e o salvamento dos dados. O teste
+aguarda o recarregamento real antes de desligar a rede e verifica o caso de
+quadros de animação suspensos.
+
+O encaminhamento separado de `Simulator/main` para o site oficial foi preparado,
+mas a atualização dessa branch foi rejeitada pela revisão automática de aprovação:
+a autorização foi considerada específica para publicar em Wallet-Simulator.
+Consequentemente, a branch e a publicação antigas não foram alteradas. O destino
+local de desenvolvimento já é somente Wallet-Simulator; para encaminhar também o
+outro site, é necessária autorização específica dessa alteração.
