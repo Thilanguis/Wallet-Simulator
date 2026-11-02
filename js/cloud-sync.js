@@ -14,7 +14,16 @@
     return { version: 2, revision: 0, simulator: structuredClone(doc.simulator), finance: JSON.parse(doc.financeJson) };
   }
   function signature(doc) {
-    return JSON.stringify([doc?.simulator, doc?.financeJson]);
+    // Firestore maps may return keys in a different order. Simulator values
+    // are strings: compare their contents, never object insertion order.
+    const sim = doc?.simulator;
+    return JSON.stringify([
+      sim &&
+        Object.keys(sim)
+          .sort()
+          .map((key) => [key, sim[key]]),
+      doc?.financeJson,
+    ]);
   }
   function create({ store, transport, id, validate, backup, onFreeze = () => {}, onRemote = () => {}, onState = () => {}, onConflict = () => {}, now = Date.now, later = setTimeout, cancel = clearTimeout }) {
     const idleWaiters = [];

@@ -97,6 +97,24 @@ function fixture() {
 }
 const turn = () => new Promise((resolve) => setImmediate(resolve));
 
+test('Firestore map key order does not turn an unchanged server state into a conflict', async () => {
+  const h = fixture(),
+    a = h.device('first');
+  a.sync.connect();
+  await turn();
+  await a.sync.takeControl();
+  a.store.sim.setItem('bonusEspecialAtivo', 'true');
+  await turn();
+  await a.sync.flush();
+  a.store.sim.setItem('saldoDominadora', '125');
+  await turn();
+  h.edit((doc) => ({ ...doc, simulator: Object.fromEntries(Object.entries(doc.simulator).reverse()) }));
+  await a.sync.flush();
+  assert.equal(h.cloud().simulator.saldoDominadora, '125');
+  assert.equal(a.store.sim.getItem('saldoDominadora'), '125');
+  assert.equal(a.sync.state().pending, false);
+});
+
 test('a concurrent server edit preserves the unsent copy and keeps following snapshots', async () => {
   const h = fixture(),
     a = h.device('first');
