@@ -16,3 +16,16 @@ test('production build injects complete offline shell and local OCR assets', () 
   for (const asset of ['vendor/lang/por.traineddata.gz', 'vendor/lang/eng.traineddata.gz', 'vendor/pdf/pdf.mjs', 'vendor/pdf/pdf.worker.mjs', 'vendor/tesseract/worker.min.js']) assert.ok(assets.includes(asset));
   for (const asset of assets) assert.ok(fs.existsSync(path.join(root, 'dist', asset)), 'missing asset ' + asset);
 });
+
+test('public Pages build excludes the local Firebase config and includes the existing-project bootstrap', () => {
+  const root = path.resolve(__dirname, '..');
+  execFileSync(process.execPath, ['scripts/build.cjs', '--public'], { cwd: root, stdio: 'pipe' });
+  assert.ok(!fs.existsSync(path.join(root, 'dist/firebaseConfiguration.js')));
+  const worker = fs.readFileSync(path.join(root, 'dist/service-worker.js'), 'utf8');
+  const assets = JSON.parse(worker.match(/const ASSETS\s*=\s*(\[[\s\S]*?\]);/)[1]);
+  assert.ok(!assets.includes('firebaseConfiguration.js'));
+  for (const name of ['js/firebase-connection.js', 'js/firebase-existing-model.js', 'js/firebase-existing-transport.js']) assert.ok(assets.includes(name));
+  const workflow = fs.readFileSync(path.join(root, '.github/workflows/pages.yml'), 'utf8');
+  assert.ok(workflow.includes("github.repository == 'Thilanguis/Wallet-Simulator'"));
+  assert.ok(workflow.includes('npm run build -- --public'));
+});

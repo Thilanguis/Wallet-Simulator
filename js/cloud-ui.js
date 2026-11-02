@@ -2,9 +2,12 @@
 document.addEventListener('DOMContentLoaded', () => {
   const $ = (id) => document.getElementById(id);
   const codeKey = 'findom.cloud.pair.v3',
+    backendKey = 'findom.cloud.backend.v3',
     recoveryKey = 'findom.cloud.before.v3';
   let engine = null,
     code = localStorage.getItem(codeKey),
+    backend = localStorage.getItem(backendKey) || (WalletCipher.valid(code) ? 'paired' : null),
+    connectingBackend = backend,
     mode = 'local',
     connecting = false;
   const tabKey = 'findom.cloud.tab.v3';
@@ -36,7 +39,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   function errorText(error) {
     if (error?.code === 'auth/operation-not-allowed' || error?.code === 'auth/admin-restricted-operation') return 'Ative o provedor Anônimo em Firebase → Authentication → Método de login. Não haverá tela de login.';
-    if (error?.code === 'permission-denied') return 'O Firebase recusou a conexão. Confira as regras em docs/FIREBASE-LOCAL.md; os dados locais foram preservados.';
+    if (error?.code === 'permission-denied')
+      return connectingBackend === 'existing'
+        ? 'O Firebase recusou acesso a usuarios/gabriel-local ou ao backup em config. Seus dados locais foram preservados; as regras do banco não foram alteradas.'
+        : 'O Firebase recusou a conexão. Confira as regras em docs/FIREBASE-LOCAL.md; os dados locais foram preservados.';
     return error?.message || 'Não foi possível conectar ao Firebase. Seus dados continuam neste navegador.';
   }
   function state(next) {
@@ -61,17 +67,18 @@ document.addEventListener('DOMContentLoaded', () => {
     $('cloudStatusBar').classList.toggle('is-error', mode === 'error');
     $('cloudControl').hidden = !['controlling', 'watching'].includes(mode);
     $('cloudControl').textContent = mode === 'controlling' ? 'Liberar controle' : 'Assumir controle';
-    $('reconnectCloud').hidden = !code || mode !== 'error';
-    $('createSharedWallet').hidden = !!code;
-    $('showPairCode').hidden = !code;
-    $('disconnectCloud').hidden = !code;
+    $('reconnectCloud').hidden = !backend || mode !== 'error';
+    $('showPairCode').hidden = !backend || !code || !['controlling', 'watching'].includes(mode);
+    $('disconnectCloud').hidden = !backend;
+    $('connectExistingFirebase').hidden = backend === 'existing' && mode !== 'error';
     document.body.classList.toggle('cloud-readonly', !WalletStore.isWritable());
     window.dispatchEvent(new Event('cloud:state'));
     if (mode === 'controlling' && !wasControlling) window.dispatchEvent(new Event('wallet:control'));
   }
-  async function connect(nextCode, create = false) {
+  async function connect(nextCode, create = false, targetBackend = 'existing') {
     if (connecting) return;
     connecting = true;
+    connectingBackend = targetBackend;
     try {
       if (!WalletCipher.valid(nextCode)) throw new Error('Cole o código completo de vínculo do outro aparelho.');
       freezeWalletTimer();
@@ -80,12 +87,12 @@ document.addEventListener('DOMContentLoaded', () => {
       engine?.stop();
       WalletStore.setWritable(false);
       state({ mode: 'connecting' });
-      const { createFirebaseTransport } = await import('./firebase-transport.js');
+      const makeTransport = targetBackend === 'existing' ? (await import('./firebase-existing-transport.js')).createExistingFirebaseTransport : (await import('./firebase-transport.js')).createFirebaseTransport;
       let timeout;
       let transport;
       try {
         transport = await Promise.race([
-          createFirebaseTransport(nextCode),
+          makeTransport(nextCode),
           new Promise((_, reject) => {
             timeout = setTimeout(() => reject(new Error('O Firebase não respondeu. Confira a conexão e tente novamente.')), 12000);
           }),
@@ -107,9 +114,17 @@ document.addEventListener('DOMContentLoaded', () => {
           if (next.mode === 'ready' && initialize) {
             initialize = false;
             queueMicrotask(() => engine.takeControl());
-          } else if (next.mode === 'ready') state({ mode: 'error', error: new Error('Não existe carteira para este código. Confira o vínculo no primeiro aparelho.') });
+          } else if (next.mode === 'ready')
+            state({
+              mode: 'error',
+              error: new Error(
+                targetBackend === 'existing' ? 'A carteira atual ainda não foi inicializada no Firebase. Conecte primeiro no aparelho com a sua lista atual.' : 'Não existe carteira para este código. Confira o vínculo no primeiro aparelho.',
+              ),
+            });
         },
       });
+      backend = targetBackend;
+      localStorage.setItem(backendKey, backend);
       code = nextCode;
       localStorage.setItem(codeKey, code);
       $('cloudPairCode').value = '';
@@ -118,21 +133,26 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (error) {
       // A failed first connection leaves local use available. Existing paired wallets
       // remain read-only to avoid a divergent offline ledger overwriting the server.
-      WalletStore.setWritable(!code);
+      WalletStore.setWritable(!backend);
       state({ mode: 'error', error });
     } finally {
       connecting = false;
     }
   }
-  $('createSharedWallet').onclick = async () => {
-    if (!(await AppDialog.confirm('Enviar esta carteira ao seu Firebase? Saldo, histórico, tarefas, roleta, configurações e notas reais serão compartilhados. Uma cópia local será preservada.'))) return;
-    await connect(WalletCipher.create(), true);
+  $('connectExistingFirebase').onclick = async () => {
+    if (
+      !(await AppDialog.confirm(
+        'Conectar ao Firebase existente? Se a versão atual ainda não estiver salva lá, este aparelho será a base: seu saldo, histórico, catálogo e lista de gastos atuais serão enviados. O documento antigo será guardado em backup e as coleções antigas serão preservadas.',
+      ))
+    )
+      return;
+    await connect(backend === 'existing' && WalletCipher.valid(code) ? code : WalletCipher.create(), true, 'existing');
   };
   $('joinSharedWallet').onclick = async () => {
     const next = $('cloudPairCode').value.trim().toLowerCase();
     if (!WalletCipher.valid(next)) return AppDialog.alert('Cole o código completo fornecido pelo primeiro aparelho.');
     if (!(await AppDialog.confirm('Usar a carteira compartilhada neste aparelho? Sua carteira local será guardada em uma cópia de recuperação e não será mesclada automaticamente.'))) return;
-    await connect(next);
+    await connect(next, false, 'existing');
   };
   $('cloudControl').onclick = async () => {
     if (!engine) return;
@@ -152,7 +172,7 @@ document.addEventListener('DOMContentLoaded', () => {
       $('cloudShareCode').select();
     }
   };
-  $('reconnectCloud').onclick = () => connect(code);
+  $('reconnectCloud').onclick = () => connect(code, false, backend);
   $('disconnectCloud').onclick = async () => {
     if (!(await AppDialog.confirm('Desconectar este aparelho? Os dados desta página continuarão locais. A carteira no Firebase e o vínculo do outro aparelho serão preservados.'))) return;
     if (engine?.state().mode === 'controlling' && !(await engine.release())) return;
@@ -160,7 +180,9 @@ document.addEventListener('DOMContentLoaded', () => {
     engine = null;
     window.SharedWallet = null;
     code = null;
+    backend = null;
     localStorage.removeItem(codeKey);
+    localStorage.removeItem(backendKey);
     WalletStore.setWritable(true);
     state({ mode: 'local' });
   };
@@ -202,5 +224,6 @@ document.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('pagehide', () => {
     if (engine?.state().pending) preserve(WalletStore.snapshot());
   });
-  if (WalletCipher.valid(code)) connect(code);
+  if (backend === 'existing') connect(code, false, 'existing');
+  else if (WalletCipher.valid(code)) connect(code, false, 'paired');
 });

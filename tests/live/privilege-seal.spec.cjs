@@ -40,10 +40,10 @@ test('seal persists real bonus, keeps gain quantity and discounts services exact
   expect(await page.evaluate(() => FinanceUI.getState().entries)).toEqual([]);
 });
 test('timer synchronizes on pause and finish, applies bonus once, restored session stays paused', async ({ page }) => {
-  await open(page);
-  await page.clock.install();
-  const start = new Date('2026-10-31T12:00:00Z');
+  const start = new Date('2026-10-31T12:00:01Z');
+  await page.clock.install({ time: new Date(start.getTime() - 1000) });
   await page.clock.pauseAt(start);
+  await open(page);
   await page.locator('#privilegeSeal').click();
   await page.locator('[data-jump=ganho]').click();
   await page.locator('#selectGanho').selectOption('Tapa de pé na cara');

@@ -62,11 +62,15 @@ for (const width of [1280, 390]) {
     test('completing a spin creates the service immediately without reload or redeem', async ({ page }) => {
       const errors = [];
       page.on('pageerror', (error) => errors.push(error.message));
+      await page.clock.install({ time: new Date('2026-10-31T12:00:00Z') });
+      await page.clock.pauseAt(new Date('2026-10-31T12:00:01Z'));
       await open(page, { saldoDominadora: '75' });
-      await page.clock.install();
-      await page.clock.pauseAt(new Date());
+      // Smooth scrolling cannot finish while the simulated animation clock is paused.
+      await page.addStyleTag({ content: 'html { scroll-behavior: auto !important; }' });
       await page.evaluate(() => (Math.random = () => 0.1));
       await page.locator('#openRouletteCard').click();
+      await page.clock.runFor(300);
+      await expect(page.locator('#roletaBox')).toHaveCSS('opacity', '1');
       await page.locator('#btnRoletaGirar').click();
       await page.clock.fastForward(6000);
       await expect(page.locator('#tarefasPendentes .tarefa-item')).toHaveCount(1);

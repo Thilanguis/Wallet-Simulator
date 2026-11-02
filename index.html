@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="css/bonusAtivoGPT.css" />
     <link rel="stylesheet" href="css/luzLateral.css" />
     <link rel="stylesheet" href="css/modern.css" />
-    <script type="module" src="firebaseConfiguration.js"></script>
+    <script type="module" src="js/firebase-connection.js"></script>
   </head>
   <body>
     <div class="container">
@@ -499,8 +499,9 @@
           <summary>Carteira compartilhada</summary>
           <p class="hint">Vocês acompanham a mesma carteira, sem tela de login. Um aparelho controla a sessão por vez.</p>
           <p id="cloudSettingsStatus" role="status">Este navegador ainda usa uma carteira local.</p>
+          <button type="button" id="connectExistingFirebase">Conectar ao Firebase existente</button>
+          <p class="hint">Usa a conexão do Wallet-Simulator e mantém seus dados atuais. No segundo aparelho, cole o código privado gerado aqui.</p>
           <div class="btn-row">
-            <button type="button" id="createSharedWallet">Compartilhar esta carteira</button>
             <button type="button" id="showPairCode" hidden>Mostrar código de vínculo</button>
             <button type="button" id="reconnectCloud" hidden>Reconectar</button>
             <button type="button" id="disconnectCloud" hidden>Desconectar este aparelho</button>
@@ -604,6 +605,7 @@
     <script defer src="js/wallet-presentation.js"></script>
     <script defer src="js/cloud-sync.js"></script>
     <script defer src="js/cloud-cipher.js"></script>
+    <script defer src="js/firebase-existing-model.js"></script>
     <script defer src="js/cloud-ui.js"></script>
   </body>
 </html>

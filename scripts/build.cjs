@@ -7,7 +7,12 @@ fs.mkdirSync(dest, { recursive: true });
 const { copy, prepareAssets } = require('./local-assets.cjs');
 for (const name of ['index.html', 'manifest.json', 'css', 'js', 'icon-192.png', 'icon-512.jpg', '💎 Contrato de Submissão e Resgate de Saldo.pdf']) copy(path.join(root, name), path.join(dest, name));
 prepareAssets(root, dest);
-if (fs.existsSync(path.join(root, 'firebaseConfiguration.js'))) copy(path.join(root, 'firebaseConfiguration.js'), path.join(dest, 'firebaseConfiguration.js'));
+const publicBuild = process.argv.includes('--public');
+const localConfig = path.join(dest, 'firebaseConfiguration.js');
+if (publicBuild) {
+  // The existing-project bootstrap works without publishing the local config.
+  if (fs.existsSync(localConfig)) fs.unlinkSync(localConfig);
+} else if (fs.existsSync(path.join(root, 'firebaseConfiguration.js'))) copy(path.join(root, 'firebaseConfiguration.js'), localConfig);
 const files = [];
 function walk(dir) {
   for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {

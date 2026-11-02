@@ -70,13 +70,16 @@ test('select all respects filters, supports partial selection, cancellation and 
   await page.locator('[data-panel=financePanel]').click();
   expect(await page.evaluate(() => FinanceUI.getState().entries.length)).toBe(1);
 });
-test('actual VS Code Live Server serves the modern app, retaining local Firebase inclusion', async ({ page, request }) => {
+test('actual VS Code Live Server serves the modern app and preserves the local Firebase configuration loader', async ({ page, request }) => {
   await open(page);
   const response = await request.get(page.url());
   expect(response.status()).toBe(200);
   const html = await response.text();
   expect(html).toContain('id="financePanel"');
-  expect(html).toContain('src="firebaseConfiguration.js"');
+  expect(html).toContain('src="js/firebase-connection.js"');
+  const loader = await request.get(new URL('js/firebase-connection.js', page.url()).href);
+  expect(loader.status()).toBe(200);
+  expect(await loader.text()).toContain('../firebaseConfiguration.js');
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await open(page);
@@ -289,7 +292,7 @@ test('manual entry accepts decimal point, saves once and shows feedback next to 
   await expect(page.locator('#entryFeedback')).toContainText('inválido');
   expect(await page.evaluate(() => FinanceUI.getState().entries.length)).toBe(1);
   const icon = await page.locator('link[rel=icon]').getAttribute('href');
-  expect((await request.get('/' + icon)).status()).toBe(200);
+  expect((await request.get(new URL(icon, page.url()).href)).status()).toBe(200);
   await page.reload();
   expect(await page.evaluate(() => FinanceUI.getState().entries.length)).toBe(1);
 });

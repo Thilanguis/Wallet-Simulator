@@ -1,47 +1,12 @@
 const { test, expect } = require('@playwright/test');
-// Exercise the real encrypted Firebase adapter with a deterministic in-memory SDK.
-// No request reaches Google, Authentication or the real Firestore project.
-async function hub() {
-  const docs = new Map(),
-    pages = new Set();
-  async function attach(page, uid, balance) {
-    pages.add(page);
-    await page.routeWebSocket(/\/ws$/, (socket) => socket.close());
-    await page.route('https://www.gstatic.com/firebasejs/**', (route) => {
-      const auth = route.request().url().endsWith('firebase-auth.js');
-      route.fulfill({
-        contentType: 'text/javascript',
-        body: auth
-          ? `export function getAuth(){return {authStateReady:async()=>{},currentUser:{uid:${JSON.stringify(uid)}}}};export async function signInAnonymously(){}`
-          : `export function doc(db,col,room){return {path:col+'/'+room,room}};
-           export function serverTimestamp(){return 'server-time'};
-           const snap=v=>({exists:()=>v!==null,data:()=>v,metadata:{fromCache:false,hasPendingWrites:false}});
-           export function onSnapshot(ref,opts,receive,fail){let active=true;const fn=e=>{if(e.detail.room===ref.room&&active)receive(snap(e.detail.value))};window.addEventListener('__cloudDoc',fn);window.__hubRead(ref.room).then(v=>{if(active)receive(snap(v))}).catch(fail);return ()=>{active=false;window.removeEventListener('__cloudDoc',fn)}};
-           export async function runTransaction(db,fn){for(let i=0;i<10;i++){let old=null,ref=null,next=null;const result=await fn({get:async r=>{ref=r;old=await window.__hubRead(r.room);return snap(old)},set:(r,v)=>{ref=r;next=v}});if(await window.__hubWrite({room:ref.room,expected:old?.revision??null,next}))return result;}throw new Error('conflict')}`,
-      });
-    });
-    await page.route('**/firebaseConfiguration.js', (r) => r.fulfill({ contentType: 'text/javascript', body: 'window._firestoreDb={app:{}}; export {};' }));
-    await page.exposeBinding('__hubRead', (_, room) => structuredClone(docs.get(room) || null));
-    await page.exposeBinding('__hubWrite', (_, { room, expected, next }) => {
-      if ((docs.get(room)?.revision ?? null) !== expected) return false;
-      docs.set(room, structuredClone(next));
-      for (const p of pages) if (!p.isClosed()) setTimeout(() => p.evaluate(({ room, value }) => window.dispatchEvent(new CustomEvent('__cloudDoc', { detail: { room, value } })), { room, value: next }).catch(() => {}), 0);
-      return true;
-    });
-    await page.addInitScript((balance) => {
-      if (!localStorage.getItem('findom.wallet.v2')) localStorage.setItem('saldoDominadora', balance);
-    }, balance);
-    await page.goto('/');
-  }
-  return { attach, docs };
-}
+const { hub } = require('./firebase-hub.cjs');
 async function settings(page) {
   await page.locator('[data-panel=backupPanel]').click();
   if (!(await page.locator('#cloudSettings').evaluate((el) => el.open))) await page.locator('#cloudSettings > summary').click();
 }
 async function create(page) {
   await settings(page);
-  await page.locator('#createSharedWallet').click();
+  await page.locator('#connectExistingFirebase').click();
   await page.locator('[data-dialog-confirm]').click();
   await expect(page.locator('#cloudStatusText')).toContainText('controle neste aparelho');
   return page.evaluate(() => localStorage.getItem('findom.cloud.pair.v3'));
@@ -68,8 +33,8 @@ for (const [name, options] of [
     a.on('pageerror', (e) => errors.push(e.message));
     b.on('pageerror', (e) => errors.push(e.message));
     try {
-      await server.attach(a, 'first', '1000');
-      await server.attach(b, 'second', '777');
+      await server.attach(a, '1000');
+      await server.attach(b, '777');
       const code = await create(a);
       await join(b, code);
       expect(await b.evaluate(() => JSON.parse(localStorage.getItem('findom.cloud.before.v3')).simulator.saldoDominadora)).toBe('777');
@@ -123,7 +88,7 @@ for (const [name, options] of [
       expect(await b.evaluate(() => JSON.parse(AppStorage.getItem('historico')).length)).toBe(2);
       await b.reload();
       await expect(b.locator('#cloudStatusText')).toContainText('controle neste aparelho');
-      const encrypted = [...server.docs.values()][0];
+      const encrypted = server.docs.get('usuarios/gabriel-local').walletAtualV3;
       expect(encrypted.simulator).toBeUndefined();
       expect(JSON.stringify(encrypted)).not.toContain('saldoDominadora');
       expect(await b.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -142,8 +107,8 @@ test('catalog, finance records and free roulette awards replicate once; reconnec
   const a = await ca.newPage(),
     b = await cb.newPage();
   try {
-    await server.attach(a, 'first', '100');
-    await server.attach(b, 'second', '0');
+    await server.attach(a, '100');
+    await server.attach(b, '0');
     const code = await create(a);
     await join(b, code);
     await a.evaluate(() => {
@@ -185,22 +150,13 @@ test('catalog, finance records and free roulette awards replicate once; reconnec
   }
 });
 
-test('an unavailable anonymous provider leaves local balance and records usable and gives setup instructions', async ({ page }) => {
+test('existing Firebase connects without loading an anonymous authentication provider', async ({ page }) => {
   const server = await hub();
-  await server.attach(page, 'first', '321');
-  await page.route('https://www.gstatic.com/firebasejs/12.6.0/firebase-auth.js', (r) =>
-    r.fulfill({
-      contentType: 'text/javascript',
-      body: "export const getAuth=()=>({authStateReady:async()=>{},currentUser:null});export async function signInAnonymously(){throw Object.assign(new Error('disabled'),{code:'auth/operation-not-allowed'})}",
-    }),
-  );
-  await settings(page);
-  await page.locator('#createSharedWallet').click();
-  await page.locator('[data-dialog-confirm]').click();
-  await expect(page.locator('#cloudSettingsStatus')).toContainText('Ative o provedor Anônimo');
-  expect(await page.evaluate(() => WalletStore.isWritable())).toBe(true);
+  await server.attach(page, '321');
+  await create(page);
+  expect(server.authRequests()).toBe(0);
   expect(await page.evaluate(() => AppStorage.getItem('saldoDominadora'))).toBe('321');
-  expect(server.docs.size).toBe(0);
+  expect(server.docs.get('usuarios/gabriel-local').saldoDominadora).toBe(321);
 });
 
 test('restoring a reviewed backup waits for Firebase acknowledgment before reload and reaches the companion', async ({ browser }) => {
@@ -210,8 +166,8 @@ test('restoring a reviewed backup waits for Firebase acknowledgment before reloa
   const a = await ca.newPage(),
     b = await cb.newPage();
   try {
-    await server.attach(a, 'first', '100');
-    await server.attach(b, 'second', '777');
+    await server.attach(a, '100');
+    await server.attach(b, '777');
     const code = await create(a);
     await join(b, code);
     const backup = await a.evaluate(() => {
