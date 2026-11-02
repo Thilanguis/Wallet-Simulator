@@ -71,7 +71,7 @@ test('select all respects filters, supports partial selection, cancellation and 
   await page.locator('[data-panel=financePanel]').click();
   expect(await page.evaluate(() => FinanceUI.getState().entries.length)).toBe(1);
 });
-test('actual VS Code Live Server serves the modern app and preserves the local Firebase configuration loader', async ({ page, request }) => {
+test('actual VS Code Live Server uses the same verified Firebase configuration as production', async ({ page, request }) => {
   await open(page);
   const response = await request.get(page.url());
   expect(response.status()).toBe(200);
@@ -80,7 +80,8 @@ test('actual VS Code Live Server serves the modern app and preserves the local F
   expect(html).toContain('src="js/firebase-connection.js"');
   const loader = await request.get(new URL('js/firebase-connection.js', page.url()).href);
   expect(loader.status()).toBe(200);
-  expect(await loader.text()).toContain('../firebaseConfiguration.js');
+  expect(await loader.text()).toContain("import('./firebase-web-config.js')");
+  expect(await loader.text()).not.toContain('import(local.href)');
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await open(page);
