@@ -11,9 +11,8 @@ document.addEventListener('DOMContentLoaded', () => {
     currentUser = null,
     generation = 0,
     received = false,
-    automaticControl = false,
     importAttempted = false,
-    currentMode = 'starting';
+    activated = false;
   function preserve(wallet) {
     if (!localStorage.getItem(recoveryKey)) localStorage.setItem(recoveryKey, JSON.stringify(wallet));
     else if (engine?.state().pending) localStorage.setItem('findom.firebase.unsent.v4', JSON.stringify(wallet));
@@ -43,13 +42,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   function state(next) {
     const mode = next.mode;
-    const enteredControl = mode === 'controlling' && currentMode !== mode;
-    currentMode = mode;
     const descriptions = {
       connecting: 'Conectando ao Firebase…',
       receiving: 'Recebendo a carteira do Firebase…',
-      watching: next.error?.message || 'Firebase conectado · sessão acompanhada neste aparelho',
-      controlling: next.pending ? 'Enviando alterações ao Firebase…' : 'Salvo no Firebase · sessão neste aparelho',
+      watching: 'Atualizado',
+      controlling: next.pending ? 'Salvando…' : 'Salvo no Firebase',
       error: message(next.error),
       local: 'Entre com Google para abrir sua carteira.',
       ready: 'Carregando a carteira existente…',
@@ -59,8 +56,6 @@ document.addEventListener('DOMContentLoaded', () => {
     $('cloudSettingsStatus').textContent = text;
     $('cloudStatusBar').hidden = !currentUser;
     $('cloudStatusBar').classList.toggle('is-error', mode === 'error');
-    $('cloudControl').hidden = !['watching', 'controlling'].includes(mode);
-    $('cloudControl').textContent = mode === 'controlling' ? 'Liberar sessão' : 'Assumir sessão';
     $('reconnectCloud').hidden = mode !== 'error';
     $('retryFirebaseConnection').hidden = !currentUser || mode !== 'error';
     document.body.classList.toggle('cloud-readonly', !WalletStore.isWritable());
@@ -71,13 +66,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (received && ['watching', 'controlling'].includes(mode)) document.body.classList.remove('firebase-required');
     if (!received && mode === 'error') $('firebaseAuthMessage').textContent = text;
     window.dispatchEvent(new Event('cloud:state'));
-    if (mode === 'watching' && !automaticControl) {
-      automaticControl = true;
-      if (engine?.state().base?.leaseUntil <= Date.now()) queueMicrotask(() => engine?.takeControl());
-    }
     if (mode === 'controlling') {
-      automaticControl = true;
-      if (enteredControl) window.dispatchEvent(new Event('wallet:control'));
+      if (!activated) {
+        activated = true;
+        window.dispatchEvent(new Event('wallet:control'));
+      }
       queueMicrotask(importPreviousNotes);
     }
   }
@@ -111,7 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.SharedWallet = null;
     WalletStore.setWritable(false);
     received = false;
-    automaticControl = false;
+    activated = false;
     importAttempted = false;
     document.body.classList.add('firebase-required');
     if (!user) {
@@ -132,11 +125,15 @@ document.addEventListener('DOMContentLoaded', () => {
       const { createPrimaryFirebaseTransport } = await import('./firebase-primary-transport.js');
       const transport = await createPrimaryFirebaseTransport({ db: session.db, user, template: { simulator: localBeforeLoad.simulator, emptyFinance: Finance.empty() } });
       if (attempt !== generation) return;
-      engine = WalletCloud.create({
+      engine = WalletShared.create({
         store: WalletStore,
         transport,
         id: user.uid + '.' + tabId,
         validate,
+        advanceTimer: (timer, seconds) => {
+          const next = Economy.step(timer, seconds, getEconomy(), timer.dynamicActivities?.length || Number(!!timer.legacyDynamicActivity));
+          return { ...next, autoRateTotal: Economy.round((timer.autoRateTotal || 0) + next.rate - timer.rate) };
+        },
         backup: preserve,
         onFreeze: () => freezeWalletTimer(),
         onRemote: (detail) => {
@@ -166,14 +163,35 @@ document.addEventListener('DOMContentLoaded', () => {
       if (error.code !== 'auth/popup-closed-by-user') $('firebaseAuthMessage').textContent = message(error);
     }
   };
+  // Either account may operate the common clock. Transfer its internal writer
+  // automatically only when a clock action requires it, without a session UI.
+  let replayingTimer = false;
+  document.addEventListener(
+    'click',
+    async (event) => {
+      const button = event.target.closest('#btnPlayPauseTempo,#btnTerminarTempo');
+      if (!button || replayingTimer || !engine?.shared || engine.isTimerOwner() || !WalletStore.isWritable()) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const running = JSON.parse(AppStorage.getItem('timerSession') || 'null')?.running;
+      try {
+        await engine.claimTimer();
+        if (button.id === 'btnPlayPauseTempo' && running) return;
+        replayingTimer = true;
+        button.click();
+      } catch (error) {
+        AppDialog.alert(message(error));
+      } finally {
+        replayingTimer = false;
+      }
+    },
+    true,
+  );
   $('firebaseSignOut').onclick = async () => {
     if (!(await AppDialog.confirm('Sair da sua conta Google neste aparelho? Os dados no Firebase serão preservados.'))) return;
-    if (engine?.state().mode === 'controlling' && !(await engine.release())) return;
+    if (engine?.isTimerOwner()) freezeWalletTimer();
+    await engine?.flush();
     await session.signOut();
-  };
-  $('cloudControl').onclick = async () => {
-    if (engine?.state().mode === 'controlling') await engine.release();
-    else await engine?.takeControl();
   };
   $('reconnectCloud').onclick = $('retryFirebaseConnection').onclick = () => connect(currentUser);
   $('exportCloudRecovery').hidden = !localStorage.getItem(recoveryKey);
@@ -209,6 +227,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (currentUser && engine?.state().mode === 'error') void connect(currentUser);
   });
   window.addEventListener('pagehide', () => {
+    void engine?.flush();
     if (engine?.state().pending) preserve(WalletStore.snapshot());
   });
   import('./firebase-google-auth.js')

@@ -96,14 +96,15 @@
       write(storage, key, state);
     }
     if (state.version !== 2 || !state.simulator || !state.finance || !Number.isSafeInteger(state.revision)) throw new Error('Armazenamento estruturado inválido.');
-    let writable = true;
+    let writable = true,
+      remoteBacked = false;
     const listeners = new Set();
     let dirty = false,
       queued = false;
     function commit(next) {
-      if (!writable) throw new Error('Este aparelho acompanha a carteira. Assuma o controle antes de alterar dados.');
+      if (!writable) throw new Error('Aguarde a conexão com a carteira antes de alterar dados.');
       const disk = read(storage, key, null);
-      if (disk && disk.revision !== state.revision) throw new Error('Outra aba alterou os dados. Exporte o backup e recarregue antes de continuar.');
+      if (!remoteBacked && disk && disk.revision !== state.revision) throw new Error('Outra aba alterou os dados. Exporte o backup e recarregue antes de continuar.');
       const candidate = { ...structuredClone(next), revision: state.revision + 1 };
       write(storage, key, candidate);
       state = candidate;
@@ -140,6 +141,10 @@
       flush,
       snapshot: () => structuredClone(state),
       isWritable: () => writable,
+      setRemoteBacked(value) {
+        remoteBacked = !!value;
+      },
+      isRemoteBacked: () => remoteBacked,
       setWritable(value) {
         writable = !!value;
       },

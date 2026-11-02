@@ -2642,3 +2642,96 @@ body:not(.firebase-required) #firebaseAuthPanel {
 .firebase-required #btnRoletaFlutuante {
   display: none !important;
 }
+
+/* Compact account toolbar; the wallet itself belongs to both logins. */
+.firebase-account-actions {
+  min-height: 24px;
+  margin: 0 0 4px;
+  gap: 16px;
+  font-size: 11px;
+}
+.firebase-account-actions #cloudStatusBar {
+  color: var(--muted);
+}
+.firebase-account-actions #cloudStatusBar.is-error {
+  color: #ee9d97;
+}
+.account-menu {
+  position: relative;
+  border: 0;
+  padding: 0;
+  background: none;
+  font-family: Arial, sans-serif;
+}
+.account-menu summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  cursor: pointer;
+  color: #c9b98b;
+  font-size: 12px;
+  list-style: none;
+}
+.account-menu summary::-webkit-details-marker {
+  display: none;
+}
+.account-menu summary svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+}
+.account-menu-content {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #211d1a;
+  box-shadow: 0 8px 20px #0006;
+  width: max-content;
+  min-width: min(260px, calc(100vw - 40px));
+  max-width: calc(100vw - 40px);
+}
+.account-menu-content span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.account-menu-content button {
+  flex-shrink: 0;
+  white-space: nowrap;
+  background: transparent;
+  border: 1px solid #66523d;
+  border-radius: 6px;
+  padding: 5px 9px;
+  font-size: 11px;
+  box-shadow: none;
+}
+.firebase-required .account-menu {
+  display: none;
+}
+.firebase-auth-panel {
+  border-color: #574431;
+  box-shadow: 0 6px 24px #0003;
+}
+.firebase-auth-panel h2 {
+  font-size: 21px;
+  text-transform: none;
+  color: #dfca9f;
+}
+.firebase-auth-panel #googleSignIn {
+  background: #d3b16a;
+  color: #21190f;
+  border: 1px solid #e4c78c;
+  border-radius: 8px;
+  box-shadow: none;
+  font-size: 12px;
+  padding: 12px 20px;
+}

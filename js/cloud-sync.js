@@ -25,7 +25,22 @@
       doc?.financeJson,
     ]);
   }
-  function create({ store, transport, id, validate, backup, onFreeze = () => {}, onRemote = () => {}, onState = () => {}, onConflict = () => {}, now = Date.now, later = setTimeout, cancel = clearTimeout }) {
+  function create({
+    store,
+    transport,
+    id,
+    validate,
+    backup,
+    onFreeze = () => {},
+    onRemote = () => {},
+    onState = () => {},
+    onConflict = () => {},
+    freezeOnReceive = true,
+    checkpointMs = 1000,
+    now = Date.now,
+    later = setTimeout,
+    cancel = clearTimeout,
+  }) {
     const idleWaiters = [];
     let base = null,
       mode = 'local',
@@ -40,7 +55,7 @@
       suspended = false,
       connectionTimer = null;
     function status(next, error) {
-      if ((mode === 'local' || mode === 'controlling') && next !== mode) {
+      if ((mode === 'local' || mode === 'controlling') && next !== mode && (freezeOnReceive || next !== 'receiving')) {
         onFreeze();
         store.flush();
       }
@@ -133,8 +148,12 @@
       // New actions should not wait for a heartbeat scheduled further away.
       const snapshot = pack(store.snapshot());
       const bookkeeping = new Set(['timerSession', 'tarefasBloqueadas', 'accelBoosts']);
-      const action = snapshot.financeJson !== base?.financeJson || Object.keys(snapshot.simulator).some((key) => !bookkeeping.has(key) && snapshot.simulator[key] !== base?.simulator[key]);
-      schedule(action ? 0 : 1000);
+      const timer = JSON.parse(snapshot.simulator.timerSession || 'null'),
+        previousTimer = JSON.parse(base?.simulator.timerSession || 'null');
+      const clockAction = timer?.active !== previousTimer?.active || timer?.running !== previousTimer?.running;
+      const completed = ['tarefasBloqueadas', 'accelBoosts'].some((key) => JSON.parse(snapshot.simulator[key] || '[]').length !== JSON.parse(base?.simulator[key] || '[]').length);
+      const action = clockAction || completed || snapshot.financeJson !== base?.financeJson || Object.keys(snapshot.simulator).some((key) => !bookkeeping.has(key) && snapshot.simulator[key] !== base?.simulator[key]);
+      schedule(action ? 0 : checkpointMs);
     });
     async function takeControl() {
       if (busy || stopped) return false;
@@ -199,9 +218,9 @@
         });
         base = structuredClone(doc);
         guardLease();
-        pending = signature(pack(store.snapshot())) !== signature(sent);
+        pending = signature(pack(store.snapshot())) !== signature(doc);
         onState({ mode, pending });
-        schedule(pending ? 1000 : 15000);
+        schedule(pending ? checkpointMs : 15000);
       } catch (error) {
         if (error.code === 'wallet/stale' && error.current) {
           // A console edit or another device won the race. Keep the unsent copy

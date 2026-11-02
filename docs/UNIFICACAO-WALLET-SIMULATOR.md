@@ -26,4 +26,4 @@ O endereço antigo Simulator encaminha para Wallet-Simulator por autorização
 específica. Esse encaminhamento trata apenas do endereço antigo; a unificação real
 da persistência está no transporte Firebase principal, não no redirecionamento.
 
-Consulte FIREBASE-LOCAL.md para acesso, migração das notas locais e troca de sessão.
+Consulte FIREBASE-LOCAL.md para acesso, migração das notas locais e operações compartilhadas.

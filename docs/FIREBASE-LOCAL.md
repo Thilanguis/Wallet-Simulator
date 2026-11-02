@@ -51,14 +51,44 @@ publicado no lugar dela. firebase.json aponta para a regra principal.
 
 js/firebase-web-config.js contém somente identificadores públicos do Web SDK.
 Nenhum token administrativo ou credencial de conta é publicado. A configuração
-local firebaseConfiguration.js continua ignorada e não entra no pacote público.
+local firebaseConfiguration.js é preservada, mas não é carregada pela aplicação
+atual e não entra no pacote público.
 
 ## Dois aparelhos e conexão
 
-Somente um aparelho registra operações por vez, evitando duplicar sessão ou
-sobrescrever transações. O outro recebe snapshots e pode consultar, navegar,
-filtrar e exportar. Liberar sessão pausa e envia o cronômetro; Assumir sessão o
-recebe pausado. Se um aparelho fecha sem liberar, a posse vence em até 45 segundos.
+Os dois logins autorizados recebem e alteram a mesma carteira, sem assumir ou
+liberar sessão. Não existem carteiras separadas por UID. Uma transação combina
+inclusões e alterações independentes, aplica a diferença de saldo sobre o valor
+atual do servidor e preserva os IDs. Compras concorrentes não podem exceder o
+saldo disponível nem reutilizar um cooldown. Edições incompatíveis do mesmo item
+preservam uma cópia para conferência em vez de sobrescrever o registro.
+
+O cronômetro possui uma única contagem compartilhada. Um gravador interno integra
+o tempo, enquanto ambos podem registrar atividades e operar a carteira. Pausar,
+retomar ou calcular em outro aparelho transfere essa função automaticamente,
+sem botões de sessão. Os checkpoints evitam contar o mesmo tempo duas vezes.
+O cache local não bloqueia outras abas: o Firebase decide as transações.
+
+O desenho do cronômetro e do acelerador avança no aparelho, sem uma gravação no
+Firebase a cada segundo ou quadro. O progresso pendente é enviado em checkpoints
+de 15 segundos; compras, ganhos, início/pausa/conclusão, novos efeitos e alterações
+do catálogo solicitam envio imediato. Sem alterações pendentes, o agendamento
+interno não executa transações no banco. Cada checkpoint grava o documento
+principal e somente os espelhos de registros alterados; os listeners também podem
+gerar leituras. Isso reduz a frequência, mas não torna o uso do Firestore gratuito.
+
+Os prazos do acelerador são conciliados pelo horário e orçamento já aplicado,
+inclusive entre aparelhos com checkpoints diferentes. O mesmo trecho de tempo
+nunca é uma segunda redução. Ao fechar o aparelho que conta a sessão, ela é
+pausada e o envio final é solicitado; o último checkpoint continua sendo a base
+segura se o navegador encerrar antes de concluir a rede. Ao reabrir, não são
+inventados créditos por tempo fechado.
+
+O catálogo JSON salvo em Configurações é parte de walletAtualV4.simulator:
+economy, economyCatalog e economyCatalogBaseline. Alterar o catálogo no site não
+reescreve arquivos JavaScript no computador. As cópias anteriores do navegador
+podem ser baixadas em Configurações; recuperar somente os valores desejados no
+editor evita restaurar saldo e histórico antigos sobre a carteira atual.
 
 A tela só mostra a carteira após confirmação do servidor. Falhas de conexão
 pausam a sessão e bloqueiam gravações até reconectar; não há uma carteira offline

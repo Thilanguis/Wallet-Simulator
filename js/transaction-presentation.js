@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const reminder = document.getElementById('timerStartReminder');
   let finished = false;
   function update() {
-    const mirrored = !WalletStore.isWritable() && JSON.parse(AppStorage.getItem('timerSession') || 'null')?.running;
+    const mirrored = (window.SharedWallet?.shared ? !SharedWallet.isTimerOwner() : !WalletStore.isWritable()) && JSON.parse(AppStorage.getItem('timerSession') || 'null')?.running;
     const state = timerInterval || mirrored ? 'running' : timerEmSessao ? 'paused' : finished ? 'finished' : 'idle';
     const label = { running: '● Em andamento', paused: 'Ⅱ Pausado', idle: '○ Parado', finished: '✓ Finalizado' }[state];
     card.dataset.sessionState = state;

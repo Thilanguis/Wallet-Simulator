@@ -8,6 +8,7 @@ let contadorTarefasTimer = 0,
   baseMultiplicadorSessao = 1,
   sessionHasEligibleTask = false;
 let timerEarnedUnits = 0,
+  timerAutomaticRate = 0,
   timerLastTick = 0;
 let sessionDynamicActivities = new Set(),
   legacyDynamicActivity = false;
@@ -51,22 +52,25 @@ function persistTimer() {
     JSON.stringify({
       seconds: tempoSegundos,
       earnedUnits: timerEarnedUnits,
+      autoRateTotal: timerAutomaticRate,
       rate: Number(document.getElementById('valorPorMinuto').value),
       active: timerEmSessao,
       tasks: contadorTarefasTimer,
       eligible: activeDynamicCount() > 0,
       dynamicActivities: Array.from(sessionDynamicActivities),
       legacyDynamicActivity,
-      running: !!timerInterval,
+      running: window.SharedWallet?.shared && !SharedWallet.isTimerOwner() && timerEmSessao ? !!JSON.parse(AppStorage.getItem('timerSession') || 'null')?.running : !!timerInterval,
     }),
   );
 }
 function syncTimer() {
+  if (window.SharedWallet?.shared && !SharedWallet.isTimerOwner()) return;
   if (!timerInterval || !timerLastTick) return;
   const seconds = Math.max(0, Math.floor((Date.now() - timerLastTick) / 1000));
   if (!seconds) return;
   const state = Economy.step({ seconds: tempoSegundos, earnedUnits: timerEarnedUnits, rate: Number(document.getElementById('valorPorMinuto').value) }, seconds, getEconomy(), activeDynamicCount());
   tempoSegundos = state.seconds;
+  timerAutomaticRate = Economy.round(timerAutomaticRate + state.rate - Number(document.getElementById('valorPorMinuto').value));
   timerEarnedUnits = state.earnedUnits;
   document.getElementById('valorPorMinuto').value = state.rate.toFixed(2);
   timerLastTick += seconds * 1000;
@@ -126,6 +130,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (![saved.seconds, saved.earnedUnits, saved.rate, saved.tasks].every((n) => Number.isFinite(n) && n >= 0)) throw new Error('Sessão inválida.');
     tempoSegundos = saved.seconds;
     timerEarnedUnits = saved.earnedUnits;
+    timerAutomaticRate = saved.autoRateTotal || 0;
     contadorTarefasTimer = saved.tasks;
     if (saved.dynamicActivities !== undefined && (!Array.isArray(saved.dynamicActivities) || saved.dynamicActivities.length > 1000 || saved.dynamicActivities.some((name) => typeof name !== 'string' || name.length > 200)))
       throw new Error('Combo salvo inválido.');
@@ -142,6 +147,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 window.addEventListener('pagehide', () => {
+  if (window.SharedWallet?.shared && SharedWallet.isTimerOwner()) freezeWalletTimer();
   syncTimer();
   persistTimer();
   AppStorage.flush();
@@ -159,12 +165,15 @@ window.freezeWalletTimer = function () {
 };
 window.addEventListener('wallet:remote', (event) => {
   if (event.detail && !event.detail.initial && !event.detail.changedKeys.includes('timerSession')) return;
+  const previousTick = timerLastTick,
+    previousSeconds = tempoSegundos;
   if (timerInterval) clearInterval(timerInterval);
   timerInterval = null;
   timerLastTick = 0;
   const saved = JSON.parse(AppStorage.getItem('timerSession') || 'null');
   tempoSegundos = saved?.seconds || 0;
   timerEarnedUnits = saved?.earnedUnits || 0;
+  timerAutomaticRate = saved?.autoRateTotal || 0;
   contadorTarefasTimer = saved?.tasks || 0;
   timerEmSessao = !!saved?.active;
   sessionDynamicActivities = new Set(saved?.dynamicActivities || []);
@@ -174,5 +183,25 @@ window.addEventListener('wallet:remote', (event) => {
   document.getElementById('btnPlayPauseTempo').textContent = timerEmSessao ? '▶️ Continuar' : '▶️ Começar';
   atualizarDisplay();
   renderDynamicCombo();
+  if (window.SharedWallet?.shared && SharedWallet.isTimerOwner() && saved?.running && !event.detail?.initial) {
+    timerLastTick = saved.seconds === previousSeconds && previousTick ? previousTick : Date.now();
+    timerInterval = setInterval(() => {
+      syncTimer();
+      atualizarDisplay();
+    }, 1000);
+    document.getElementById('btnPlayPauseTempo').textContent = '⏸️ Pausar';
+  }
 });
 window.addEventListener('wallet:control', () => persistTimer());
+
+// A companion displays the shared clock between checkpoints without writing ticks.
+setInterval(() => {
+  if (!window.SharedWallet?.shared || SharedWallet.isTimerOwner() || SharedWallet.state().pending) return;
+  const timer = SharedWallet.timerView();
+  if (!timer?.running) return;
+  tempoSegundos = timer.seconds;
+  timerEarnedUnits = timer.earnedUnits;
+  timerAutomaticRate = timer.autoRateTotal || 0;
+  if (document.activeElement !== document.getElementById('valorPorMinuto')) document.getElementById('valorPorMinuto').value = timer.rate.toFixed(2);
+  atualizarDisplay();
+}, 500);

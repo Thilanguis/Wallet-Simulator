@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { hub } = require('./firebase-primary-hub.cjs');
 const root = 'usuarios/gabriel-local';
 for (const width of [1440, 393, 820])
-  test(`two Google accounts ${width}: same Firebase, purchases, task completion and session transfer`, async ({ browser }) => {
+  test(`two Google accounts ${width}: same shared wallet, purchases and task completion without session buttons`, async ({ browser }) => {
     const server = await hub(),
       first = await browser.newContext(),
       second = await browser.newContext({ viewport: { width, height: 1000 }, isMobile: width < 1000, hasTouch: width < 1000 });
@@ -12,7 +12,7 @@ for (const width of [1440, 393, 820])
       await server.attach(a, '0');
       await expect(a.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
       await server.attach(b, '999', { user: { uid: 'partner', email: 'partner@example.invalid', emailVerified: true } });
-      await expect(b.locator('#cloudStatusText')).toContainText('acompanhada');
+      await expect(b.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
       await expect(b.locator('#saldoDominadora')).toHaveText('R$ 1.000,00');
       await a.locator('[data-jump=gasto]').click();
       await a.locator('#selectTarefa').selectOption({ index: 1 });
@@ -22,10 +22,8 @@ for (const width of [1440, 393, 820])
       await expect(b.locator('#tarefasPendentes .tarefa-item')).toHaveCount(1);
       expect([...server.docs.keys()].filter((key) => key.startsWith(root + '/historico/')).length).toBe(1);
       expect([...server.docs.keys()].filter((key) => key.startsWith(root + '/tarefas/')).length).toBe(1);
-      await a.locator('#cloudControl').click();
-      await expect(a.locator('#cloudStatusText')).toContainText('acompanhada');
-      await b.locator('#cloudControl').click();
-      await expect(b.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+      await expect(a.locator('#cloudControl')).toHaveCount(0);
+      expect(await b.evaluate(() => WalletStore.isWritable())).toBe(true);
       await b.locator('#tarefasPendentes input[type=checkbox]').check();
       await expect(a.locator('#tarefasPendentes .tarefa-item')).toHaveCount(0);
       const task = [...server.docs].find(([key]) => key.startsWith(root + '/tarefas/'))[1];

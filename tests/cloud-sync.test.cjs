@@ -157,7 +157,7 @@ test('migration and snapshots synchronize the complete envelope without erasing 
   await turn();
   assert.equal(b.store.sim.getItem('saldoDominadora'), '112');
   assert.equal(h.cloud().revision, rev);
-  assert.throws(() => b.store.commitFinance(Finance.empty()), /acompanha/);
+  assert.throws(() => b.store.commitFinance(Finance.empty()), /conexão/);
 });
 test('only one controller can write; release transfers the latest state', async () => {
   const h = fixture(),

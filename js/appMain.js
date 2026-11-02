@@ -206,7 +206,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   window.removerTarefaLimitada = function (nome) {
     tarefasBloqueadas = tarefasBloqueadas.filter((t) => t.nome !== nome);
-    AppStorage.setItem('tarefasBloqueadas', JSON.stringify(tarefasBloqueadas));
+    settleAcceleration(true);
     atualizarTarefasLimitadasUI();
     atualizarBloqueiosNoSelectTarefa();
   };
@@ -636,7 +636,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 nome: 'ACELERAR_GLOBAL_4D_1H',
                 expiraEm: agora2 + cdMs,
               });
-              AppStorage.setItem('tarefasBloqueadas', JSON.stringify(tarefasBloqueadas));
+              settleAcceleration(true);
               atualizarTarefasLimitadasUI();
               atualizarBloqueiosNoSelectTarefa();
             }
@@ -675,7 +675,7 @@ document.addEventListener('DOMContentLoaded', () => {
               nome: redutorId,
               expiraEm: agora + cooldownMs,
             });
-            AppStorage.setItem('tarefasBloqueadas', JSON.stringify(tarefasBloqueadas));
+            settleAcceleration(true);
           }
 
           adicionarHistorico(`Redução cronometrada (−${horasReducao}h em ${Math.round(duracaoMs / 1000)}s)`, valor, 'gasto');
@@ -697,7 +697,7 @@ document.addEventListener('DOMContentLoaded', () => {
           }
           const expiraEm = agora + msBloqueio;
           tarefasBloqueadas.push({ nome: tarefa, expiraEm });
-          AppStorage.setItem('tarefasBloqueadas', JSON.stringify(tarefasBloqueadas));
+          settleAcceleration(true);
           atualizarTarefasLimitadasUI();
           atualizarBloqueiosNoSelectTarefa();
         }
@@ -804,6 +804,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btnPlayPause.addEventListener('click', () => {
       try {
         if (!timerEmSessao) {
+          timerAutomaticRate = 0;
           baseMultiplicadorSessao = getEconomy().timer.base;
           somaIncrementosValorSessao = 0;
           contadorTarefasTimer = 0;
@@ -885,6 +886,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderDynamicCombo();
         tempoSegundos = 0;
         timerEarnedUnits = 0;
+        timerAutomaticRate = 0;
         persistTimer();
 
         if (typeof atualizarDisplay === 'function') atualizarDisplay();

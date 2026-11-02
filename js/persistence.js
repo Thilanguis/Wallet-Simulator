@@ -9,6 +9,8 @@ window.storageFailure = function (error) {
 };
 try {
   window.WalletStore = Vault.wallet(localStorage, Finance.empty(), storageFailure);
+  // Firebase transactions arbitrate writes across tabs; this storage is a cache.
+  WalletStore.setRemoteBacked(true);
   window.AppStorage = WalletStore.sim;
   // Firebase is the source of truth. Never operate on a cached/zero balance
   // before authentication and the confirmed server snapshot have arrived.
@@ -20,6 +22,7 @@ try {
 }
 window.addEventListener('pagehide', () => AppStorage.flush());
 window.addEventListener('storage', (event) => {
+  if (WalletStore.isRemoteBacked()) return;
   if (event.key === 'findom.wallet.v2') {
     document.getElementById('storageWarning').hidden = false;
     document.getElementById('storageWarning').textContent = 'O simulador mudou em outra aba. Recarregue antes de continuar.';

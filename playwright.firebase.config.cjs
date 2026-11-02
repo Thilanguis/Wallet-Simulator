@@ -2,7 +2,7 @@ const { defineConfig } = require('@playwright/test');
 const port = 4175;
 module.exports = defineConfig({
   testDir: 'tests/live',
-  testMatch: ['firebase-existing.spec.cjs', 'cloud-sync.spec.cjs'],
+  testMatch: ['firebase-existing.spec.cjs', 'cloud-sync.spec.cjs', 'shared-wallet.spec.cjs'],
   fullyParallel: false,
   workers: 1,
   timeout: 60000,

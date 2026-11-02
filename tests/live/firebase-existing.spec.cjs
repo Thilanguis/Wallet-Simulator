@@ -101,6 +101,7 @@ test('Google sign-out hides the wallet and a fresh sign-in reloads the existing 
   const server = await hub();
   await server.attach(page, '0');
   await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  await page.locator('.account-menu > summary').click();
   await page.locator('#firebaseSignOut').click();
   await page.locator('[data-dialog-cancel]').click();
   await expect(page.locator('#saldoDominadora')).toBeVisible();
