@@ -158,6 +158,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const timestamp = new Date().toISOString();
 
     const entry = {
+      id: crypto.randomUUID(),
       descricao,
       valor,
       tipo,
@@ -935,6 +936,15 @@ document.addEventListener('DOMContentLoaded', () => {
       atualizarBloqueiosNoSelectTarefa();
       scheduleNextTick();
     }
+  });
+  window.addEventListener('wallet:control', () => {
+    // Initial rendering is read-only. Apply elapsed reducer time once, from the
+    // confirmed server checkpoint, after this device can persist the result.
+    tarefasBloqueadas = JSON.parse(AppStorage.getItem('tarefasBloqueadas') || '[]');
+    accelBoosts = JSON.parse(AppStorage.getItem('accelBoosts') || '[]');
+    lastCheckpointBlocks = AppStorage.getItem('tarefasBloqueadas') || '[]';
+    lastCheckpointBoosts = AppStorage.getItem('accelBoosts') || '[]';
+    resumeAccelerationIfNeeded();
   });
   window.addEventListener('pagehide', () => {
     if (_tickHandle !== null) clearTimeout(_tickHandle);

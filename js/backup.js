@@ -36,7 +36,9 @@ document.addEventListener('DOMContentLoaded', () => {
       for (const item of list) {
         if (!item || typeof item !== 'object') throw new Error('Registro inválido: ' + key);
         if (['historico', 'archivedHistory', 'tarefasPendentes'].includes(key)) {
-          if (!Number.isFinite(item.valor) || !Number.isFinite(Date.parse(item.timestamp)) || !/^[0-9T:.+Z-]+$/.test(item.timestamp)) throw new Error('Transação inválida no backup.');
+          // An undated legacy Firebase record remains undated after migration.
+          const validDate = item.timestamp === '' || (Number.isFinite(Date.parse(item.timestamp)) && /^[0-9T:.+Z-]+$/.test(item.timestamp));
+          if (!Number.isFinite(item.valor) || !validDate) throw new Error('Transação inválida no backup.');
           if (key !== 'tarefasPendentes' && !Number.isFinite(item.saldoAtual)) throw new Error('Saldo de histórico inválido.');
         }
         if (key === 'tarefasBloqueadas' && (!Object.hasOwn(Economy.config.cooldowns, item.nome) || !Number.isFinite(item.expiraEm))) throw new Error('Bloqueio inválido.');

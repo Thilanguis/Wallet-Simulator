@@ -1,10 +1,11 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../firebase-fixture.cjs');
 async function open(page, seed = {}) {
   await page.route('**/firebaseConfiguration.js', (r) => r.fulfill({ contentType: 'text/javascript', body: 'export {};' }));
   await page.addInitScript((seed) => {
     if (!localStorage.getItem('findom.wallet.v2')) for (const [k, v] of Object.entries(seed)) localStorage.setItem(k, v);
   }, seed);
   await page.goto('/');
+  await expect(page.locator('body')).not.toHaveClass(/firebase-required/);
 }
 test('seal persists real bonus, keeps gain quantity and discounts services exactly once', async ({ page }) => {
   await open(page, { saldoDominadora: '100' });

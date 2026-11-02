@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../firebase-fixture.cjs');
 for (const width of [393, 360, 320]) {
   test.describe('touch phone ' + width, () => {
     test.use({ viewport: { width, height: 852 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1' });
@@ -9,6 +9,7 @@ for (const width of [393, 360, 320]) {
         localStorage.setItem('bonusEspecialAtivo', 'true');
       });
       await page.goto('/');
+      await expect(page.locator('body')).not.toHaveClass(/firebase-required/);
       await expect(page.locator('#privilegeSeal')).toHaveAttribute('aria-pressed', 'true');
       await expect(page.locator('#fx-embers')).toBeHidden();
       expect((await page.locator('#walletBalanceCard').boundingBox()).height).toBeLessThan(width < 360 ? 450 : 410);

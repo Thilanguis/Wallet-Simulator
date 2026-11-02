@@ -9,7 +9,9 @@
     "build": "node scripts/build.cjs",
     "start": "node scripts/serve.cjs",
     "setup:local": "node scripts/setup-local.cjs",
-    "test:live": "playwright test --config playwright.live.config.cjs"
+    "test:live": "playwright test --config playwright.live.config.cjs",
+    "test:firebase": "playwright test --config playwright.firebase.config.cjs",
+    "test:rules": "npx --yes firebase-tools@15.34.2 emulators:exec --project demo-findom-rules --only firestore \"node --test tests/security/firestore.rules.test.cjs\""
   },
   "dependencies": {
     "@tesseract.js-data/eng": "1.0.0",
@@ -18,7 +20,9 @@
     "tesseract.js": "7.0.0"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "5.0.2",
     "@playwright/test": "1.64.1",
+    "firebase": "12.6.0",
     "prettier": "3.9.10"
   }
 }

@@ -2611,3 +2611,34 @@ body {
 .cloud-readonly #customEconomy {
   opacity: 0.8;
 }
+/* Authentication is a regular entry panel, not a splash or artificial delay. */
+.firebase-auth-panel {
+  max-width: 640px;
+  margin: 24px auto;
+}
+.firebase-account-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  color: #b9b1a2;
+  font:
+    12px/1.5 Arial,
+    sans-serif;
+  margin: 12px 0;
+  overflow-wrap: anywhere;
+}
+.firebase-account-actions button {
+  padding: 6px 12px;
+  font-size: 11px;
+}
+body:not(.firebase-required) #firebaseAuthPanel {
+  display: none;
+}
+.firebase-required .app-nav,
+.firebase-required .app-panel,
+.firebase-required #cloudStatusBar,
+.firebase-required #btnRoletaFlutuante {
+  display: none !important;
+}

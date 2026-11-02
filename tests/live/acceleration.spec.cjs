@@ -1,9 +1,9 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../firebase-fixture.cjs');
 const start = new Date('2026-10-31T16:00:00Z').getTime(),
   hour = 3600000,
   target = 'Vale sair sozinha com amiga';
 async function open(page, extra = {}) {
-  await page.clock.install();
+  await page.clock.install({ time: new Date(start - 1000) });
   await page.clock.pauseAt(new Date(start));
   await page.route('**/firebaseConfiguration.js', (r) => r.fulfill({ contentType: 'text/javascript', body: 'export {};' }));
   await page.addInitScript(
@@ -22,6 +22,7 @@ async function open(page, extra = {}) {
     { start, target, extra },
   );
   await page.goto('/');
+  await expect(page.locator('body')).not.toHaveClass(/firebase-required/);
 }
 for (const [label, options] of [
   ['desktop', { viewport: { width: 1440, height: 1000 } }],

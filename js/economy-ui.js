@@ -1,34 +1,37 @@
 'use strict';
 let economySettings;
-try {
-  const stored = AppStorage.getItem('economy');
-  const previous = stored ? JSON.parse(stored) : null;
-  let catalog = AppStorage.getItem('economyCatalog');
-  if (AppStorage.getItem('catalogExternalGamesSeparated') !== '3') {
-    const external = new Set(['Buraco', 'Perfil', 'Match Masters']);
-    if (previous?.games) for (const id of external) delete previous.games[id];
-    if (catalog) {
-      const data = JSON.parse(catalog);
-      data.games = data.games.filter((item) => !external.has(item.id));
-      const conversation = Economy.config.games.find((item) => item.scoreBased === false);
-      if (!data.games.some((item) => item.id === conversation.id)) data.games.push({ ...conversation });
-      const cup = Economy.config.gains.find((item) => item.id === 'Cuspir no copo');
-      if (!data.gains.some((item) => item.id === cup.id)) data.gains.push({ ...cup });
-      for (const gain of data.gains) if (['Cuspir no copo', 'Pés na cara'].includes(gain.id)) gain.timerEligible = true;
-      catalog = JSON.stringify(data);
+function loadEconomy() {
+  try {
+    const stored = AppStorage.getItem('economy');
+    const previous = stored ? JSON.parse(stored) : null;
+    let catalog = AppStorage.getItem('economyCatalog');
+    if (AppStorage.getItem('catalogExternalGamesSeparated') !== '3') {
+      const external = new Set(['Buraco', 'Perfil', 'Match Masters']);
+      if (previous?.games) for (const id of external) delete previous.games[id];
+      if (catalog) {
+        const data = JSON.parse(catalog);
+        data.games = data.games.filter((item) => !external.has(item.id));
+        const conversation = Economy.config.games.find((item) => item.scoreBased === false);
+        if (!data.games.some((item) => item.id === conversation.id)) data.games.push({ ...conversation });
+        const cup = Economy.config.gains.find((item) => item.id === 'Cuspir no copo');
+        if (!data.gains.some((item) => item.id === cup.id)) data.gains.push({ ...cup });
+        for (const gain of data.gains) if (['Cuspir no copo', 'Pés na cara'].includes(gain.id)) gain.timerEligible = true;
+        catalog = JSON.stringify(data);
+      }
     }
+    if (catalog) EconomyCatalog.apply(EconomyCatalog.prepare(JSON.parse(catalog), previous || Economy.defaults()).catalog);
+    economySettings = Economy.syncCatalog(previous, JSON.parse(AppStorage.getItem('economyCatalogBaseline') || 'null'));
+    AppStorage.setItem('economyCatalogBaseline', JSON.stringify(Economy.defaults('custom')));
+    if (previous?.mode === 'classic') AppStorage.setItem('economyBeforeBalanced', stored);
+    AppStorage.setItem('economy', JSON.stringify(economySettings));
+    if (catalog) AppStorage.setItem('economyCatalog', catalog);
+    AppStorage.setItem('catalogExternalGamesSeparated', '3');
+  } catch {
+    economySettings = Economy.defaults('balanced');
+    storageFailure(new Error('Configuração econômica inválida. Valores equilibrados carregados para conferência.'));
   }
-  if (catalog) EconomyCatalog.apply(EconomyCatalog.prepare(JSON.parse(catalog), previous || Economy.defaults()).catalog);
-  economySettings = Economy.syncCatalog(previous, JSON.parse(AppStorage.getItem('economyCatalogBaseline') || 'null'));
-  AppStorage.setItem('economyCatalogBaseline', JSON.stringify(Economy.defaults('custom')));
-  if (previous?.mode === 'classic') AppStorage.setItem('economyBeforeBalanced', stored);
-  AppStorage.setItem('economy', JSON.stringify(economySettings));
-  if (catalog) AppStorage.setItem('economyCatalog', catalog);
-  AppStorage.setItem('catalogExternalGamesSeparated', '3');
-} catch {
-  economySettings = Economy.defaults('balanced');
-  storageFailure(new Error('Configuração econômica inválida. Valores equilibrados carregados para conferência.'));
 }
+loadEconomy();
 window.getEconomy = () => economySettings;
 document.addEventListener('DOMContentLoaded', () => {
   const marker = (id) => (Economy.config.eligible.includes(id) ? ' 💲' : '');
@@ -104,12 +107,13 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   window.addEventListener('wallet:remote', (event) => {
     if (event.detail && !event.detail.initial && !event.detail.changedKeys.some((key) => ['economy', 'economyCatalog', 'economyCatalogBaseline'].includes(key))) return;
-    const saved = JSON.parse(AppStorage.getItem('economy') || 'null');
-    const catalog = AppStorage.getItem('economyCatalog');
-    if (catalog) EconomyCatalog.apply(EconomyCatalog.prepare(JSON.parse(catalog), saved || Economy.defaults()).catalog);
-    economySettings = Economy.validate(saved || Economy.defaults());
+    loadEconomy();
     ELIGIBLE_TASKS.clear();
     Economy.config.eligible.forEach((id) => ELIGIBLE_TASKS.add(id));
+    render();
+  });
+  window.addEventListener('wallet:control', () => {
+    loadEconomy();
     render();
   });
   document.querySelectorAll('[data-jump]').forEach(

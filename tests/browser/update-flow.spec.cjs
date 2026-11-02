@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../firebase-fixture.cjs');
 test('automatic update asks consent and shows progress before preserving data and reloading', async ({ page }) => {
   await page.route('**/firebaseConfiguration.js', (route) => route.fulfill({ contentType: 'text/javascript', body: 'export {};' }));
   await page.addInitScript(() => {
@@ -18,6 +18,7 @@ test('automatic update asks consent and shows progress before preserving data an
     if (!localStorage.getItem('findom.wallet.v2')) localStorage.setItem('saldoDominadora', '123.45');
   });
   await page.goto('/');
+  await expect(page.locator('body')).not.toHaveClass(/firebase-required/);
   await expect(page.locator('.app-dialog')).toContainText('nova versão');
   expect(await page.evaluate(() => window.__updateMessages)).toEqual([]);
   await page.locator('[data-dialog-cancel]').click();

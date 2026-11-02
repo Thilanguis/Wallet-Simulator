@@ -1,9 +1,10 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../firebase-fixture.cjs');
 for (const width of [1280, 390, 320]) {
   test('wallet mode and bonus presentation at ' + width + 'px', async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await page.route('**/firebaseConfiguration.js', (route) => route.fulfill({ contentType: 'text/javascript', body: 'export {};' }));
     await page.goto('/');
+    await expect(page.locator('body')).not.toHaveClass(/firebase-required/);
     const gain = page.locator('[data-jump=ganho]'),
       shop = page.locator('[data-jump=gasto]');
     await expect(page.locator('[data-panel=simulator] .nav-label-desktop')).toHaveText('Minha Carteira');

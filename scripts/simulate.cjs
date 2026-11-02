@@ -2,7 +2,10 @@ const E = require('../js/economy.js'),
   fs = require('node:fs'),
   path = require('node:path');
 const s = E.defaults('balanced');
-const f = (n) => n.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+const f = (n) => {
+  if (!Number.isFinite(n)) throw new Error('Resultado não finito na simulação.');
+  return n.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+};
 function session(minutes, activityEvery = 0, activityValue = 10, bonus = false) {
   let t = { seconds: 0, earnedUnits: 0, rate: s.timer.base },
     activities = 0,
@@ -12,7 +15,7 @@ function session(minutes, activityEvery = 0, activityValue = 10, bonus = false) 
     if (activityEvery && minute % activityEvery === 0) {
       activities++;
       eligible = true;
-      t.rate = Math.min(s.timer.maxRate, E.round(t.rate + E.taskIncrement(activityValue, s) + s.timer.repeatIncrement * activities));
+      t.rate = E.round(t.rate + E.taskIncrement(activityValue, s) + s.timer.repeatIncrement * activities);
     }
   }
   return { minutes, activities, credits: E.adjusted(E.round(t.earnedUnits / 6000) + activities * activityValue, 'gain', bonus, s), rate: t.rate };
@@ -27,7 +30,7 @@ const profiles = [
 const lines = [
   '# Economia e simulações',
   '',
-  'Valores em créditos fictícios. A conversão para dinheiro é uma regra independente, desativada inicialmente. O modo Clássico preserva os preços e ganhos efetivamente calculados na main; correções de precisão, cobrança única e integração do cronômetro valem em todos os modos. Instalações existentes começam no Clássico para evitar alterar silenciosamente a economia. Selecione Equilibrado para a nova progressão.',
+  'Valores em R$ de saldo interno para serviços. Notas reais permanecem separadas. A configuração atual usa os valores equilibrados como padrão e admite catálogo personalizado; as referências clássicas abaixo documentam apenas os preços antigos, sem seletor de modo na interface.',
   '',
   '## Catálogo de serviços',
   '',
@@ -37,7 +40,7 @@ const lines = [
 E.config.services.forEach((item) => lines.push(`| ${item.label} | ${f(item.classic)} | ${f(item.balanced)} | ${Math.ceil(item.balanced / 10)} | ${item.balanced / 0.5} |`));
 lines.push(
   '',
-  'O tempo-base é acumulado em sessões de até 120 minutos, sem bônus nem atividades. Serviços de 30–70 levam 3–7 jogos; intermediários de 80–130 levam 8–13; especiais de 220–450 levam 22–45 jogos. Jogos por duração são hipóteses de planejamento, não duração medida dos participantes. Atividades exigentes rendem mais, mas sua frequência e dificuldade dependem do acordo entre participantes.',
+  'A coluna de tempo considera somente a taxa-base, sem bônus nem atividades. Não existe teto de duração ou taxa. As equivalências são exemplos de planejamento, sem alterar registros existentes.',
   '',
   '## Ganhos por atividade',
   '',
@@ -65,7 +68,7 @@ lines.push(
   '',
   '## Cenários de sessão',
   '',
-  '| Cenário | Atividades | Créditos totais | Taxa final/min |',
+  '| Cenário | Atividades | Saldo gerado (R$) | Taxa final (R$/min) |',
   '|---|---:|---:|---:|',
 );
 for (const [label, minutes, every, bonus] of profiles) {
@@ -74,9 +77,9 @@ for (const [label, minutes, every, bonus] of profiles) {
 }
 lines.push(
   '',
-  'Cronômetro Equilibrado: base 0,50/min, teto 3/min, duração máxima 120 min. Jogos elegíveis liberam +0,05/min de sessão; cada tarefa acrescenta uma fração da antiga faixa e repetição limitada pelo teto. A taxa só vale para os segundos futuros. Valores são acumulados em unidades inteiras de centésimos/minuto e arredondados no fechamento. Mesmo no teto por toda a sessão, são no máximo 360 créditos antes do bônus (414 com 15%). Compras durante a sessão também aumentam a taxa, preservando essa mecânica, sem ultrapassar o teto.',
+  'Cronômetro: base R$ ' + f(s.timer.base) + '/min; incremento dinâmico R$ ' + f(s.timer.autoIncrement) + ' a cada ' + s.timer.autoEvery + ' segundos por atividade elegível distinta. Cada registro aplica o incremento da atividade e de repetição configurados. Não há teto de tempo ou taxa; as durações acima são cenários. Os incrementos valem para segundos futuros, com arredondamento no fechamento.',
   '',
-  'Bônus padrão +15% e desconto −15% em serviços comuns. Redutores e benefícios reais não recebem desconto. Custom permite mudar valores, percentuais, limites, benefícios e pesos da roleta. A troca de modo é bloqueada durante sessão ativa. O Clássico mantém as taxas de crescimento antigas, com tetos técnicos de segurança de 1.000.000/min e sete dias; recomenda-se Equilibrado.',
+  'Bônus padrão +' + s.bonusPercent + '% e desconto −' + s.discountPercent + '% em serviços elegíveis. Redutores não recebem desconto. O editor JSON permite alterar o catálogo e os parâmetros; alterações não reprecificam operações anteriores. Não se altera o catálogo durante uma sessão ativa.',
   '',
   '## Roleta: distribuição',
   '',
@@ -109,7 +112,7 @@ lines.push(
   ``,
   '## Benefícios e limites reais',
   '',
-  'O benefício legado de US$ 60 continua expresso em USD, com custo de 450 créditos no Equilibrado. Esse setor não paga nem converte automaticamente para reais. A regra de conversão genérica começa desativada; a sugestão configurável de 10 centavos por crédito não equivale a 1 crédito = R$ 1. Limites e orçamentos de resgate são separados por moeda e incluem reservas e concluídos. Uma alteração de regra nunca modifica uma solicitação antiga. O valor efetivamente pago pode ser diferente do cotado e é confirmado na conclusão.',
+  'O benefício legado de US$ 60 conserva sua moeda e custo de catálogo. O Wallet não efetua pagamentos nem converte automaticamente saldo interno em gastos reais. As notas e suas equivalências USD/BRL continuam independentes da carteira.',
 );
 fs.mkdirSync(path.join(__dirname, '../docs'), { recursive: true });
 fs.writeFileSync(path.join(__dirname, '../docs/ECONOMIA.md'), lines.join('\n') + '\n');

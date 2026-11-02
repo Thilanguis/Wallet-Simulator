@@ -1,9 +1,10 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../firebase-fixture.cjs');
 for (const width of [1280, 390, 320]) {
   test('original inline notes preserve data, totals and export at ' + width + 'px', async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await page.route('**/firebaseConfiguration.js', (route) => route.fulfill({ contentType: 'text/javascript', body: 'export {};' }));
     await page.goto('/');
+    await expect(page.locator('body')).not.toHaveClass(/firebase-required/);
     const before = await page.evaluate(() => {
       const text = '1. Perfil\n• Jogo em partes: R$ 12,00 + R$ 3,00\n2. Match Masters\n• R$ 10,00 + R$ 2,00 + R$ 3,00\n3. Comida para Luana e Mel\n• $5 dólares = R$ 20,00\n4. Lista de Compras\n• Compra fictícia ✅: R$ 40,00';
       const state = Finance.commitPreview(Finance.empty(), Finance.preview(text, [], ''));

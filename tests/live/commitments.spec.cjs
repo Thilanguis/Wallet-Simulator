@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../firebase-fixture.cjs');
 for (const width of [1280, 393]) {
   test.describe('commitments ' + width, () => {
     test.use({ viewport: { width, height: 852 }, isMobile: width < 600, hasTouch: width < 600 });
@@ -21,6 +21,7 @@ for (const width of [1280, 393]) {
       );
       await page.clock.install();
       await page.goto('/');
+      await expect(page.locator('body')).not.toHaveClass(/firebase-required/);
       await expect(page.locator('#walletActivities > #pendingTasksSection')).toBeVisible();
       await expect(page.locator('#walletActivities > #contractOccurrences')).toBeVisible();
       const bar = page.locator('.limit-progress');

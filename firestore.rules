@@ -1,0 +1,43 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function walletMember() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.firebase.sign_in_provider == 'google.com'
+        && request.auth.token.email in get(/databases/$(database)/documents/usuarios/gabriel-local/config/acesso).data.emails;
+    }
+    match /usuarios/gabriel-local {
+      allow read: if walletMember();
+      allow update: if walletMember()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'walletAtualV4', 'saldoDominadora', 'bonusEspecialAtivo',
+          'roletaUltimoUso', 'roletaUltimoResultadoTexto', 'tarefasBloqueadas',
+          'accelBoosts', 'timerTempoSegundos', 'timerValorAtual',
+          'timerValorPorMinuto', 'timerAtivo', 'timerRodando', 'atualizadoEm'
+        ])
+        && request.resource.data.saldoDominadora is number
+        && request.resource.data.bonusEspecialAtivo is bool;
+      allow create, delete: if false;
+      match /config/acesso {
+        allow read: if walletMember();
+        allow write: if false;
+      }
+      match /config/antesFirebasePrincipalV4 {
+        allow read: if walletMember();
+        allow create: if walletMember();
+        allow update, delete: if false;
+      }
+      match /config/{configId} {
+        allow read: if walletMember();
+        allow write: if false;
+      }
+      match /tarefas/{taskId} { allow read, create, update: if walletMember(); allow delete: if false; }
+      match /historico/{recordId} { allow read, create, update: if walletMember(); allow delete: if false; }
+      match /debugRoleta/{spinId} { allow read, create, update: if walletMember(); allow delete: if false; }
+      match /accelBoosts/{boostId} { allow read, create, update: if walletMember(); allow delete: if false; }
+    }
+    // Other paths are denied by default. Administrative backups and access
+    // management use IAM, never an end-user permission to edit the allowlist.
+  }
+}

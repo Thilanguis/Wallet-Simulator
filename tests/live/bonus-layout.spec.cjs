@@ -1,9 +1,10 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../firebase-fixture.cjs');
 for (const width of [1280, 393]) {
   test('gain focus leaves bonus note in flow and contract follows roulette at ' + width, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await page.route('**/firebaseConfiguration.js', (r) => r.fulfill({ contentType: 'text/javascript', body: 'export {};' }));
     await page.goto('/');
+    await expect(page.locator('body')).not.toHaveClass(/firebase-required/);
     await page.locator('#privilegeSeal').click();
     await page.locator('[data-jump=ganho]').click();
     const select = page.locator('#selectGanho'),

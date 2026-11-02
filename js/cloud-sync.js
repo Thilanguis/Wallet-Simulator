@@ -16,7 +16,7 @@
   function signature(doc) {
     return JSON.stringify([doc?.simulator, doc?.financeJson]);
   }
-  function create({ store, transport, id, validate, backup, onFreeze = () => {}, onRemote = () => {}, onState = () => {}, now = Date.now, later = setTimeout, cancel = clearTimeout }) {
+  function create({ store, transport, id, validate, backup, onFreeze = () => {}, onRemote = () => {}, onState = () => {}, onConflict = () => {}, now = Date.now, later = setTimeout, cancel = clearTimeout }) {
     const idleWaiters = [];
     let base = null,
       mode = 'local',
@@ -185,7 +185,7 @@
         if (new TextEncoder().encode(JSON.stringify(sent)).length > 650000) throw new Error('A carteira excedeu o tamanho da sincronização. Exporte um backup; nenhum registro foi removido.');
         const doc = await transport.transact((current) => {
           if (!current || current.controller !== id || current.leaseUntil <= now() || current.revision !== expected.revision || signature(current) !== signature(expected))
-            throw new Error('A carteira mudou em outro aparelho. Sua cópia foi preservada para conferência.');
+            throw Object.assign(new Error('A carteira mudou em outro aparelho. Sua cópia foi preservada para conferência.'), { code: 'wallet/stale', current });
           return { ...current, ...sent, revision: current.revision + 1, leaseUntil: now() + LEASE_MS };
         });
         base = structuredClone(doc);
@@ -194,7 +194,14 @@
         onState({ mode, pending });
         schedule(pending ? 1000 : 15000);
       } catch (error) {
-        fail(error);
+        if (error.code === 'wallet/stale' && error.current) {
+          // A console edit or another device won the race. Keep the unsent copy
+          // but continue following the server instead of suspending snapshots.
+          backup(store.snapshot());
+          pending = false;
+          latest = { doc: error.current };
+          onConflict(error);
+        } else fail(error);
       } finally {
         busy = false;
         drain();

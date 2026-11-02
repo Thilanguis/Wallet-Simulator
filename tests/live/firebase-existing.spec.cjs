@@ -1,172 +1,115 @@
 const { test, expect } = require('@playwright/test');
-const { hub } = require('./firebase-hub.cjs');
-const path = 'usuarios/gabriel-local',
-  backup = path + '/config/antesWalletAtualV3';
-async function settings(page) {
-  await page.locator('[data-panel=backupPanel]').click();
-  if (!(await page.locator('#cloudSettings').evaluate((el) => el.open))) await page.locator('#cloudSettings > summary').click();
-}
-async function connect(page) {
-  await settings(page);
-  await page.locator('#connectExistingFirebase').click();
-  await page.locator('[data-dialog-confirm]').click();
-  await expect(page.locator('#cloudStatusText')).toContainText('controle neste aparelho');
-  return page.evaluate(() => localStorage.getItem('findom.cloud.pair.v3'));
-}
-async function join(page, code) {
-  await settings(page);
-  await page.locator('#cloudPairCode').fill(code);
-  await page.locator('#joinSharedWallet').click();
-  await page.locator('[data-dialog-confirm]').click();
-  await expect(page.locator('#cloudStatusText')).toContainText('Acompanhando');
-}
+const { hub } = require('./firebase-primary-hub.cjs');
+const Finance = require('../../js/finance.js');
+const root = 'usuarios/gabriel-local';
 for (const width of [1440, 393, 820])
-  test(`existing Firebase ${width}: current notes survive migration, old records remain and console changes arrive live`, async ({ browser }) => {
-    const oldUser = {
-      saldoDominadora: 9999,
-      bonusEspecialAtivo: true,
-      roletaUltimoUso: '2025-11-01T00:00:00Z',
-      timerAtivo: true,
-      timerTempoSegundos: 300,
-      timerValorAtual: 80,
-      timerValorPorMinuto: 4,
-      notificationToken: 'synthetic-preserved',
-      tarefasBloqueadas: [{ nome: 'Old service', expiraEm: 1000 }],
-    };
-    const oldRecords = {
-      [path + '/tarefas/old-task']: { tarefa: 'Old service', valor: 50 },
-      [path + '/historico/old-operation']: { valor: 50, tipo: 'gasto' },
-      [path + '/debugRoleta/old-spin']: { resultadoTexto: 'Old spin', consumidoEm: '2025-11-01' },
-    };
-    const server = await hub({ [path]: oldUser, ...oldRecords });
-    const ca = await browser.newContext(),
-      cb = await browser.newContext({ viewport: { width, height: 1000 }, hasTouch: width < 1000, isMobile: width < 1000 });
-    const a = await ca.newPage(),
-      b = await cb.newPage();
+  test(`Firebase principal ${width}: server money and bonus load automatically before any operation`, async ({ browser }) => {
+    const server = await hub({
+      [root]: { saldoDominadora: 1000, bonusEspecialAtivo: false, timerTempoSegundos: 6, timerValorAtual: 0.19, timerValorPorMinuto: 1.93, timerAtivo: true, tarefasBloqueadas: [], accelBoosts: [], notificationToken: 'synthetic-preserved' },
+    });
+    const context = await browser.newContext({ viewport: { width, height: 1000 }, isMobile: width < 1000, hasTouch: width < 1000 });
+    const page = await context.newPage();
     try {
-      await server.attach(a, '200');
-      await server.attach(b, '0');
-      expect(server.docs.get(path)).toEqual(oldUser); // Visiting the site does not migrate or write.
-      const before = await a.evaluate(() => {
-        let f = Finance.empty();
-        const common = { store: 'Loja sintética', date: '2026-10-31', currency: 'BRL', status: 'paid' };
-        f = Finance.update(f, {
-          type: 'add',
-          entry: {
-            ...common,
-            id: 'current-note-1',
-            category: Finance.categories[7],
-            description: 'Descrição longa de um lançamento atual que deve permanecer intacto depois da conexão ao Firebase',
-            amount: 62579,
-            sourceLine: 'Descrição sintética ✅: R$ 625,79',
-          },
-        });
-        f = Finance.update(f, { type: 'add', entry: { ...common, id: 'current-note-2', category: Finance.categories[4], description: 'Outro lançamento atual', amount: 5010 } });
-        f = Finance.update(f, {
-          type: 'add',
-          entry: {
-            ...common,
-            id: 'current-note-usd',
-            category: Finance.categories[2],
-            description: 'Conversão preservada',
-            amount: 20000,
-            originalMoney: [
-              { currency: 'USD', amount: 5000 },
-              { currency: 'BRL', amount: 20000 },
-            ],
-            sourceLine: '$50,00 = R$ 200,00',
-          },
-        });
-        WalletStore.commitFinance(f);
-        window.dispatchEvent(new Event('redemptions:changed'));
-        return { finance: WalletStore.finance(), text: FinanceList.text(f.entries) };
-      });
-      const code = await connect(a);
-      expect(server.docs.get(backup).usuarioAnterior).toEqual(oldUser);
-      for (const [key, value] of Object.entries(oldRecords)) expect(server.docs.get(key)).toEqual(value);
-      expect(server.docs.get(path).saldoDominadora).toBe(200);
-      expect(server.docs.get(path).notificationToken).toBe('synthetic-preserved');
-      expect(server.docs.get(path).walletAtualV3.format).toBe('encrypted-wallet-v3');
-      expect(JSON.stringify(server.docs.get(path))).not.toContain('current-note-1');
-      expect(await a.evaluate(() => WalletStore.finance())).toEqual(before.finance);
-      await join(b, code);
-      expect(await b.evaluate(() => WalletStore.finance())).toEqual(before.finance);
-      expect(await b.evaluate(() => FinanceList.text(WalletStore.finance().entries))).toBe(before.text);
-      expect(await b.evaluate(() => JSON.parse(AppStorage.getItem('tarefasPendentes') || '[]'))).toEqual([]);
-      expect(await b.evaluate(() => JSON.parse(AppStorage.getItem('historico') || '[]'))).toEqual([]);
-      await server.publish(path, { ...server.docs.get(path), saldoDominadora: 333.75, bonusEspecialAtivo: true });
-      await expect(b.locator('#saldoDominadora')).toHaveText('R$ 333,75');
-      await expect(a.locator('#saldoDominadora')).toHaveText('R$ 333,75');
-      expect(await b.evaluate(() => WalletStore.finance())).toEqual(before.finance);
-      await b.reload();
-      await expect(b.locator('#cloudStatusText')).toContainText('Acompanhando');
-      expect(await b.evaluate(() => FinanceList.text(WalletStore.finance().entries))).toBe(before.text);
-      expect(server.docs.get(backup).usuarioAnterior).toEqual(oldUser); // Backup is created once.
-      expect(server.authRequests()).toBe(0);
-      expect(await b.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.addInitScript(() => localStorage.setItem('bonusEspecialAtivo', 'true'));
+      await server.attach(page, '0');
+      await expect(page.locator('#saldoDominadora')).toHaveText('R$ 1.000,00');
+      await expect(page.locator('#privilegeSeal')).toHaveAttribute('aria-pressed', 'false');
+      await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+      expect(server.docs.get(root).saldoDominadora).toBe(1000);
+      expect(server.docs.get(root + '/config/antesFirebasePrincipalV4').usuarioAnterior.saldoDominadora).toBe(1000);
+      expect(server.docs.get(root).notificationToken).toBe('synthetic-preserved');
+      expect(await page.evaluate(() => JSON.parse(AppStorage.getItem('timerSession')).running)).toBe(false);
+      await server.publish(root, { ...server.docs.get(root), saldoDominadora: 1234.5, bonusEspecialAtivo: true });
+      await expect(page.locator('#saldoDominadora')).toHaveText('R$ 1.234,50');
+      await expect(page.locator('#privilegeSeal')).toHaveAttribute('aria-pressed', 'true');
+      expect(await page.locator('#connectExistingFirebase,#cloudPairCode')).toHaveCount(0);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     } finally {
-      await ca.close();
-      await cb.close();
+      await context.close();
     }
   });
-
-test('wrong key cannot overwrite a protected wallet; the companion can reconnect with the correct key', async ({ browser }) => {
-  const server = await hub(),
-    ca = await browser.newContext(),
-    cb = await browser.newContext();
-  const a = await ca.newPage(),
-    b = await cb.newPage();
-  try {
-    await server.attach(a, '100');
-    await server.attach(b, '777');
-    const code = await connect(a),
-      saved = structuredClone(server.docs.get(path));
-    await settings(b);
-    await b.locator('#connectExistingFirebase').click();
-    await b.locator('[data-dialog-confirm]').click();
-    await expect(b.locator('#cloudSettingsStatus')).toContainText('Cole o código privado');
-    expect(server.docs.get(path)).toEqual(saved);
-    expect(await b.evaluate(() => AppStorage.getItem('saldoDominadora'))).toBe('777');
-    await join(b, code);
-    expect(await b.evaluate(() => AppStorage.getItem('saldoDominadora'))).toBe('100');
-    expect(await b.evaluate(() => JSON.parse(localStorage.getItem('findom.cloud.before.v3')).simulator.saldoDominadora)).toBe('777');
-  } finally {
-    await ca.close();
-    await cb.close();
+test('signed-out and unauthorized Google accounts cannot see cached notes or modify the server', async ({ browser }) => {
+  for (const user of [null, { uid: 'outsider', email: 'outsider@example.invalid', emailVerified: true }]) {
+    const server = await hub(),
+      context = await browser.newContext(),
+      page = await context.newPage();
+    try {
+      await server.attach(page, '777', { user });
+      await expect(page.locator('#firebaseAuthPanel')).toBeVisible();
+      await expect(page.locator('#saldoDominadora')).toBeHidden();
+      expect(server.writes()).toBe(0);
+      expect(server.docs.get(root).saldoDominadora).toBe(1000);
+    } finally {
+      await context.close();
+    }
   }
 });
-test('static publication connects with the public project ID when the private local configuration is absent', async ({ page }) => {
+test('first sign-in imports existing local notes only into an empty Firebase ledger, retaining IDs, currencies and order', async ({ page }) => {
+  const local = Finance.update(Finance.empty(), {
+    type: 'add',
+    entry: {
+      id: 'current-note',
+      category: Finance.categories[2],
+      description: 'Conversão sintética preservada',
+      store: 'Exemplo',
+      date: '2026-11-02',
+      currency: 'BRL',
+      amount: 20000,
+      status: 'paid',
+      originalMoney: [
+        { currency: 'USD', amount: 5000 },
+        { currency: 'BRL', amount: 20000 },
+      ],
+      sourceLine: '$50,00 = R$ 200,00',
+    },
+  });
+  const wallet = { version: 2, revision: 0, simulator: { saldoDominadora: '0', bonusEspecialAtivo: 'true' }, finance: local };
   const server = await hub();
-  await server.attach(page, '432', { configurationMissing: true });
-  await connect(page);
-  expect(await page.evaluate(() => window.__minimalFirebaseConfig)).toEqual({ projectId: 'walletsumilator' });
-  expect(server.docs.get(path).saldoDominadora).toBe(432);
-  expect(server.docs.get(path).walletAtualV3.format).toBe('encrypted-wallet-v3');
-  expect(server.authRequests()).toBe(0);
+  await server.attach(page, '0', { wallet });
+  await expect.poll(() => JSON.parse(server.docs.get(root).walletAtualV4?.financeJson || '{"entries":[]}').entries.length).toBe(1);
+  expect(JSON.parse(server.docs.get(root).walletAtualV4.financeJson)).toEqual(local);
+  expect(server.docs.get(root).saldoDominadora).toBe(1000);
+  expect(server.docs.get(root).walletAtualV4.financeImportOpen).toBe(false);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('findom.firebase.before-primary.v4')).finance)).toEqual(local);
+  await page.reload();
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  expect(JSON.parse(server.docs.get(root).walletAtualV4.financeJson).entries.map((x) => x.id)).toEqual(['current-note']);
+});
+test('a missing existing Firebase document is an error, never a zero browser upload', async ({ page }) => {
+  const server = await hub({ [root]: null });
+  await server.attach(page, '0');
+  await expect(page.locator('#firebaseAuthMessage')).toContainText('não foi encontrado');
+  expect(server.writes()).toBe(0);
 });
 
-test('an already saved alternative pairing reconnects to its original collection without migrating it silently', async ({ page }) => {
+test('a stale local note cannot repopulate an intentionally cleared Firebase ledger', async ({ page }) => {
+  const Primary = require('../../js/firebase-primary-model.js');
+  const raw = { saldoDominadora: 1000, bonusEspecialAtivo: false, tarefasBloqueadas: [], accelBoosts: [] };
+  const canonical = Primary.bootstrap(raw, {}, { simulator: {}, emptyFinance: Finance.empty() });
+  canonical.financeImportOpen = false;
+  const stale = Finance.update(Finance.empty(), { type: 'add', entry: { id: 'stale', category: Finance.categories[7], description: 'Nota antiga sintética', store: '', date: '2026-11-02', currency: 'BRL', amount: 1000, status: 'paid' } });
+  const server = await hub({ [root]: { ...raw, walletAtualV4: canonical } });
+  await server.attach(page, '0', { wallet: { version: 2, revision: 0, simulator: { saldoDominadora: '0' }, finance: stale } });
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  await page.evaluate(() => SharedWallet.flush());
+  expect(JSON.parse(server.docs.get(root).walletAtualV4.financeJson).entries).toEqual([]);
+  expect(await page.evaluate(() => WalletStore.finance().entries)).toEqual([]);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('findom.firebase.before-primary.v4')).finance.entries[0].id)).toBe('stale');
+});
+
+test('Google sign-out hides the wallet and a fresh sign-in reloads the existing server balance', async ({ page }) => {
   const server = await hub();
-  await server.attach(page, '456');
-  const prior = await page.evaluate(async () => {
-    const code = WalletCipher.create(),
-      cipher = await WalletCipher.forCode(code);
-    const envelope = await cipher.seal({ ...WalletCloud.pack(WalletStore.snapshot()), schema: 3, revision: 1, controller: '', leaseUntil: 0 });
-    localStorage.setItem('findom.cloud.pair.v3', code);
-    localStorage.removeItem('findom.cloud.backend.v3');
-    return { room: cipher.room, envelope };
-  });
-  const priorPath = 'walletsCompartilhadas/' + prior.room;
-  server.docs.set(priorPath, prior.envelope);
-  await page.route(/firebase-auth\.js$/, (route) =>
-    route.fulfill({ contentType: 'text/javascript', body: "export const getAuth=()=>({currentUser:{uid:'synthetic-compatibility'},authStateReady:async()=>{}}); export const signInAnonymously=async()=>{};" }),
-  );
-  await page.reload();
-  await expect(page.locator('#cloudStatusText')).toContainText('Acompanhando');
-  expect(await page.evaluate(() => localStorage.getItem('findom.cloud.backend.v3'))).toBe('paired');
-  await page.locator('#cloudControl').click();
-  await expect(page.locator('#cloudStatusText')).toContainText('controle neste aparelho');
-  expect(await page.evaluate(() => AppStorage.getItem('saldoDominadora'))).toBe('456');
-  expect(server.docs.get(priorPath)).not.toEqual(prior.envelope);
-  expect(server.docs.has(path)).toBe(false);
+  await server.attach(page, '0');
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  await page.locator('#firebaseSignOut').click();
+  await page.locator('[data-dialog-cancel]').click();
+  await expect(page.locator('#saldoDominadora')).toBeVisible();
+  await page.locator('#firebaseSignOut').click();
+  await page.locator('[data-dialog-confirm]').click();
+  await expect(page.locator('#firebaseAuthPanel')).toBeVisible();
+  await expect(page.locator('#saldoDominadora')).toBeHidden();
+  expect(server.docs.get(root).saldoDominadora).toBe(1000);
+  await page.locator('#googleSignIn').click();
+  await expect(page.locator('#saldoDominadora')).toHaveText('R$ 1.000,00');
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
 });

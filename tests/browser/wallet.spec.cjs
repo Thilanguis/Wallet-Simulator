@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../firebase-fixture.cjs');
 async function autoConfirm(page) {
   await page.addLocatorHandler(page.locator('.app-dialog[open]'), async () => {
     await page.locator('.app-dialog [data-dialog-confirm]').click();
@@ -12,6 +12,7 @@ async function open(page, seed = {}) {
     if (!localStorage.getItem('findom.wallet.v2')) for (const [k, v] of Object.entries(seed)) localStorage.setItem(k, v);
   }, seed);
   await page.goto('/');
+  await expect(page.locator('body')).not.toHaveClass(/firebase-required/);
 
   await expect(page.locator('#selectTarefa option')).toHaveCount(18);
 }
@@ -305,10 +306,11 @@ test('PWA update waits for consent, Later preserves state, confirmed reload and 
     await expect(page.locator('#financeHistory .finance-entry')).toHaveCount(1);
     await context.setOffline(true);
     await page.reload();
-
-    await expect(page.locator('#saldoDominadora')).toHaveText('R$ 321,45');
-    await finance(page);
-    await expect(page.locator('#financeHistory .finance-entry')).toHaveCount(1);
+    await expect(page.locator('#firebaseAuthPanel')).toBeVisible();
+    await expect(page.locator('#saldoDominadora')).toBeHidden();
+    expect(await page.evaluate(() => WalletStore.snapshot().simulator.saldoDominadora)).toBe('321.45');
+    expect(await page.evaluate(() => WalletStore.finance().entries.length)).toBe(1);
+    expect(await page.evaluate(() => WalletStore.isWritable())).toBe(false);
   } finally {
     fs.writeFileSync(file, original);
     await context.setOffline(false);

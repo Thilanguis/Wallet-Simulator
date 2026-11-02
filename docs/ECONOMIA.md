@@ -1,6 +1,6 @@
 # Economia e simulações
 
-Valores em créditos fictícios. A conversão para dinheiro é uma regra independente, desativada inicialmente. O modo Clássico preserva os preços e ganhos efetivamente calculados na main; correções de precisão, cobrança única e integração do cronômetro valem em todos os modos. Instalações existentes começam no Clássico para evitar alterar silenciosamente a economia. Selecione Equilibrado para a nova progressão.
+Valores em R$ de saldo interno para serviços. Notas reais permanecem separadas. A configuração atual usa os valores equilibrados como padrão e admite catálogo personalizado; as referências clássicas abaixo documentam apenas os preços antigos, sem seletor de modo na interface.
 
 ## Catálogo de serviços
 
@@ -24,7 +24,7 @@ Valores em créditos fictícios. A conversão para dinheiro é uma regra indepen
 | Reduzir 3 dias ⌛ | 11.000 | 200 | 20 | 400 |
 | Reduzir 4 dias ⌛ | 18.000 | 330 | 33 | 660 |
 
-O tempo-base é acumulado em sessões de até 120 minutos, sem bônus nem atividades. Serviços de 30–70 levam 3–7 jogos; intermediários de 80–130 levam 8–13; especiais de 220–450 levam 22–45 jogos. Jogos por duração são hipóteses de planejamento, não duração medida dos participantes. Atividades exigentes rendem mais, mas sua frequência e dificuldade dependem do acordo entre participantes.
+A coluna de tempo considera somente a taxa-base, sem bônus nem atividades. Não existe teto de duração ou taxa. As equivalências são exemplos de planejamento, sem alterar registros existentes.
 
 ## Ganhos por atividade
 
@@ -34,6 +34,7 @@ O tempo-base é acumulado em sessões de até 120 minutos, sem bônus nem ativid
 | Tapa de pé na cara | 2 | 2 |
 | Chupar peito | 500 | 30 |
 | Cuspir na cara | 320 | 15 |
+| Cuspir no copo | 5 | 5 |
 | Mijar na boca | 350 | 18 |
 | Dedo do meio com desprezo | 30 | 4 |
 | Vestir cinta e comer dominado | 3.500 | 180 |
@@ -45,21 +46,21 @@ O tempo-base é acumulado em sessões de até 120 minutos, sem bônus nem ativid
 
 Extras (Clássico → Equilibrado): chkChule 400 → 12; chkFrancesinha 300 → 8; chkCatarro 500 → 20. O extra anteriormente anunciado como 500, mas cobrado como 400, passa a usar os 500 anunciados no Clássico.
 
-Ganhos de jogos eram inteiramente manuais. Sugestões equilibradas: Match Masters 8; Videogames Competitivos 10; Buraco 10; Perfil 12; Jogos de tabuleiro com amigas 10. O limite manual do Equilibrado é 100 por lançamento; a quantidade da atividade multiplicável é limitada a 30.
+Ganhos de jogos eram inteiramente manuais. Sugestões equilibradas: Conversar no grupo do WhatsApp sobre compras 15; Videogames Competitivos 10; Jogos de tabuleiro com amigas 10. O limite manual do Equilibrado é 100 por lançamento; a quantidade da atividade multiplicável é limitada a 30.
 
 ## Cenários de sessão
 
-| Cenário | Atividades | Créditos totais | Taxa final/min |
+| Cenário | Atividades | Saldo gerado (R$) | Taxa final (R$/min) |
 |---|---:|---:|---:|
 | Somente tempo, 30 min | 0 | 15 | 0,5 |
-| Jogo de 10 créditos a cada 10 min, 30 min | 3 | 55,2 | 1,59 |
-| Jogo de 10 créditos a cada 10 min, 30 min, bônus | 3 | 63,48 | 1,59 |
+| Jogo de 10 créditos a cada 10 min, 30 min | 3 | 47,2 | 0,73 |
+| Jogo de 10 créditos a cada 10 min, 30 min, bônus | 3 | 54,28 | 0,73 |
 | Somente tempo, 120 min | 0 | 60 | 0,5 |
-| Jogo de 10 créditos a cada 10 min, 120 min | 12 | 395,95 | 3 |
+| Jogo de 10 créditos a cada 10 min, 120 min | 12 | 248,75 | 1,81 |
 
-Cronômetro Equilibrado: base 0,50/min, teto 3/min, duração máxima 120 min. Jogos elegíveis liberam +0,05/min de sessão; cada tarefa acrescenta uma fração da antiga faixa e repetição limitada pelo teto. A taxa só vale para os segundos futuros. Valores são acumulados em unidades inteiras de centésimos/minuto e arredondados no fechamento. Mesmo no teto por toda a sessão, são no máximo 360 créditos antes do bônus (414 com 15%). Compras durante a sessão também aumentam a taxa, preservando essa mecânica, sem ultrapassar o teto.
+Cronômetro: base R$ 0,5/min; incremento dinâmico R$ 0,01 a cada 60 segundos por atividade elegível distinta. Cada registro aplica o incremento da atividade e de repetição configurados. Não há teto de tempo ou taxa; as durações acima são cenários. Os incrementos valem para segundos futuros, com arredondamento no fechamento.
 
-Bônus padrão +15% e desconto −15% em serviços comuns. Redutores e benefícios reais não recebem desconto. Custom permite mudar valores, percentuais, limites, benefícios e pesos da roleta. A troca de modo é bloqueada durante sessão ativa. O Clássico mantém as taxas de crescimento antigas, com tetos técnicos de segurança de 1.000.000/min e sete dias; recomenda-se Equilibrado.
+Bônus padrão +15% e desconto −15% em serviços elegíveis. Redutores não recebem desconto. O editor JSON permite alterar o catálogo e os parâmetros; alterações não reprecificam operações anteriores. Não se altera o catálogo durante uma sessão ativa.
 
 ## Roleta: distribuição
 
@@ -91,4 +92,4 @@ Maior desvio absoluto: 0,14 ponto percentual. Gerador determinístico com sement
 
 ## Benefícios e limites reais
 
-O benefício legado de US$ 60 continua expresso em USD, com custo de 450 créditos no Equilibrado. Esse setor não paga nem converte automaticamente para reais. A regra de conversão genérica começa desativada; a sugestão configurável de 10 centavos por crédito não equivale a 1 crédito = R$ 1. Limites e orçamentos de resgate são separados por moeda e incluem reservas e concluídos. Uma alteração de regra nunca modifica uma solicitação antiga. O valor efetivamente pago pode ser diferente do cotado e é confirmado na conclusão.
+O benefício legado de US$ 60 conserva sua moeda e custo de catálogo. O Wallet não efetua pagamentos nem converte automaticamente saldo interno em gastos reais. As notas e suas equivalências USD/BRL continuam independentes da carteira.

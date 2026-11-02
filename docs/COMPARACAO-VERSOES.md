@@ -1,5 +1,11 @@
 # Comparação e unificação local
 
+> Atualização de 02/11/2026: a conexão opcional descrita na comparação abaixo foi
+> substituída por Firebase principal com login Google. Consulte
+> [FIREBASE-LOCAL.md](FIREBASE-LOCAL.md). O navegador não é mais a fonte do saldo;
+> a aplicação lê automaticamente o documento existente e suas subcoleções.
+> O texto a seguir registra a investigação histórica das duas versões.
+
 ## Qual era a diferença
 
 A instalação ativa é `D:\Sistemas DEV\dominação\Simulator`, com o visual, o

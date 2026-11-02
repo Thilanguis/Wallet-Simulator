@@ -96,6 +96,26 @@ function fixture() {
   };
 }
 const turn = () => new Promise((resolve) => setImmediate(resolve));
+
+test('a concurrent server edit preserves the unsent copy and keeps following snapshots', async () => {
+  const h = fixture(),
+    a = h.device('first');
+  a.sync.connect();
+  await turn();
+  await a.sync.takeControl();
+  a.store.sim.setItem('saldoDominadora', '120');
+  await turn();
+  h.edit((doc) => ({ ...doc, revision: doc.revision + 1, simulator: { ...doc.simulator, saldoDominadora: '150' } }));
+  await a.sync.flush();
+  await turn();
+  assert.equal(a.store.sim.getItem('saldoDominadora'), '150');
+  assert.equal(a.sync.state().mode, 'controlling');
+  assert.equal(a.sync.state().pending, false);
+  assert.ok(a.backups.some((wallet) => wallet.simulator.saldoDominadora === '120'));
+  h.edit((doc) => ({ ...doc, revision: doc.revision + 1, simulator: { ...doc.simulator, saldoDominadora: '160' } }));
+  h.broadcast();
+  assert.equal(a.store.sim.getItem('saldoDominadora'), '160');
+});
 test('migration and snapshots synchronize the complete envelope without erasing the companion ledger', async () => {
   const h = fixture(),
     a = h.device('first'),
@@ -153,7 +173,8 @@ test('a stale transaction preserves unsent data and never overwrites a newer ser
   await turn();
   h.edit((doc) => ({ ...doc, revision: doc.revision + 1, simulator: { saldoDominadora: '200' } }));
   await a.sync.flush();
-  assert.equal(a.sync.state().mode, 'error');
+  assert.equal(a.sync.state().mode, 'controlling');
+  assert.equal(a.store.sim.getItem('saldoDominadora'), '200');
   assert.equal(h.cloud().simulator.saldoDominadora, '200');
   assert.equal(a.backups.at(-1).simulator.saldoDominadora, '150');
 });

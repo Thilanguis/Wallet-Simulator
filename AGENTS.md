@@ -1,5 +1,7 @@
 # Fluxo local obrigatório
 
+- Atualização autorizada de 02/11/2026: Firebase é a fonte principal, com login Google e duas contas na lista privada `usuarios/gabriel-local/config/acesso`. Usar o projeto existente `walletsumilator`, documento `usuarios/gabriel-local`, campo completo `walletAtualV4` e subcoleções existentes. Não voltar ao vínculo por código nem ao modo financeiro local. Cache do navegador serve somente para recuperação; nunca enviar saldo local zero como base. Notas particulares ficam no Firebase protegido e nas cópias privadas, nunca no código. Preservar a importação única das notas locais na primeira migração e os IDs dos registros.
+
 - Repositório remoto oficial e único destino de desenvolvimento: `https://github.com/Thilanguis/Wallet-Simulator.git`, branch main. A pasta local permanece Simulator/ para preservar o VS Code/Live Server. A autorização de publicação desta unificação não autoriza operações Git automáticas em pedidos futuros.
 
 - A pasta de trabalho do VS Code é `D:\Sistemas DEV\dominação`.

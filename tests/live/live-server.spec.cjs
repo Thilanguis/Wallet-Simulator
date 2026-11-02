@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../firebase-fixture.cjs');
 const fs = require('node:fs'),
   path = require('node:path');
 async function autoConfirm(page) {
@@ -12,6 +12,7 @@ async function open(page, seed = {}) {
     if (!localStorage.getItem('findom.wallet.v2')) for (const [key, value] of Object.entries(seed)) localStorage.setItem(key, value);
   }, seed);
   await page.goto('/');
+  await expect(page.locator('body')).not.toHaveClass(/firebase-required/);
   await expect(page.locator('#splash')).toHaveCount(0);
   await expect(page.locator('.splash-skip')).toHaveCount(0);
   await expect(page.locator('#tipoTransacao')).toBeHidden();
@@ -551,7 +552,7 @@ test('dynamic combo stacks unique activities, survives reload paused and resets 
   await page.reload();
   await page.locator('[data-jump=ganho]').click();
   await expect(page.locator('#timerDynamicCombo .dynamic-combo-chip')).toHaveCount(2);
-  await expect(page.locator('#btnPlayPauseTempo')).toContainText('Retomar');
+  await expect(page.locator('#btnPlayPauseTempo')).toContainText('Continuar');
   await page.locator('#timerDynamicCombo .dynamic-combo-chip').first().click();
   await expect(page.locator('#timerDynamicCombo .dynamic-combo-chip')).toHaveCount(1);
   await page.clock.install();

@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../firebase-fixture.cjs');
 const path = require('node:path');
 async function open(page, seed = {}) {
   await page.route('**/firebaseConfiguration.js', (route) => route.fulfill({ contentType: 'text/javascript', body: 'export {};' }));
@@ -6,6 +6,7 @@ async function open(page, seed = {}) {
     if (!localStorage.getItem('findom.wallet.v2')) for (const [key, value] of Object.entries(seed)) localStorage.setItem(key, value);
   }, seed);
   await page.goto('/');
+  await expect(page.locator('body')).not.toHaveClass(/firebase-required/);
 }
 for (const width of [1280, 390]) {
   test.describe(`compact roulette ${width}px`, () => {

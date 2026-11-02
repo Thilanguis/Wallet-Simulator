@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../firebase-fixture.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -10,6 +10,7 @@ async function open(page, seed = {}) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/');
+  await expect(page.locator('body')).not.toHaveClass(/firebase-required/);
   await expect(page.locator('#transactionTitle')).toHaveText('Resgatar Privilégio');
   return errors;
 }

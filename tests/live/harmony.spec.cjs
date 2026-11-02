@@ -1,9 +1,10 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../firebase-fixture.cjs');
 for (const width of [1280, 390, 320]) {
   test('mode changes stay in place with distinct income and expense accents at ' + width, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await page.route('**/firebaseConfiguration.js', (r) => r.fulfill({ contentType: 'text/javascript', body: 'export {};' }));
     await page.goto('/');
+    await expect(page.locator('body')).not.toHaveClass(/firebase-required/);
     await page.evaluate(() => window.scrollTo({ top: document.querySelector('.operation-tabs').getBoundingClientRect().top + scrollY - 100, behavior: 'instant' }));
     const top = await page.evaluate(() => scrollY);
     await page.locator('[data-jump=ganho]').click();
@@ -22,6 +23,7 @@ for (const width of [1280, 390, 320]) {
 test('seal and eligible calculations follow edited gain and discount percentages', async ({ page }) => {
   await page.route('**/firebaseConfiguration.js', (r) => r.fulfill({ contentType: 'text/javascript', body: 'export {};' }));
   await page.goto('/');
+  await expect(page.locator('body')).not.toHaveClass(/firebase-required/);
   await page.locator('[data-panel=backupPanel]').click();
   await page.locator('#customEconomy > summary').click();
   const code = page.locator('#customEconomyJson'),

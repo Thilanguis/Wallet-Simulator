@@ -15,7 +15,7 @@
     <link rel="stylesheet" href="css/modern.css" />
     <script type="module" src="js/firebase-connection.js"></script>
   </head>
-  <body>
+  <body class="firebase-required">
     <div class="container">
       <h1 id="simuladorTitulo">Findom Wallet</h1>
       <p class="hint">Seu saldo, seus ganhos e seus serviços.</p>
@@ -28,6 +28,16 @@
         </div>
       </div>
       <div id="storageWarning" role="alert" hidden></div>
+      <section id="firebaseAuthPanel" class="section firebase-auth-panel" aria-labelledby="firebaseAuthTitle">
+        <h2 id="firebaseAuthTitle">Sua carteira no Firebase</h2>
+        <p id="firebaseAuthMessage" role="status">Entre com sua conta Google para abrir a carteira compartilhada.</p>
+        <button id="googleSignIn" type="button">Entrar com Google</button>
+        <button id="retryFirebaseConnection" type="button" hidden>Tentar novamente</button>
+      </section>
+      <div id="firebaseAccountActions" class="firebase-account-actions">
+        <span id="firebaseAccount"></span>
+        <button id="firebaseSignOut" type="button" hidden>Sair</button>
+      </div>
       <nav class="app-nav" aria-label="Seções">
         <button type="button" data-panel="simulator" aria-pressed="true" aria-label="Minha Carteira">
           <svg class="nav-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10" /></svg>
@@ -497,22 +507,11 @@
         <h2>Configurações e backup</h2>
         <details id="cloudSettings" class="cloud-settings">
           <summary>Carteira compartilhada</summary>
-          <p class="hint">Vocês acompanham a mesma carteira, sem tela de login. Um aparelho controla a sessão por vez.</p>
-          <p id="cloudSettingsStatus" role="status">Este navegador ainda usa uma carteira local.</p>
-          <button type="button" id="connectExistingFirebase">Conectar ao Firebase existente</button>
-          <p class="hint">Usa a conexão do Wallet-Simulator e mantém seus dados atuais. No segundo aparelho, cole o código privado gerado aqui.</p>
+          <p class="hint">A carteira é carregada automaticamente do Firebase após entrar com Google. Os dois aparelhos acessam os mesmos dados.</p>
+          <p id="cloudSettingsStatus" role="status">Aguardando autenticação.</p>
+          <p id="firebaseMigrationMessage" class="hint" role="status"></p>
           <div class="btn-row">
-            <button type="button" id="showPairCode" hidden>Mostrar código de vínculo</button>
             <button type="button" id="reconnectCloud" hidden>Reconectar</button>
-            <button type="button" id="disconnectCloud" hidden>Desconectar este aparelho</button>
-          </div>
-          <label for="cloudPairCode">Código privado do outro aparelho</label>
-          <input id="cloudPairCode" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" />
-          <button type="button" id="joinSharedWallet">Vincular este aparelho</button>
-          <div id="cloudPairShare" hidden>
-            <p class="hint">Cole este código no outro aparelho. Ele dá acesso à carteira: guarde-o somente com vocês.</p>
-            <input id="cloudShareCode" type="password" readonly aria-label="Código de vínculo desta carteira" autocomplete="off" />
-            <button type="button" id="copyPairCode">Copiar código</button>
           </div>
           <button type="button" id="exportCloudRecovery" hidden>Baixar cópia local antes da sincronização</button>
         </details>
@@ -541,7 +540,7 @@
         </label>
         <button type="button" id="previewBackup">Conferir backup</button>
         <div id="backupPreview" class="notice" hidden></div>
-        <button type="button" id="confirmBackup" hidden>Confirmar substituição dos dados locais</button>
+        <button type="button" id="confirmBackup" hidden>Confirmar restauração da carteira</button>
         <p id="backupMessage" role="status"></p>
         <details id="walletMaintenance" class="wallet-maintenance">
           <summary>Gerenciar saldo e histórico</summary>
@@ -604,8 +603,8 @@
     <script defer src="js/navigation-presentation.js"></script>
     <script defer src="js/wallet-presentation.js"></script>
     <script defer src="js/cloud-sync.js"></script>
-    <script defer src="js/cloud-cipher.js"></script>
     <script defer src="js/firebase-existing-model.js"></script>
-    <script defer src="js/cloud-ui.js"></script>
+    <script defer src="js/firebase-primary-model.js"></script>
+    <script defer src="js/firebase-ui.js"></script>
   </body>
 </html>

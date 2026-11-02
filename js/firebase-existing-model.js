@@ -54,9 +54,9 @@
       timerRodando: !!timer?.running,
     };
   }
-  function read(raw) {
-    if (raw[field] === undefined) return null;
-    const saved = raw[field];
+  function read(raw, sourceField = field) {
+    if (raw[sourceField] === undefined) return null;
+    const saved = raw[sourceField];
     if (!saved || saved.schema !== 3 || !Number.isSafeInteger(saved.revision) || saved.revision < 1 || !saved.simulator || typeof saved.financeJson !== 'string')
       throw new Error('A carteira atual no Firebase tem formato incompatível. Os dados locais foram preservados.');
     const doc = structuredClone(saved),
