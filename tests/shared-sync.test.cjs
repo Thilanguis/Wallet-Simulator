@@ -6,8 +6,8 @@ const Merge = require('../js/shared-merge.js'),
   Vault = require('../js/vault.js'),
   Finance = require('../js/finance.js');
 const doc = () => ({ schema: 3, revision: 1, controller: '', leaseUntil: 0, simulator: { saldoDominadora: '100', historico: '[]' }, financeJson: JSON.stringify(Finance.empty()) });
-function hub() {
-  let state = doc(),
+function hub(initial = doc()) {
+  let state = initial,
     held = null;
   const watchers = new Set();
   const transport = {
@@ -27,13 +27,13 @@ function hub() {
       return structuredClone(state);
     },
   };
-  function device(id) {
+  function device(id, options = {}) {
     const map = new Map();
     const store = Vault.wallet({ getItem: (k) => map.get(k) || null, setItem: (k, v) => map.set(k, v) }, Finance.empty(), (e) => {
       throw e;
     });
     const backups = [];
-    const engine = Shared.create({ id, store, transport, validate: (w) => Finance.validateState(w.finance), backup: (w) => backups.push(w), later: () => 0, cancel: () => {} });
+    const engine = Shared.create({ id, store, transport, validate: (w) => Finance.validateState(w.finance), backup: (w) => backups.push(w), later: () => 0, cancel: () => {}, ...options });
     engine.connect();
     return { store, engine, backups };
   }
@@ -48,6 +48,51 @@ function hub() {
   };
 }
 const turn = () => new Promise((r) => setImmediate(r));
+
+test('shared transport can finalize between checkpoints while projecting the server clock', async () => {
+  const initial = doc();
+  const timer = { active: true, running: true, seconds: 0, earnedUnits: 0, rate: 0.5, autoRateTotal: 0, tasks: 0, dynamicActivities: [] };
+  Object.assign(initial, { controller: 'a', leaseUntil: 50000, timerCheckpointAt: 1000 });
+  initial.simulator.timerSession = JSON.stringify(timer);
+  let now = 1000;
+  const h = hub(initial), a = h.device('a', {
+    now: () => now,
+    advanceTimer: (state, seconds) => ({ ...state, seconds: state.seconds + seconds, earnedUnits: state.earnedUnits + 50 * seconds }),
+  });
+  await turn();
+  const initialBackups = a.backups.length;
+  now = 6000;
+  const snapshot = a.store.snapshot();
+  a.store.commitBoth(snapshot.finance, { ...snapshot.simulator, saldoDominadora: '100.04', historico: JSON.stringify([{ id: 'clock-credit', tipo: 'ganho', valor: 0.04, saldoAtual: 100.04 }]), timerSession: JSON.stringify({ ...timer, active: false, running: false }) });
+  await turn();
+  await a.engine.flush();
+  await turn();
+  assert.equal(h.state().simulator.saldoDominadora, '100.04');
+  assert.equal(JSON.parse(h.state().simulator.timerSession).active, false);
+  assert.equal(a.backups.length, initialBackups);
+  await a.engine.flush();
+  assert.equal(JSON.parse(h.state().simulator.historico).length, 1);
+  assert.equal(a.engine.state().pending, false);
+});
+
+test('finishing a running timer accepts elapsed checkpoints without losing or repeating its credit', () => {
+  const base = doc(), local = structuredClone(base), remote = structuredClone(base);
+  const timer = { active: true, running: true, seconds: 59, earnedUnits: 2950, rate: 0.5, autoRateTotal: 0, tasks: 1, eligible: true, dynamicActivities: ['example'] };
+  base.simulator.timerSession = JSON.stringify(timer);
+  local.simulator.timerSession = JSON.stringify({ ...timer, active: false, running: false, seconds: 0, earnedUnits: 0, tasks: 0, dynamicActivities: [], eligible: false });
+  local.simulator.saldoDominadora = '100.5';
+  local.simulator.historico = JSON.stringify([{ id: 'finished-clock', tipo: 'ganho', valor: 0.5, saldoAtual: 100.5 }]);
+  remote.simulator.timerSession = JSON.stringify({ ...timer, seconds: 61, earnedUnits: 3055, rate: 0.55, autoRateTotal: 0.05 });
+  const result = Merge.merge(base, local, remote);
+  assert.equal(result.simulator.timerSession, local.simulator.timerSession);
+  assert.equal(result.simulator.saldoDominadora, '100.5');
+  assert.equal(JSON.parse(result.simulator.historico).length, 1);
+  assert.deepEqual(Merge.merge(result, result, result), result);
+  for (const edit of [{ tasks: 2 }, { running: false }, { rate: 0.75 }, { dynamicActivities: ['another'] }]) {
+    remote.simulator.timerSession = JSON.stringify({ ...timer, ...edit });
+    assert.throws(() => Merge.merge(base, local, remote), /alterado/);
+  }
+});
 
 test('an incoming snapshot retains a local action still waiting to be sent', async () => {
   const h = hub(),

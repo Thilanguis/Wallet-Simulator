@@ -15,6 +15,11 @@
           )
         : value;
   const equal = (a, b) => JSON.stringify(stable(a)) === JSON.stringify(stable(b));
+  function sameTimerActions(before, after) {
+    // A checkpoint advances these counters without changing the user's session.
+    const actions = ({ seconds, earnedUnits, autoRateTotal = 0, rate, ...rest }) => ({ ...rest, manualRate: Math.round((rate - autoRateTotal) * 100) });
+    return after.seconds >= before.seconds && after.earnedUnits >= before.earnedUnits && equal(actions(before), actions(after));
+  }
   function conflict() {
     throw new Error('Este item foi alterado ao mesmo tempo. A cópia anterior foi preservada para conferência.');
   }
@@ -146,6 +151,11 @@
             (rt.dynamicActivities || []).map((id) => ({ id })),
           ).map((item) => item.id);
           out.simulator[key] = JSON.stringify(next);
+        } else if (timerOwner && bt?.active && lt?.active === false && rt?.active && sameTimerActions(bt, rt)) {
+          // Finishing intentionally resets the counters. Elapsed time projected
+          // by shared-sync.advance() is not a concurrent edit; credit the exact
+          // amount already recorded by the finishing device, without another tick.
+          out.simulator[key] = l[key];
         } else if (!equal(b[key], r[key])) conflict();
         else out.simulator[key] = l[key];
       } else {

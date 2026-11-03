@@ -1,0 +1,28 @@
+const { test, expect } = require('@playwright/test');
+const { hub } = require('./firebase-primary-hub.cjs');
+test('Calculate finishes the running clock between Firebase checkpoints exactly once', async ({ page }) => {
+  const server = await hub();
+  await page.clock.install();
+  await server.attach(page);
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  await page.locator('[data-jump=ganho]').click();
+  await page.locator('#selectGanho').selectOption('Videogames Competitivos');
+  await expect.poll(() => JSON.parse(server.docs.get('usuarios/gabriel-local').walletAtualV4.simulator.timerSession || 'null')?.running).toBe(true);
+  await page.clock.runFor(6500);
+  await page.locator('#btnTerminarTempo').click();
+  await page.evaluate(() => SharedWallet.flush());
+  await expect.poll(() => JSON.parse(server.docs.get('usuarios/gabriel-local').walletAtualV4.simulator.timerSession).active).toBe(false);
+  await expect(page.locator('#storageWarning')).toBeHidden();
+  const saved = server.docs.get('usuarios/gabriel-local').walletAtualV4.simulator;
+  const rows = JSON.parse(saved.historico).filter((row) => row.descricao.startsWith('Ganho por tempo'));
+  expect(rows).toHaveLength(1);
+  expect(rows[0].valor).toBeGreaterThan(0);
+  expect(Number(saved.saldoDominadora)).toBeCloseTo(1000 + rows[0].valor, 2);
+  await page.locator('#btnTerminarTempo').click();
+  await page.evaluate(() => SharedWallet.flush());
+  expect(JSON.parse(server.docs.get('usuarios/gabriel-local').walletAtualV4.simulator.historico).filter((row) => row.descricao.startsWith('Ganho por tempo'))).toHaveLength(1);
+  await page.reload();
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  await expect(page.locator('#storageWarning')).toBeHidden();
+  expect(await page.evaluate(() => timerEmSessao)).toBe(false);
+});
