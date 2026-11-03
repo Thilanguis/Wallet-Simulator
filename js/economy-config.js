@@ -264,9 +264,9 @@
       balanced: {
         base: 0.5,
         autoEvery: 60,
-        autoIncrement: 0.01,
-        repeatIncrement: 0.002,
-        taskScale: 0.01,
+        autoIncrement: 0.05,
+        repeatIncrement: 0.01,
+        taskScale: 0.05,
       },
     },
     // Quantidade máxima por lançamento no ganho que usa multiplicador.
@@ -458,6 +458,8 @@
     classicQuantityMax: 1000000,
     classicManualGainMax: 1000000,
   };
+  // Stable prize references survive edits/removals in the customizable shop catalog.
+  data.rouletteServices = data.services.map((item) => ({ ...item }));
   data.gameRewards = Object.fromEntries(data.games.map((item) => [item.id, item.amount]));
   data.eligible = [...data.services, ...data.gains, ...data.games].filter((item) => item.timerEligible).map((item) => item.id);
   if (typeof module === 'object') module.exports = data;

@@ -18,7 +18,8 @@ for (const width of [1280, 390, 320]) {
     await expect(notes.locator('details, .note-amount, .note-values')).toHaveCount(0);
     await expect(notes.locator('[data-note-group="Perfil"] .note-content')).toContainText(/12,00.*3,00/);
     await expect(notes.locator('[data-note-group="Comida para Luana e Mel"] .note-content')).toContainText(/5,00 = R\$/);
-    await expect(notes.locator('[data-grand-total]')).toContainText('90,00');
+    await expect(page.locator('#financeTopTotal [data-grand-total]')).toContainText('90,00');
+    expect(await page.locator('#financeTopTotal').evaluate(el => el.getBoundingClientRect().top < document.getElementById('groupedFinanceList').getBoundingClientRect().top)).toBe(true);
     expect(await page.evaluate(() => FinanceUI.getState())).toEqual(before.state);
     expect(await page.evaluate(() => FinanceList.text(FinanceUI.getState().entries))).toBe(before.text);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -28,7 +29,7 @@ for (const width of [1280, 390, 320]) {
     await page.locator('.note-edit-dialog #entryAmount').fill('41,00');
     await page.locator('#saveEntry').click();
     await page.locator('[data-dialog-confirm]').click();
-    await expect(notes.locator('[data-grand-total]')).toContainText('91,00');
+    await expect(page.locator('#financeTopTotal [data-grand-total]')).toContainText('91,00');
     await expect(purchase.locator('.note-content')).toContainText('41,00');
   });
 }

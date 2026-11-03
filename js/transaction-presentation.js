@@ -15,20 +15,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (status.textContent !== label) status.textContent = label;
     const dynamic = ELIGIBLE_TASKS.has(select.value);
     reminder.hidden = state === 'running' || (state === 'idle' && !dynamic);
-    const message = state === 'paused' ? 'Sessão pausada. Use Continuar para retomar a contagem.' : 'Escolha uma atividade para começar a contar o tempo automaticamente.';
+    const message = state === 'paused' ? 'Ⅱ Pausado · ▶ Continuar' : '▶ Escolha uma atividade para começar';
     if (reminder.textContent !== message) reminder.textContent = message;
     const settings = getEconomy();
     const rate = Number(document.getElementById('valorPorMinuto').value) || settings.timer.base;
     const delta = (reference) => Economy.round(Economy.round(rate + Economy.taskIncrement(reference, settings) + settings.timer.repeatIncrement * (contadorTarefasTimer + 1)) - rate);
-    const references = [
-      ...Economy.config.services.filter((item) => !item.reduceHours && !item.id.startsWith('ACELERAR_')).map((item) => item.classic || settings.prices[item.id]),
-      ...Economy.config.gains.map((item) => item.classic || settings.gains[item.id]),
-      0.01,
-      settings.manualGainMax,
-    ];
-    const values = references.map(delta);
-    const min = Math.min(...values);
-    let summary = '+' + formatBR(min) + '/min · conforme atividade';
+    let summary = 'Conforme atividade · veja ao selecionar';
     const kind = document.getElementById('tipoTransacao').value;
     const chosen = kind === 'ganho' ? select.value : document.getElementById('selectTarefa').value.split('|')[1];
     const item = [...Economy.config.services, ...Economy.config.gains].find((item) => item.id === chosen);
@@ -39,14 +31,39 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     const hint = document.getElementById('activityRateHint');
     const amount = Number(document.getElementById('valorGanho').value);
+    document.getElementById('gainDynamicLegend').hidden = !!select.value;
     hint.hidden = !timerEmSessao || !select.value || !(amount > 0);
     if (!hint.hidden) {
-      const settings = getEconomy();
       const reference = Economy.config.services.find((item) => item.id === select.value)?.classic || Economy.config.gains.find((item) => item.id === select.value)?.classic || amount;
-      const increment = Economy.taskIncrement(reference, settings) + settings.timer.repeatIncrement * (contadorTarefasTimer + 1);
+      const activityPart = Economy.taskIncrement(reference, settings);
+      const nextRegistration = contadorTarefasTimer + 1;
+      const increment = activityPart + settings.timer.repeatIncrement * nextRegistration;
       const rate = Number(document.getElementById('valorPorMinuto').value);
       const added = Economy.round(Economy.round(rate + increment) - rate);
-      hint.textContent = 'Ao registrar agora: +' + formatBR(added) + '/min na taxa da sessão.' + (dynamic ? ' Também ativa os aumentos automáticos do combo.' : ' Este aumento vale mesmo sem 💲.');
+      document.getElementById('activityImmediateRate').textContent = '+' + formatBR(added) + '/min';
+      const inCombo = sessionDynamicActivities.has(select.value);
+      document.getElementById('activityDynamicRate').textContent = dynamic
+        ? '💲 +' + formatBR(settings.timer.autoIncrement) + '/min · ' + settings.timer.autoEvery + 's · ' + (inCombo ? '✓ No combo' : '+ Combo')
+        : 'Sem aumento automático (mesmo sem 💲)';
+      const number = (n) => new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 6 }).format(n);
+      document.getElementById('activityRateFormula').textContent =
+        'Registro nº ' +
+        nextRegistration +
+        ': faixa ' +
+        number(activityPart / settings.timer.taskScale) +
+        ' × ' +
+        number(settings.timer.taskScale) +
+        ' + ' +
+        nextRegistration +
+        ' × ' +
+        number(settings.timer.repeatIncrement) +
+        ' = R$ ' +
+        number(increment) +
+        '/min antes do arredondamento. A taxa passa de ' +
+        formatBR(rate) +
+        '/min para ' +
+        formatBR(Economy.round(rate + increment)) +
+        '/min.';
     }
   }
   window.addEventListener('timer:settled', () => {

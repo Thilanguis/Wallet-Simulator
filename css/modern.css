@@ -261,6 +261,95 @@ summary {
 #roletaWheel {
   max-width: 100%;
 }
+/* Keep the original spinning mechanism and pointer keyframes; refine only its casing. */
+.roulette-overlay {
+  padding: 16px;
+  overflow-y: auto;
+}
+.roulette-overlay #roletaBox {
+  flex: 0 1 430px;
+  box-sizing: border-box;
+  padding: 24px !important;
+  background: radial-gradient(ellipse at 50% 35%, #30271d, #191715 70%) !important;
+  border-color: #9a7a40 !important;
+  box-shadow: 0 24px 80px #000b, inset 0 1px #e0bc6633 !important;
+}
+#roletaBox #rouletteModalTitle {
+  margin: 0 18px 8px;
+  padding: 0;
+  border: 0;
+  color: #ead5a2;
+  font-size: 23px;
+  text-transform: none;
+  letter-spacing: .02em;
+}
+#roletaBox .roulette-caption {
+  margin: 0 0 48px;
+  font: 12px system-ui;
+  color: #b9ad98;
+}
+.roulette-wheel-shell {
+  position: relative;
+  width: min(320px, 100%);
+  aspect-ratio: 1;
+  margin: 0 auto;
+}
+.roulette-wheel-stage {
+  position: absolute;
+  width: 320px;
+  height: 320px;
+  left: 50%;
+  top: 0;
+  transform-origin: top center;
+  transform: translateX(-50%) scale(var(--wheel-scale, 1));
+}
+.roulette-wheel-stage #roletaPointer {
+  top: -50px !important;
+  background: linear-gradient(90deg, #7b2331, #e39891 48%, #9c3945) !important;
+}
+.roulette-wheel-stage #roletaWheel {
+  border-color: #cfad61 !important;
+  box-shadow: 0 0 0 5px #292018, 0 0 0 6px #8f713c, 0 14px 28px #0009 !important;
+}
+#roletaWheel .roulette-hub {
+  border: 3px double #785c29;
+  background: radial-gradient(circle at 35% 25%, #f2dda0, #c3a050 55%, #785e2d) !important;
+  box-shadow: inset 0 0 0 5px #e4c67e66, 0 4px 12px #0008 !important;
+}
+#roletaBox #roletaVisor {
+  margin-top: 24px;
+  border-color: #79613c !important;
+  background: #252019;
+  color: #edd59e;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+#roletaBox #btnRoletaGirar {
+  min-width: 150px;
+  background: linear-gradient(135deg, #ead39a, #be974a) !important;
+  color: #211a0f !important;
+  box-shadow: 0 3px 12px #0006 !important;
+}
+#roletaBox .roulette-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #c8b78f;
+  font: 24px system-ui;
+  box-shadow: none;
+}
+#roletaBox .roulette-close:disabled { opacity: .3; }
+@media (max-width: 420px) {
+  .roulette-overlay { padding: 12px; }
+  .roulette-overlay #roletaBox { padding: 20px 16px !important; }
+  #roletaBox #rouletteModalTitle { font-size: 20px; }
+}
 footer {
   color: var(--muted);
   font: 12px system-ui;
@@ -1502,6 +1591,78 @@ html:has(dialog[open]) {
   border-radius: 0 8px 8px 0;
   margin: 10px 0 16px;
 }
+/* Keep technical explanations in Settings and avoid repeated bonus notices. */
+#ganhoFields #bonusEspecialBanner,
+#contadorBloco .session-eyebrow,
+.transaction-intro {
+  display: none;
+}
+.activity-rate-parts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 20px;
+}
+.rate-part-label,
+#activityDynamicRate {
+  color: #b6b5a8;
+}
+.rate-calculation-details {
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.rate-calculation-details summary {
+  font: 12px/1.6 system-ui;
+  color: #a9bfaf;
+}
+.rate-calculation-details .hint {
+  margin: 6px 0;
+}
+.catalog-timer-guide {
+  margin: 12px 0 16px;
+  padding: 10px 12px;
+}
+.catalog-timer-guide summary {
+  font-size: 13px;
+}
+.timer-field-list {
+  font: 12px/1.6 system-ui;
+  margin: 14px 0;
+}
+.timer-field-list > div {
+  display: grid;
+  grid-template-columns: minmax(170px, 1fr) minmax(0, 2fr);
+  gap: 6px 20px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.timer-field-list dt,
+.timer-field-list dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.timer-field-list dt strong,
+.timer-field-list dt code {
+  display: block;
+}
+.timer-field-list dt strong {
+  color: #d5c6a7;
+}
+.timer-field-list dt code {
+  color: #aaa393;
+  font-size: 11px;
+}
+.timer-field-list dd {
+  color: #c5beb0;
+}
+@media (max-width: 620px) {
+  .timer-field-list > div {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 
 [data-timer-summary] {
   display: flex;
@@ -2636,6 +2797,127 @@ body {
 body:not(.firebase-required) #firebaseAuthPanel {
   display: none;
 }
+.firebase-checking #firebaseAuthPanel {
+  display: none;
+}
+.wallet-connection-loader {
+  display: none;
+}
+.list-tools { display: flex; flex-wrap: wrap; gap: 10px; position: relative; margin: 12px 0 20px; }
+.list-editor { padding: 0; border: 1px solid #74603c; border-radius: 9px; background: #b38c2210; margin: 0 0 16px; }
+.list-editor > summary { padding: 10px 14px; cursor: pointer; font: 600 12px/1.5 system-ui; color: #d8c18e; }
+.list-editor[open] { background: #211d1855; }
+.list-editor > form { padding: 4px 14px 14px; }
+.list-tools .list-editor { flex: 0 1 auto; margin: 0; }
+.list-tools:has(.list-editor[open]) { display: block; }
+.list-tools .list-editor[open] { margin-bottom: 12px; }
+.list-editor > .section { padding: 8px 14px 14px !important; margin: 0; background: transparent; border: 0; box-shadow: none !important; }
+#financeAdd #entryTitle, #financeImport #financeImportTitle { display: none; }
+.list-import-actions { display: flex; gap: 8px; padding: 0 14px 8px; }
+.list-import-actions button { padding: 7px 12px; font-size: 11px; box-shadow: none; }
+.wish-group h3 { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.wish-group-total { color: #c4b792; font: 12px/1.5 system-ui; white-space: nowrap; }
+#financeTopTotal { margin: 0; }
+/* Compact entry forms; the lists and their totals remain the main content. */
+.list-title-row { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 10px 24px; margin-bottom: 18px; }
+.list-title-row h2 { margin: 0; }
+.list-top-total { color: #dfc47d; font-size: 20px; font-variant-numeric: tabular-nums; }
+.list-top-total > span { display: block; color: #b0a590; font: 11px/1.5 system-ui; }
+#financeTopTotal { margin: 8px 0 18px; }
+#financeTopTotal .notebook-grand-total { margin: 0; padding: 0; border: 0; font-size: 20px; justify-content: flex-start; gap: 10px; }
+#wishForm .form-grid { grid-template-columns: minmax(0,2fr) minmax(0,1.2fr) minmax(0,1fr) minmax(0,.7fr); }
+#entryForm .form-grid { grid-template-columns: repeat(4,minmax(0,1fr)); }
+#entryForm .form-grid > label:nth-child(3) { grid-column: span 2; }
+#wishForm label, #entryForm label, #financePanel > .section:has(#financeImportTitle) label { font-size: 12px; margin: 0; }
+#wishForm input, #wishForm select, #entryForm input, #entryForm select, #financePanel > .section:has(#financeImportTitle) input { min-height: 36px; height: 36px; padding: 7px 10px; margin: 5px 0 0; font-size: 14px; }
+#wishForm .form-grid, #entryForm .form-grid { gap: 12px 16px; }
+#wishForm button, #entryForm > button, #wishRead { min-height: 36px; padding: 8px 14px; font-size: 11px; width: auto; }
+#wishForm .btn-row { justify-content: flex-start; margin-top: 12px; }
+#wishForm .btn-row > button { flex: 0 0 auto; }
+#wishlistPanel .wish-row .wish-tool { min-height: 24px; height: 24px; margin: 0; }
+#wishlistPanel .wish-row input { min-height: 0; }
+#wishForm .wish-link-row { margin-bottom: 12px; }
+#wishForm .hint:empty, #entryOrigin:empty { display: none; }
+#entryForm details { margin-top: 12px; padding: 9px 12px; }
+#entryForm details summary { font-size: 12px; }
+#financePanel > .section:has(#financeImportTitle) { padding-top: 18px; padding-bottom: 18px; }
+#financePanel > .section:has(#financeImportTitle) details { margin: 8px 0; padding: 9px 12px; }
+#financePanel > .section:has(#financeImportTitle) summary { font-size: 13px; }
+#wishlistPanel .wish-group { margin-top: 16px; padding-top: 8px; }
+#wishlistPanel .wish-group h3 { margin: 6px 0; font-size: 17px; }
+#wishlistPanel .wish-row { padding: 9px 0; }
+@media(max-width: 700px) {
+  #wishForm .form-grid, #entryForm .form-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  #wishForm .form-grid > label:first-child, #wishForm .form-grid > label:nth-child(2), #entryForm .form-grid > label:nth-child(3) { grid-column: 1/-1; }
+  #wishForm input, #wishForm select, #entryForm input, #entryForm select { font-size: 16px; }
+  #financeTopTotal .notebook-grand-total { font-size: 17px; }
+}
+.wallet-header-line { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 20px; margin: 18px 0; }
+.wallet-header-line > .hint, .wallet-header-line .firebase-account-actions { margin: 0; }
+.app-nav { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.wish-link-row { display: flex; align-items: end; gap: 12px; }
+.wish-link-row label { flex: 1; min-width: 0; }
+.wish-group { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 12px; }
+.wish-row { display: grid; grid-template-columns: 20px minmax(0,1fr) auto 24px 24px; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid #ffffff0b; }
+.wish-row a { color: #d7c6a4; overflow-wrap: anywhere; }
+.wish-row input { width: 16px; height: 16px; margin: 0; }
+.wish-row .is-bought { text-decoration: line-through; opacity: .6; }
+.wish-row .wish-tool { padding: 0; min-width: 0; background: none; border: 0; box-shadow: none; font-size: 17px; }
+@media(max-width: 620px) {
+  .app-nav { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; }
+  .app-nav button { padding-left: 2px; padding-right: 2px; min-width: 0; }
+  .app-nav .nav-label-mobile { font-size: 9px; }
+  .wish-link-row { flex-wrap: wrap; }
+  .wish-link-row label { flex-basis: 100%; }
+  .wish-row { gap: 6px; font-size: 12px; }
+}
+.firebase-checking .wallet-connection-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  padding: 64px 20px;
+  margin: 24px auto;
+  max-width: 420px;
+  color: #c6b994;
+  font: 13px/1.5 system-ui;
+}
+.connection-emblem {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border: 1px solid #8d7343;
+  border-radius: 50%;
+  color: #d7b66a;
+  font-size: 32px;
+  background: radial-gradient(circle, #b9923820, transparent 70%);
+  box-shadow: 0 0 0 7px #c6a55708;
+}
+.connection-track {
+  width: 150px;
+  height: 2px;
+  overflow: hidden;
+  background: #b8974930;
+}
+.connection-track::after {
+  content: '';
+  display: block;
+  width: 45%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, #d7b66a, transparent);
+  animation: wallet-connection-progress 1.5s ease-in-out infinite;
+}
+.firebase-checking footer {
+  visibility: hidden;
+}
+@keyframes wallet-connection-progress {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(325%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .connection-track::after { animation: none; width: 100%; }
+}
 .firebase-required .app-nav,
 .firebase-required .app-panel,
 .firebase-required #cloudStatusBar,
@@ -2734,4 +3016,77 @@ body:not(.firebase-required) #firebaseAuthPanel {
   box-shadow: none;
   font-size: 12px;
   padding: 12px 20px;
+}
+
+/* Anchored editors keep the heading and trigger in place while open. */
+#financePanel > .section:first-child, #wishlistPanel { position: relative; }
+#financePanel .list-tools, #financeAdd, #financeImport, #wishEditor { position: static; }
+#financePanel.app-panel .list-tools:has(.list-editor[open]) { display: flex; grid-column: 2; grid-row: 1; margin: 0; }
+#financePanel .list-tools .list-editor[open] { margin: 0; }
+#wishlistPanel #wishEditor[open] { grid-column: 2; grid-row: 1; width: max-content; margin: 0; }
+.list-popover {
+  position: absolute; z-index: 40; left: 16px; right: 16px;
+  padding: 32px 16px 16px; overflow-y: auto; overscroll-behavior: contain;
+  background: #211f1b; border: 1px solid #8b7145; border-radius: 12px;
+  box-shadow: 0 15px 40px #0008;
+  animation: list-popover-in 150ms ease-out;
+}
+.list-popover::before { content: ''; position: absolute; left: var(--popover-arrow,30px); top: 0; width: 16px; height: 3px; background: #d7b66a; }
+.list-popover > .section { margin: 0; padding: 0 !important; border: 0; background: transparent; box-shadow: none !important; }
+.list-popover .list-import-actions { padding-left: 0; }
+.list-popover button:not(.note-icon) { font-size: 12px; padding: 8px 12px; min-height: 34px; }
+.list-popover .list-popover-close { position: absolute; right: 8px; top: 5px; padding: 0 8px; background: none; box-shadow: none; border: 0; font-size: 22px; min-height: 24px; }
+.list-popover > button.list-popover-close { right: 6px; top: 5px; width: 26px; height: 26px; min-height: 26px; padding: 0; font-size: 22px; }
+.list-popover label, .list-popover summary { font-size: 13px; }
+.list-popover textarea { min-height: 90px; }
+.wish-list-heading { grid-column: 1/-1; display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; margin: 6px 0 12px; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+.wish-list-heading h3 { margin: 0; color: #d4c3a3; font-size: 17px; }
+.wish-list-heading #wishSummary { margin: 0; font: 12px/1.5 system-ui; color: #bdb4a3; }
+#wishList > .wish-group:first-child { margin-top: 0; border-top: 0; }
+@keyframes list-popover-in { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+@media(max-width: 820px) {
+  #financePanel.app-panel .list-tools:has(.list-editor[open]), #wishlistPanel #wishEditor[open] { grid-column: 1/-1; grid-row: 2; margin-top: 12px; justify-self: start; }
+  .list-popover { left: 8px; right: 8px; padding-left: 12px; padding-right: 12px; }
+}
+@media(prefers-reduced-motion: reduce) { .list-popover { animation: none; } }
+
+/* List headings: compact actions beside the title, prominent totals below. */
+#financePanel > .section:first-child, #wishlistPanel:not([hidden]) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 20px;
+}
+#financePanel .list-title-row, #wishlistPanel .list-title-row { display: contents; }
+#financePanel .list-title-row > h2, #wishlistPanel .list-title-row > h2 {
+  grid-column: 1; grid-row: 1; margin: 0; align-self: center;
+}
+#financePanel .list-tools { grid-column: 2; grid-row: 1; margin: 0; gap: 8px; }
+#financePanel .list-tools:has(.list-editor[open]) { grid-column: 1/-1; grid-row: 3; margin-top: 12px; }
+#financePanel #financeMessage, #financePanel #groupedFinanceList,
+#financePanel #financeIndicators, #financePanel #categoryTotals,
+#wishlistPanel > #wishSummary, #wishlistPanel > #wishList { grid-column: 1/-1; }
+#financeTopTotal, #wishlistPanel .list-title-row > .list-top-total {
+  grid-column: 1/-1; grid-row: 2;
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px;
+  margin: 18px 0 22px; padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+#financeTopTotal > span, #wishlistPanel .list-top-total > span {
+  font: 14px/1.5 system-ui; color: #d5c298;
+}
+#financeTopTotal > output, #wishTotal { font-size: 28px; font-weight: 700; color: #ecd080; }
+#wishEditor { grid-column: 2; grid-row: 1; width: max-content; max-width: 100%; margin: 0; }
+#wishEditor[open] { grid-column: 1/-1; grid-row: 3; width: auto; margin-bottom: 12px; }
+#wishEditor > summary, #financePanel .list-tools .list-editor > summary {
+  padding: 7px 10px; font-size: 11px; min-height: 0;
+}
+#financePanel .list-tools > .list-editor { padding: 0 !important; margin: 0 !important; }
+@media(max-width: 820px) {
+  #financePanel > .section:first-child, #wishlistPanel:not([hidden]) { column-gap: 10px; }
+  #financePanel .list-title-row > h2, #wishlistPanel .list-title-row > h2 { grid-column: 1/-1; }
+  #financePanel .list-tools, #wishEditor { grid-column: 1/-1; grid-row: 2; margin-top: 12px; justify-self: start; }
+  #financeTopTotal, #wishlistPanel .list-title-row > .list-top-total { grid-row: 3; margin: 10px 0 14px; }
+  #wishEditor[open], #financePanel .list-tools:has(.list-editor[open]) { grid-row: 4; justify-self: stretch; }
+  #financeTopTotal > output, #wishTotal { font-size: 25px; }
 }

@@ -15,8 +15,11 @@
     <link rel="stylesheet" href="css/modern.css" />
     <script type="module" src="js/firebase-connection.js"></script>
   </head>
-  <body class="firebase-required">
+  <body class="firebase-required firebase-checking">
     <div class="container">
+      <h1 id="simuladorTitulo">Findom Wallet</h1>
+      <div class="wallet-header-line">
+      <p class="hint">Seu saldo, seus ganhos e seus serviços.</p>
       <div id="firebaseAccountActions" class="firebase-account-actions">
         <span id="cloudStatusBar" hidden aria-live="polite"><span id="cloudStatusText"></span></span>
         <details class="account-menu">
@@ -24,8 +27,7 @@
           <div class="account-menu-content"><span id="firebaseAccount"></span><button id="firebaseSignOut" type="button" hidden>Sair</button></div>
         </details>
       </div>
-      <h1 id="simuladorTitulo">Findom Wallet</h1>
-      <p class="hint">Seu saldo, seus ganhos e seus serviços.</p>
+      </div>
       <div id="updateBanner" class="notice" role="status" hidden>
         <progress id="updateProgress" max="100" value="0" hidden aria-label="Progresso da atualização"></progress>
         <span id="updateVersion">Nova versão disponível</span>
@@ -35,6 +37,11 @@
         </div>
       </div>
       <div id="storageWarning" role="alert" hidden></div>
+      <div id="walletConnectionLoader" class="wallet-connection-loader" role="status" aria-live="polite">
+        <span class="connection-emblem" aria-hidden="true">♛</span>
+        <span>Conectando à sua carteira…</span>
+        <span class="connection-track" aria-hidden="true"></span>
+      </div>
       <section id="firebaseAuthPanel" class="section firebase-auth-panel" aria-labelledby="firebaseAuthTitle">
         <h2 id="firebaseAuthTitle">Uma carteira para vocês dois</h2>
         <p id="firebaseAuthMessage" role="status">Entre com Google para acessar seus saldos, privilégios e notas.</p>
@@ -55,6 +62,7 @@
           <span class="nav-label-desktop">Notas e gastos reais</span>
           <span class="nav-label-mobile">Notas</span>
         </button>
+        <button type="button" data-panel="wishlistPanel" aria-pressed="false" aria-label="Lista de Desejos"><svg class="nav-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21L3 12C-3 3 8-1 12 6c4-7 15-3 9 6z"/></svg><span class="nav-label-desktop">Lista de Desejos</span><span class="nav-label-mobile">Desejos</span></button>
         <button type="button" data-panel="contractPanel" aria-pressed="false" aria-label="Contrato">
           <svg class="nav-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h7" /></svg>
           <span class="nav-label-desktop">Contrato</span>
@@ -81,12 +89,10 @@
             <span class="bonus-icon">💥</span>
           </div>
 
-          <p id="walletTimerSummary" class="hint wallet-timer-summary" data-timer-summary></p>
 
           <!-- cabeçalho com título + botão do contrato à direita -->
           <div class="section-header">
             <h2>Resumo da Carteira</h2>
-            <button type="button" id="abrirContrato" class="icon-btn" title="Abrir contrato">📜</button>
           </div>
 
           <!-- saldo em linha com o rótulo -->
@@ -166,6 +172,7 @@
           </div>
 
           <div id="ganhoFields" style="display: none">
+            <p id="walletTimerSummary" class="hint wallet-timer-summary" data-timer-summary></p>
             <div id="contadorBloco" style="background: #1a1a1a; padding: 15px; border-radius: 12px; border: 1px solid #444; margin-top: 20px">
               <div class="session-heading">
                 <div>
@@ -174,7 +181,7 @@
                 </div>
                 <span id="timerVisualStatus" class="session-status" role="status">Parado</span>
               </div>
-              <p class="session-help">Ao escolher uma atividade, o tempo começa. Registre o ganho; pause ou calcule quando terminar.</p>
+              <p class="session-help">▶ O tempo começa ao escolher uma atividade.</p>
               <p id="timerStartReminder" class="session-reminder" hidden></p>
               <label class="session-rate-label">Taxa atual · R$ por minuto</label>
               <input type="number" id="valorPorMinuto" value="0" min="0.01" step="0.01" readonly />
@@ -203,6 +210,21 @@
               <option value="Outro">Outro (Valor editável)</option>
             </select>
 
+            <div id="activityRateHint" class="activity-rate-hint" hidden>
+              <div class="activity-rate-parts" role="status">
+                <span>
+                  <span class="rate-part-label">Ao registrar</span>
+                  <strong id="activityImmediateRate"></strong>
+                </span>
+                <span id="activityDynamicRate"></span>
+              </div>
+              <details class="rate-calculation-details" hidden>
+                <summary>Como esse aumento é calculado?</summary>
+                <p id="activityRateFormula" class="hint"></p>
+                <p class="hint">A faixa vem da referência interna da atividade. No JSON, taskScale ajusta essa parcela e repeatIncrement ajusta a parcela por registro. Não há um campo individual de aumento por atividade.</p>
+              </details>
+            </div>
+
             <details id="gameScoreCalculator" hidden>
               <summary>Calcular pela pontuação</summary>
               <div class="form-grid">
@@ -227,8 +249,7 @@
               <input type="number" id="valorGanho" value="0" step="0.01" min="0.01" />
             </label>
 
-            <p class="hint">Registrar atividades na sessão aumenta a taxa por minuto. As marcadas 💲 também somam aumentos automáticos ao combo.</p>
-            <p id="activityRateHint" class="activity-rate-hint" role="status" hidden></p>
+            <p id="gainDynamicLegend" class="hint">💲 = aumento automático da taxa</p>
             <div id="gainExtras" class="checkbox-group" hidden></div>
 
             <label id="labelQuantidadeMultiplicador" style="display: none; margin-top: 12px">Quantidade (multiplicador):</label>
@@ -315,14 +336,9 @@
       </main>
       <section id="financePanel" class="app-panel" hidden>
         <div class="section">
-          <h2>🎮 Resumo de Jogos e Finanças 💰</h2>
-          <p class="hint">Sua lista de jogos, compras e despesas fora do Findom Wallet. Valores somente em dólar ficam separados dos valores em reais.</p>
+          <div class="list-title-row"><h2>🎮 Resumo de Jogos e Finanças 💰</h2><div id="financeTopTotal" class="list-top-total"></div></div>
           <div id="financeMessage" role="status" aria-live="polite"></div>
-          <div class="quick-nav finance-actions">
-            <button type="button" data-finance-jump="entry">Adicionar nota / gasto</button>
-            <button type="button" data-finance-jump="receipt">Enviar comprovante</button>
-            <button type="button" data-finance-jump="import">Importar lista</button>
-          </div>
+          <div class="list-tools"><details id="financeAdd" class="list-editor"><summary data-finance-jump="entry">＋ Nota / gasto</summary></details><details id="financeImport" class="list-editor"><summary>⇧ Importar</summary><div class="list-import-actions"><button type="button" data-finance-jump="receipt">Comprovante</button><button type="button" data-finance-jump="import">Lista</button></div></details></div>
           <div id="groupedFinanceList"></div>
           <details id="financeIndicators">
             <summary>Indicadores e orçamento</summary>
@@ -406,7 +422,7 @@
           </form>
         </div>
         <div class="section">
-          <h2>Importar lista ou comprovante</h2>
+          <h2 id="financeImportTitle">Importar lista ou comprovante</h2>
           <details>
             <summary id="importListToggle">Colar lista do WhatsApp</summary>
             <label>
@@ -502,6 +518,20 @@
           </details>
         </details>
       </section>
+      <section id="wishlistPanel" class="app-panel section" hidden>
+        <div class="list-title-row"><h2>Lista de Desejos</h2><div class="list-top-total"><span>Falta comprar · estimativa</span><output id="wishTotal" aria-live="polite">R$ 0,00</output></div></div>
+        <details id="wishEditor" class="list-editor"><summary>＋ Adicionar desejo</summary>
+        <form id="wishForm">
+          <div class="wish-link-row"><label>Produto ou link<input id="wishUrl" type="url" required placeholder="Cole o link do produto" /></label><button id="wishRead" type="button">Atualizar prévia</button></div>
+          <p id="wishMessage" class="hint" role="status"></p>
+          <div class="form-grid"><label>Produto<input id="wishTitle" maxlength="300" required /></label><label>Loja<input id="wishStore" maxlength="150" required /></label><label>Preço original<input id="wishPrice" type="number" min="0" step="0.01" /></label><label>Moeda<select id="wishCurrency"><option>BRL</option><option>CAD</option><option>USD</option><option>EUR</option><option>GBP</option><option>AUD</option><option>JPY</option><option>CNY</option><option>CHF</option></select></label></div>
+          <p id="wishConversion" class="hint" role="status"></p>
+          <div class="btn-row"><button type="submit" id="wishSave">Adicionar desejo</button><button type="button" id="wishCancel" class="subtle-btn" hidden>Cancelar edição</button></div>
+        </form>
+        </details>
+        <div class="wish-list-heading"><h3>Seus desejos</h3><p id="wishSummary" class="hint" role="status"></p></div>
+        <div id="wishList"></div>
+      </section>
       <section id="backupPanel" class="app-panel section" hidden>
         <h2>Configurações e backup</h2>
         <details id="cloudSettings" class="cloud-settings">
@@ -523,6 +553,49 @@
               Edite os arrays e salve. “price” é o preço do serviço; “amount” é o ganho, em R$. Acrescente um objeto para criar um item. “timerEligible”: true marca com 💲. Dentro de cada ganho, “extras” lista seus adicionais: id, label (nome na
               tela) e amount (valor em R$).
             </p>
+            <details id="timerFieldGuide" class="catalog-timer-guide">
+              <summary>Entender os campos do cronômetro</summary>
+              <p class="hint">As explicações estão em português; mantenha os nomes das chaves no JSON para preservar a compatibilidade. Números usam ponto decimal.</p>
+              <dl class="timer-field-list">
+                <div>
+                  <dt>
+                    <strong>Taxa inicial</strong>
+                    <code>timer.base</code>
+                  </dt>
+                  <dd data-timer-guide="base"></dd>
+                </div>
+                <div>
+                  <dt>
+                    <strong>Intervalo do aumento dinâmico</strong>
+                    <code>timer.autoEvery</code>
+                  </dt>
+                  <dd data-timer-guide="autoEvery"></dd>
+                </div>
+                <div>
+                  <dt>
+                    <strong>Aumento dinâmico por atividade 💲</strong>
+                    <code>timer.autoIncrement</code>
+                  </dt>
+                  <dd data-timer-guide="autoIncrement"></dd>
+                </div>
+                <div>
+                  <dt>
+                    <strong>Parcela por número do registro</strong>
+                    <code>timer.repeatIncrement</code>
+                  </dt>
+                  <dd data-timer-guide="repeatIncrement"></dd>
+                </div>
+                <div>
+                  <dt>
+                    <strong>Fator da faixa da atividade</strong>
+                    <code>timer.taskScale</code>
+                  </dt>
+                  <dd data-timer-guide="taskScale"></dd>
+                </div>
+              </dl>
+              <p class="hint">Aumento ao registrar = faixa da atividade × taskScale + número do registro na sessão × repeatIncrement. A taxa final é arredondada para centavos.</p>
+              <p class="hint">amount define o ganho direto; timerEligible: true habilita 💲. Nenhum dos dois é um campo de aumento individual por registro. Os itens existentes podem conservar uma referência interna diferente do ganho atual.</p>
+            </details>
             <label for="customEconomyJson">Código do catálogo (JSON)</label>
             <textarea id="customEconomyJson" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off"></textarea>
             <p id="economyCodeMessage" role="status" class="hint"></p>
@@ -607,5 +680,9 @@
     <script defer src="js/firebase-existing-model.js"></script>
     <script defer src="js/firebase-primary-model.js"></script>
     <script defer src="js/firebase-ui.js"></script>
+    <script defer src="js/wishlist-product.js"></script>
+    <script defer src="js/wishlist-fx.js"></script>
+    <script defer src="js/wishlist.js"></script>
+    <script defer src="js/list-popovers.js"></script>
   </body>
 </html>

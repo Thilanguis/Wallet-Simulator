@@ -44,7 +44,7 @@
     }
     const active = !!window.bonusEspecialAtivo;
     badge.classList.toggle('is-active', active);
-    const caption = active ? 'Bônus lingerie ativo · +' + getEconomy().bonusPercent + '% nos ganhos elegíveis' : 'Bônus lingerie desligado';
+    const caption = active ? '👙 +' + getEconomy().bonusPercent + '%' : '👙 desligado';
     const text = document.getElementById('bonusEspecialInlineText');
     if (text.textContent !== caption) text.textContent = caption;
   }
@@ -206,7 +206,7 @@
       var comBonus = Math.round(base * mult * 100) / 100;
 
       bonusPreviewValorEl.innerHTML = [
-        '<span style="opacity:.8">Ganho com bônus: </span>',
+        '<span style="opacity:.8">Com bônus: </span>',
         '<span style="text-decoration:line-through;opacity:.6;margin-right:6px">' + bonusFmtBR(base) + '</span>',
         '<strong style="color:#a7f3d0">' + bonusFmtBR(comBonus) + '</strong>',
       ].join('');
@@ -276,7 +276,7 @@
 
       // texto: Valor por minuto com bônus: ~3,99~ 4,59
       bonusPreviewMinutoEl.innerHTML = [
-        '<span style="opacity:.8">Valor por minuto com bônus: </span>',
+        '<span style="opacity:.8">👙 /min: </span>',
         '<span style="text-decoration:line-through;opacity:.6;margin-right:6px">',
         bonusFmtBR(base),
         '</span>',

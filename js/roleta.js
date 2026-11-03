@@ -61,15 +61,18 @@
   const setores = Economy.config.roulette.map((sector) => ({ ...sector, full: sector.label }));
   function refreshPrizeLabels() {
     for (const s of setores) {
-      const service = Economy.config.services.find((item) => item.id === s.serviceId);
+      const service = Economy.config.services.find((item) => item.id === s.serviceId) || Economy.config.rouletteServices.find((item) => item.id === s.serviceId);
+      const name = service?.label || s.serviceId || s.label;
+      const price = getEconomy().prices[s.serviceId];
+      const catalogPrice = Number.isFinite(price) ? ' · valor de catálogo ' + formatBR(price) : '';
       s.full =
         s.kind === 'bonus'
           ? 'Bônus lingerie por ' + Economy.config.bonusDurationHours + 'h'
           : s.kind === 'none'
             ? 'Nada hoje'
             : s.kind === 'offer'
-              ? 'Benefício do catálogo: ' + service.label + ' · ' + formatBR(getEconomy().prices[service.id])
-              : (s.kind === 'reducer' ? 'Redutor gratuito: ' : 'Serviço gratuito: ') + service.label + ' · valor de catálogo ' + formatBR(getEconomy().prices[service.id]);
+              ? 'Benefício do catálogo: ' + name + catalogPrice
+              : (s.kind === 'reducer' ? 'Redutor gratuito: ' : 'Serviço gratuito: ') + name + catalogPrice;
     }
   }
   function settleSpin(spin) {
@@ -139,6 +142,7 @@
     // ---------- BOLA CENTRAL (HUB) ----------
     const hubSize = 100;
     const hub = document.createElement('div');
+    hub.className = 'roulette-hub';
     hub.style = `
       position: absolute;
       left: 50%;
@@ -313,6 +317,7 @@
     if (document.getElementById('roletaBox') || msRestantes() > 0) return;
     refreshPrizeLabels();
     const overlay = document.createElement('div');
+    overlay.className = 'roulette-overlay';
     overlay.style = `
       position: fixed;
       inset: 0;
@@ -325,6 +330,9 @@
 
     const box = document.createElement('div');
     box.id = 'roletaBox';
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-modal', 'true');
+    box.setAttribute('aria-labelledby', 'rouletteModalTitle');
     box.style = `
       position: relative;
       width: min(460px, 94vw);
@@ -341,12 +349,8 @@
     `;
 
     box.innerHTML = `
-      <h2 style="margin:0 0 12px;color:#ffd700;font-size:22px;letter-spacing:.05em;">
-        ROLETA
-      </h2>
-      <p style="font-size:13px;margin-top:0;margin-bottom:55px;color:#ccc;">
-        Clique para girar e tentar a sorte.
-      </p>
+      <h2 id="rouletteModalTitle">Roleta de privilégios</h2>
+      <p class="roulette-caption">Um giro a cada três dias</p>
     `;
 
     const wheel = criarRoletaVisual();
@@ -383,26 +387,70 @@
       box-shadow: 0 4px 10px rgba(0,0,0,.5);
     `;
 
-    box.appendChild(wheel);
-    box.appendChild(pointer);
+    const shell = document.createElement('div');
+    shell.className = 'roulette-wheel-shell';
+    const stage = document.createElement('div');
+    stage.className = 'roulette-wheel-stage';
+    stage.append(wheel, pointer);
+    shell.appendChild(stage);
+    box.appendChild(shell);
     box.appendChild(visor);
     box.appendChild(btnGirar);
     overlay.appendChild(box);
     document.body.appendChild(overlay);
+    // Scale the entire mechanism together; wheel/peg angles and pointer motion stay intact.
+    const resize = new ResizeObserver(() => stage.style.setProperty('--wheel-scale', Math.min(1, shell.clientWidth / 320)));
+    resize.observe(shell);
+    const opener = document.activeElement;
+    function close() {
+      if (overlay.dataset.spinning) return;
+      resize.disconnect();
+      document.removeEventListener('keydown', onKey);
+      overlay.remove();
+      opener?.focus({ preventScroll: true });
+      if (onFinish) onFinish();
+    }
+    function onKey(event) {
+      if (event.key === 'Escape') close();
+      if (event.key === 'Tab') {
+        const controls = [...box.querySelectorAll('button:not(:disabled)')];
+        const target = event.shiftKey ? controls.at(-1) : controls[0];
+        if (!box.contains(document.activeElement) || document.activeElement === (event.shiftKey ? controls[0] : controls.at(-1))) {
+          event.preventDefault();
+          target?.focus();
+        }
+      }
+    }
+    document.addEventListener('keydown', onKey);
+    const closeButton = document.createElement('button');
+    closeButton.type = 'button';
+    closeButton.className = 'roulette-close';
+    closeButton.setAttribute('aria-label', 'Fechar roleta');
+    closeButton.textContent = '×';
+    closeButton.onclick = close;
+    box.appendChild(closeButton);
 
     requestAnimationFrame(() => {
       box.style.transform = 'scale(1)';
       box.style.opacity = '1';
+      btnGirar.focus({ preventScroll: true });
     });
 
     overlay.onclick = (ev) => {
       if (ev.target === overlay && !overlay.dataset.spinning) {
-        overlay.remove();
-        if (onFinish) onFinish();
+        close();
       }
     };
 
-    btnGirar.onclick = () => girarRoleta(wheel, pointer, visor, overlay, onFinish);
+    btnGirar.onclick = () => {
+      closeButton.disabled = true;
+      girarRoleta(wheel, pointer, visor, overlay, () => {
+        resize.disconnect();
+        document.removeEventListener('keydown', onKey);
+        opener?.focus({ preventScroll: true });
+        if (onFinish) onFinish();
+      });
+    };
   }
 
   // ====================================================================

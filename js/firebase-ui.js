@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function validate(wallet) {
     Finance.validateState(wallet.finance);
     const sim = wallet.simulator;
+    if (sim?.wishlist && !Array.isArray(JSON.parse(sim.wishlist))) throw new Error('Lista de desejos inválida.');
     if (!sim || Array.isArray(sim) || Object.entries(sim).some(([key, value]) => !Vault.keys.includes(key) || typeof value !== 'string')) throw new Error('Dados do Firebase incompatíveis. A cópia anterior foi preservada.');
     if (!Number.isFinite(Number(sim.saldoDominadora || 0))) throw new Error('Saldo inválido no Firebase.');
     for (const key of ['historico', 'archivedHistory', 'tarefasPendentes', 'tarefasBloqueadas', 'accelBoosts', 'rouletteAwards']) if (!Array.isArray(JSON.parse(sim[key] || '[]'))) throw new Error('Lista inválida no Firebase: ' + key);
@@ -42,6 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   function state(next) {
     const mode = next.mode;
+    if (mode === 'error' || (received && ['watching', 'controlling'].includes(mode))) document.body.classList.remove('firebase-checking');
     const descriptions = {
       connecting: 'Conectando ao Firebase…',
       receiving: 'Recebendo a carteira do Firebase…',
@@ -108,6 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
     importAttempted = false;
     document.body.classList.add('firebase-required');
     if (!user) {
+      document.body.classList.remove('firebase-checking');
       currentUser = null;
       $('firebaseAccount').textContent = '';
       $('firebaseSignOut').hidden = true;
@@ -116,6 +119,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     currentUser = user;
+    document.body.classList.add('firebase-checking');
     $('firebaseAccount').textContent = user.email || '';
     $('firebaseSignOut').hidden = false;
     $('firebaseAuthMessage').textContent = 'Conferindo acesso à carteira…';
@@ -236,6 +240,7 @@ document.addEventListener('DOMContentLoaded', () => {
       session.watch((user) => void connect(user));
     })
     .catch((error) => {
+      document.body.classList.remove('firebase-checking');
       $('firebaseAuthMessage').textContent = message(error);
       WalletStore.setWritable(false);
     });

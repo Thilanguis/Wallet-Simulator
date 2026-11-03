@@ -89,7 +89,7 @@
       b = base.simulator,
       l = local.simulator,
       r = current.simulator;
-    const arrays = { historico: 'id', archivedHistory: 'id', tarefasPendentes: 'id', tarefasBloqueadas: 'nome', accelBoosts: 'id', rouletteAwards: 'id' };
+    const arrays = { wishlist: 'id', historico: 'id', archivedHistory: 'id', tarefasPendentes: 'id', tarefasBloqueadas: 'nome', accelBoosts: 'id', rouletteAwards: 'id' };
     for (const key of new Set([...Object.keys(b), ...Object.keys(l)])) {
       if (equal(b[key], l[key])) continue;
       if (key === 'saldoDominadora') {
@@ -101,6 +101,9 @@
         if (concurrent && additions.some((item) => item.tipo === 'ajuste')) conflict();
         if (!Number.isSafeInteger(result) || (concurrent && delta < 0 && result < 0 && !additions.some((item) => item.contractRule))) throw new Error('Saldo insuficiente após uma operação recebida do outro aparelho.');
         out.simulator[key] = String(result / 100);
+      } else if (key === 'wishlistFx') {
+        const localFx = JSON.parse(l[key] || 'null'), remoteFx = JSON.parse(r[key] || 'null');
+        out.simulator[key] = !remoteFx || localFx?.checkedAt > remoteFx.checkedAt ? l[key] : r[key];
       } else if (arrays[key]) {
         const previous = JSON.parse(b[key] || '[]'),
           localRows = JSON.parse(l[key] || '[]'),

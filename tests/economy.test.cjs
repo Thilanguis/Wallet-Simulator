@@ -36,9 +36,9 @@ test('timer integrates rate changes without retroactive gains, no rate or time c
   const s = E.defaults('balanced');
   let t = E.step({ seconds: 0, earnedUnits: 0, rate: 0.5 }, 60, s, true);
   assert.equal(t.earnedUnits / 6000, 0.5);
-  assert.equal(t.rate, 0.51);
+  assert.equal(t.rate, 0.55);
   t = E.step(t, 60, s, true);
-  assert.equal(t.earnedUnits / 6000, 1.01);
+  assert.equal(t.earnedUnits / 6000, 1.05);
   t = E.step(t, 100000, s, true);
   assert.equal(t.seconds, 100120);
   assert.ok(t.rate > 3);
@@ -80,7 +80,7 @@ test('distinct dynamic activity count adds automatic increments without repricin
   const one = E.step({ seconds: 0, earnedUnits: 0, rate: 0.5 }, 60, s, 1);
   const two = E.step({ seconds: 0, earnedUnits: 0, rate: 0.5 }, 60, s, 2);
   assert.equal(one.earnedUnits, two.earnedUnits);
-  assert.equal(one.rate, 0.51);
-  assert.equal(two.rate, 0.52);
+  assert.equal(one.rate, 0.55);
+  assert.equal(two.rate, 0.6);
   assert.throws(() => E.step({ seconds: 0, earnedUnits: 0, rate: 0.5 }, 60, s, -1));
 });

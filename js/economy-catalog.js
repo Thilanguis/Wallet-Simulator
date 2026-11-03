@@ -113,6 +113,7 @@
   }
   function format(input) {
     const lines = Object.entries(input).map(([key, value]) => {
+      if (key === 'timer') return '  "timer": ' + JSON.stringify(value, null, 2).replaceAll('\n', '\n  ');
       if (Array.isArray(value))
         return (
           '  ' +

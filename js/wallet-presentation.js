@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const gain = mode.value === 'ganho';
     $('transactionTitle').textContent = gain ? 'Ganhar Créditos' : 'Resgatar Privilégio';
     document.querySelectorAll('[data-jump="ganho"],[data-jump="gasto"]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.jump === mode.value)));
-    document.querySelector('.transaction-intro').textContent = gain ? 'Escolha a atividade para iniciar o tempo e registrar o ganho.' : 'Escolha o serviço e confira o preço antes de comprar.';
+    document.querySelector('.transaction-intro').textContent = gain ? 'Atividade → Registrar' : 'Privilégio → Resgatar';
   }
   mode.addEventListener('change', operation);
   operation();

@@ -26,8 +26,9 @@ function renderDynamicCombo() {
   const caption = document.createElement('p');
   caption.className = 'hint';
   caption.textContent = activeDynamicCount()
-    ? 'Combo: ' + activeDynamicCount() + ' atividade(s) · +' + formatBR(Economy.round(getEconomy().timer.autoIncrement * activeDynamicCount())) + ' a cada ' + getEconomy().timer.autoEvery + ' segundos · toque no × para encerrar uma dinâmica.'
-    : 'Seu combo aparece aqui ao registrar atividades 💲 durante a sessão.';
+    ? '💲 Combo ' + activeDynamicCount() + ' · +' + formatBR(Economy.round(getEconomy().timer.autoIncrement * activeDynamicCount())) + '/min · ' + getEconomy().timer.autoEvery + 's'
+    : '';
+  caption.hidden = !activeDynamicCount();
   area.append(caption);
   for (const name of sessionDynamicActivities) {
     const chip = document.createElement('button');

@@ -72,10 +72,6 @@ document.addEventListener('DOMContentLoaded', () => {
       <h2>6. Vigência e assinaturas</h2><p>Este documento representa a configuração atual do sistema e acompanha as alterações salvas no catálogo. É válido enquanto a dinâmica estiver ativa entre as partes. O PDF original é mantido como referência histórica.</p>
       <div class="contract-signatures"><p>Dominadora: __________________________________</p><p>Dominado: ____________________________________</p><p>Data: ____ / ____ / ________</p></div>`;
   }
-  $('abrirContrato').onclick = () => {
-    document.querySelector('[data-panel="contractPanel"]').click();
-    $('contractPanel').scrollIntoView({ block: 'start' });
-  };
   $('editContractValues').onclick = () => {
     document.querySelector('[data-panel="backupPanel"]').click();
     $('customEconomy').open = true;

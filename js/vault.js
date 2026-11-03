@@ -5,6 +5,8 @@
   else root.Vault = api;
 })(typeof window === 'object' ? window : globalThis, function () {
   const keys = [
+    'wishlist',
+    'wishlistFx',
     'saldoDominadora',
     'historico',
     'tarefasPendentes',

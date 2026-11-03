@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let changed = false;
     for (const award of awards) {
       if (award.claimed || award.kind !== 'freeService') continue;
-      const item = Economy.config.services.find((service) => service.id === award.serviceId);
+      const item = Economy.config.services.find((service) => service.id === award.serviceId) || Economy.config.rouletteServices.find((service) => service.id === award.serviceId);
       if (!item) continue;
       const recorded = tasks.some((task) => String(task.id) === String(award.id) || task.rouletteAwardId === award.id) || [...history, ...archived].some((entry) => entry.id === 'prize:' + award.id);
       if (!recorded) {
@@ -43,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
     container.hidden = !available.length;
     container.innerHTML = available
       .map((award) => {
-        const item = Economy.config.services.find((service) => service.id === award.serviceId);
+        const item = Economy.config.services.find((service) => service.id === award.serviceId) || Economy.config.rouletteServices.find((service) => service.id === award.serviceId);
         const label = award.kind === 'bonus' ? 'Ativar bônus lingerie' : 'Ativar redutor: ' + (item?.label || 'redução de prazo');
         return '<button type="button" data-claim="' + escapeHTML(award.id) + '">' + escapeHTML(label) + '</button>';
       })
@@ -68,7 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
       checkbox.checked = true;
       checkbox.dispatchEvent(new Event('change'));
     } else if (award.kind === 'reducer') {
-      const item = Economy.config.services.find((s) => s.id === award.serviceId),
+      const item = Economy.config.services.find((s) => s.id === award.serviceId) || Economy.config.rouletteServices.find((s) => s.id === award.serviceId),
         hours = item.reduceHours || 96;
       const total = hours * 3600000,
         duration = Economy.config.reducerDurationMs;

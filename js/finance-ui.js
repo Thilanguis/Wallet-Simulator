@@ -46,6 +46,8 @@ document.addEventListener('DOMContentLoaded', () => {
     F.categories.forEach((c) => $(key).add(new Option(c, c)));
   }
   $('entryDate').value = today();
+  $('financeAdd').append($('entryForm').parentElement);
+  $('financeImport').append($('financeImportTitle').parentElement);
   $('importDate').value = today();
   document.querySelectorAll('[data-panel]').forEach(
     (button) =>
@@ -130,6 +132,9 @@ document.addEventListener('DOMContentLoaded', () => {
       entries = F.filtered(state.entries, filters()),
       t = F.totals(entries, state.budget);
     $('groupedFinanceList').innerHTML = notebookHTML(state.entries, true);
+    const totalRow = $('groupedFinanceList').querySelector('.notebook-grand-total');
+    const totalLabel = document.createElement('span'); totalLabel.textContent = 'Total Geral Atualizado 🔥';
+    $('financeTopTotal').replaceChildren(totalLabel, totalRow.querySelector('output')); totalRow.remove();
     $('homeTotal').textContent = F.format(all.total);
     $('homeRemaining').textContent = F.format(all.remaining);
     $('homeRemaining').classList.toggle('negative', all.remaining < 0);
@@ -191,7 +196,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $('saveEntry').textContent = edit ? 'Confirmar correção' : 'Confirmar e registrar compra';
     $('cancelEdit').hidden = false;
     $('entryOrigin').textContent = entry.originalMoney?.length ? 'Valores originais preservados: ' + entry.originalMoney.map((m) => F.format(m.amount, m.currency)).join(' = ') : '';
-    if (!editPopup) $('entryForm').scrollIntoView({ block: 'start' });
+    if (!editPopup) { $('financeAdd').open = true; $('entryForm').scrollIntoView({ block: 'nearest' }); }
   }
   $('entryForm').onsubmit = async (event) => {
     event.preventDefault();
@@ -403,15 +408,16 @@ document.addEventListener('DOMContentLoaded', () => {
   $('cancelEdit').onclick = () => (editPopup ? closeInlineEditor() : resetForm());
   document.querySelectorAll('[data-finance-jump]').forEach(
     (button) =>
-      (button.onclick = () => {
+      (button.onclick = (event) => {
         const target = button.dataset.financeJump;
         if (target === 'entry') {
-          resetForm();
-          $('entryForm').scrollIntoView({ block: 'start' });
-          $('entryDescription').focus();
+          event.preventDefault(); $('financeAdd').open = !$('financeAdd').open;
+          if (!$('financeAdd').open) return;
+          $('entryDescription').focus({ preventScroll: true });
           return;
         }
         const toggle = $(target === 'receipt' ? 'receiptToggle' : 'importListToggle');
+        $('financeImport').open = true;
         toggle.closest('details').open = true;
         toggle.scrollIntoView({ block: 'start' });
         $(target === 'receipt' ? 'receiptFile' : 'whatsappInput').focus();
@@ -509,6 +515,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   function renderPreview() {
     const p = proposed;
+    $('financeImport').open = true;
     $('importPreview').hidden = false;
     renderPreviewTotals();
     $('importRows').innerHTML = p.rows

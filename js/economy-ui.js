@@ -59,7 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('quantidadeMultiplicador').max = economySettings.quantityMax;
     const rules = [
       ['Base', formatBR(economySettings.timer.base) + '/min'],
-      ['Por registro', 'Calculando faixa…'],
+      ['Por registro', 'Conforme atividade'],
       ['Dinâmico 💲', '+' + formatBR(economySettings.timer.autoIncrement) + '/min a cada ' + economySettings.timer.autoEvery + 's por atividade'],
     ];
     document.querySelectorAll('[data-timer-summary]').forEach((el) => {
@@ -75,6 +75,28 @@ document.addEventListener('DOMContentLoaded', () => {
         rule.append(name, amount);
         el.append(rule);
       }
+    });
+
+    const number = (value) => new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 6 }).format(value);
+    const money = (value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 6 }).format(value);
+    const timer = economySettings.timer;
+    const guide = {
+      base: money(timer.base) + '/min ao começar uma nova sessão. É uma taxa por minuto; o ganho é acumulado segundo a segundo.',
+      autoEvery: number(timer.autoEvery) + ' segundos entre aumentos automáticos. Não é o intervalo de pagamento da taxa inicial.',
+      autoIncrement:
+        '+' +
+        money(timer.autoIncrement) +
+        '/min na taxa a cada ' +
+        number(timer.autoEvery) +
+        ' segundos, por atividade 💲 distinta ativa no combo. Duas atividades somam +' +
+        money(Economy.round(timer.autoIncrement * 2)) +
+        '/min por intervalo. Repetir a mesma não cria outro espaço no combo.',
+      repeatIncrement:
+        'Número do registro na sessão × ' + money(timer.repeatIncrement) + '/min: 1º = ' + money(timer.repeatIncrement) + '/min; 2º = ' + money(timer.repeatIncrement * 2) + '/min. Essa parcela é somada à faixa da atividade antes do arredondamento.',
+      taskScale: 'Fator ' + number(timer.taskScale) + ' multiplicado pela faixa interna da atividade. Não é dinheiro nem percentual de bônus. Ajusta o aumento por registro de todas as atividades.',
+    };
+    document.querySelectorAll('[data-timer-guide]').forEach((el) => {
+      el.textContent = guide[el.dataset.timerGuide];
     });
 
     document.getElementById('customEconomyJson').value = EconomyCatalog.format(EconomyCatalog.document(economySettings));
