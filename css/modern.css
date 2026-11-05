@@ -2996,7 +2996,7 @@ body:not(.firebase-required) #firebaseAuthPanel {
   font-size: 11px;
   box-shadow: none;
 }
-.firebase-required .account-menu {
+.firebase-required:not(.firebase-authenticated) .account-menu {
   display: none;
 }
 .firebase-auth-panel {

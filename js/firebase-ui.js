@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let session = null,
     engine = null,
     currentUser = null,
+    connectionError = null,
     generation = 0,
     received = false,
     importAttempted = false,
@@ -43,6 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   function state(next) {
     const mode = next.mode;
+    connectionError = mode === 'error' ? next.error : null;
     if (mode === 'error' || (received && ['watching', 'controlling'].includes(mode))) document.body.classList.remove('firebase-checking');
     const descriptions = {
       connecting: 'Conectando ao Firebase…',
@@ -65,6 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
       document.body.classList.add('firebase-required');
       $('firebaseAuthMessage').textContent = text;
     }
+    $('firebaseAuthTitle').textContent = currentUser ? 'Conexão com a carteira' : 'Entrar na carteira';
     if (received && ['watching', 'controlling'].includes(mode)) document.body.classList.remove('firebase-required');
     if (!received && mode === 'error') $('firebaseAuthMessage').textContent = text;
     window.dispatchEvent(new Event('cloud:state'));
@@ -108,13 +111,18 @@ document.addEventListener('DOMContentLoaded', () => {
     received = false;
     activated = false;
     importAttempted = false;
+    connectionError = null;
+    document.body.classList.toggle('firebase-authenticated', Boolean(user));
     document.body.classList.add('firebase-required');
+    $('googleSignIn').hidden = Boolean(user);
+    $('retryFirebaseConnection').hidden = true;
     if (!user) {
       document.body.classList.remove('firebase-checking');
       currentUser = null;
       $('firebaseAccount').textContent = '';
       $('firebaseSignOut').hidden = true;
       $('cloudStatusBar').hidden = true;
+      $('firebaseAuthTitle').textContent = 'Entrar na carteira';
       $('firebaseAuthMessage').textContent = 'Entre com sua conta Google para carregar a carteira do Firebase.';
       return;
     }
@@ -197,7 +205,10 @@ document.addEventListener('DOMContentLoaded', () => {
     await engine?.flush();
     await session.signOut();
   };
-  $('reconnectCloud').onclick = $('retryFirebaseConnection').onclick = () => connect(currentUser);
+  $('reconnectCloud').onclick = $('retryFirebaseConnection').onclick = () => {
+    if (currentUser) void connect(currentUser);
+    else if (!session) location.reload();
+  };
   $('exportCloudRecovery').hidden = !localStorage.getItem(recoveryKey);
   $('exportCloudRecovery').onclick = () => {
     const saved = localStorage.getItem('findom.firebase.unsent.v4') || localStorage.getItem(recoveryKey);
@@ -227,8 +238,13 @@ document.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('offline', () => {
     engine?.suspend(new Error('Sem conexão com o Firebase. A sessão foi pausada; novas operações aguardam a reconexão.'));
   });
-  window.addEventListener('online', () => {
-    if (currentUser && engine?.state().mode === 'error') void connect(currentUser);
+  function resumeConnection() {
+    if (currentUser && navigator.onLine && connectionError && connectionError.code !== 'permission-denied') void connect(currentUser);
+  }
+  window.addEventListener('online', resumeConnection);
+  window.addEventListener('pageshow', resumeConnection);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') resumeConnection();
   });
   window.addEventListener('pagehide', () => {
     void engine?.flush();
@@ -241,7 +257,10 @@ document.addEventListener('DOMContentLoaded', () => {
     })
     .catch((error) => {
       document.body.classList.remove('firebase-checking');
+      $('firebaseAuthTitle').textContent = 'Conexão com a carteira';
       $('firebaseAuthMessage').textContent = message(error);
+      $('googleSignIn').hidden = true;
+      $('retryFirebaseConnection').hidden = false;
       WalletStore.setWritable(false);
     });
 });
