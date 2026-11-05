@@ -69,6 +69,12 @@
         if (group === 'games') {
           result.amount = amount;
           result.scoreBased = item.scoreBased !== false;
+          delete result.pointValue;
+          if (item.pointValue !== undefined) {
+            const value = item.pointValue;
+            if (!Number.isFinite(value) || value <= 0 || value > 1000000 || E.round(value) !== value) throw new Error(item.id + ': pointValue deve ser positivo, com até duas casas decimais.');
+            result.pointValue = value;
+          }
         } else {
           result.balanced = amount;
           result.classic = old?.classic ?? item.classic ?? amount;

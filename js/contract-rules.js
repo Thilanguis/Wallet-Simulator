@@ -1,9 +1,9 @@
 'use strict';
 document.addEventListener('DOMContentLoaded', () => {
   const $ = (id) => document.getElementById(id);
-  function isGame() {
-    return Economy.config.games.some((item) => item.id === $('selectGanho').value && item.scoreBased !== false);
-  }
+  const selectedGame = () => Economy.config.games.find((item) => item.id === $('selectGanho').value && item.scoreBased !== false);
+  const isGame = () => Boolean(selectedGame());
+  let previousGameId, previousPointValue;
   function calculate() {
     const winner = Number($('scoreWinner').value),
       other = Number($('scoreOther').value);
@@ -32,6 +32,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
   function update() {
+    const game = selectedGame();
+    const input = $('scoreCoefficient');
+    const pointValue = game?.pointValue;
+    if (game?.id !== previousGameId || pointValue !== previousPointValue) {
+      input.value = pointValue === undefined ? '' : pointValue.toFixed(2).replace('.', ',');
+    }
+    previousGameId = game?.id;
+    previousPointValue = pointValue;
     $('gameScoreCalculator').hidden = !isGame();
     if (!isGame()) $('gameScoreCalculator').open = false;
     preview();
