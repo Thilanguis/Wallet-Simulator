@@ -20,6 +20,8 @@
     'economyCatalogBaseline',
     'economyCatalog',
     'catalogExternalGamesSeparated',
+    // Recognize the catalog migration marker already stored in Firebase.
+    'privilegePrices20261105',
     'timerSession',
     'archivedHistory',
     'rouletteSpin',

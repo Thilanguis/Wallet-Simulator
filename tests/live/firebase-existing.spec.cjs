@@ -2,6 +2,22 @@ const { test, expect } = require('@playwright/test');
 const { hub } = require('./firebase-primary-hub.cjs');
 const Finance = require('../../js/finance.js');
 const root = 'usuarios/gabriel-local';
+test('an authenticated client opens the wallet with the privilege price migration marker', async ({ page }) => {
+  const raw = { saldoDominadora: 1000, bonusEspecialAtivo: false, tarefasBloqueadas: [], accelBoosts: [] };
+  const Primary = require('../../js/firebase-primary-model.js');
+  const canonical = Primary.bootstrap(raw, {}, { simulator: {}, emptyFinance: Finance.empty() });
+  canonical.simulator.privilegePrices20261105 = '1';
+  const server = await hub({ [root]: { ...raw, walletAtualV4: canonical } });
+
+  await page.setViewportSize({ width: 393, height: 852 });
+  await server.attach(page);
+  await expect(page.locator('#firebaseAuthPanel')).toBeHidden();
+  await expect(page.locator('#saldoDominadora')).toHaveText('R$ 1.000,00');
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  expect(await page.evaluate(() => AppStorage.getItem('privilegePrices20261105'))).toBe('1');
+  expect(server.docs.get(root).walletAtualV4.simulator.privilegePrices20261105).toBe('1');
+});
+
 for (const width of [1440, 393, 820])
   test(`Firebase principal ${width}: server money and bonus load automatically before any operation`, async ({ browser }) => {
     const server = await hub({
