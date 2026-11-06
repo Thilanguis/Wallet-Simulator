@@ -75,6 +75,15 @@ document.addEventListener('DOMContentLoaded', () => {
   function entryHTML(e) {
     return `<article class="finance-entry" data-entry="${esc(e.id)}"><header><label class="entry-select"><input type="checkbox" data-select-entry="${esc(e.id)}" aria-label="Selecionar ${esc(e.description)}" ${e.redemptionId ? 'disabled' : ''} /><strong>${esc(e.description)}</strong></label><strong>${F.format(e.amount, e.currency)}</strong></header><p>${esc(e.date || 'Data não informada')} · ${esc(e.category)}${e.store ? ' · ' + esc(e.store) : ''}</p>${e.note ? `<p class="hint finance-note">${esc(e.note)}</p>` : ''}<span class="status ${e.status}">${statusLabel(e)}</span>${e.redemptionId ? '<span class="status">Registro vinculado · protegido</span>' : ''}<div><button data-action="edit">Editar / corrigir</button><button data-action="status">Alterar situação</button><button data-action="refund">Estornar</button><button data-action="delete" class="danger">Excluir</button></div></article>`;
   }
+  function notebookDates(entries) {
+    const dates = entries.map((entry) => entry.date);
+    const shared = dates.every((date) => date === dates[0]);
+    const labels = (shared ? dates.slice(0, 1) : dates).map((date, index) => {
+      const label = date ? `<time datetime="${esc(date)}">${esc(date.split('-').reverse().join('/'))}</time>` : 'Sem data';
+      return shared ? label : `${index + 1}. ${label}`;
+    });
+    return ` <span class="note-dates">${labels.join(' · ')}</span>`;
+  }
   function notebookHTML(listEntries, editable = false) {
     const { groups, total } = FinanceList.calculate(listEntries);
     return (
@@ -102,6 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
                   (controls ? '<button type="button" class="note-icon note-grip" draggable="true" data-note-drag aria-label="Mover item" title="Arraste para reordenar ou mudar de grupo. Pelo teclado: Alt + setas.">⠿</button>' : '') +
                   '<span class="note-content">' +
                   esc(FinanceList.rowText(row, group.category === F.categories[7])) +
+                  (editable ? notebookDates(row.entries) : '') +
                   '</span>' +
                   (controls
                     ? '<span class="note-tools">' +

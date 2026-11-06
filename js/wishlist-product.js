@@ -12,7 +12,15 @@
     const name = parts.at(-2) === 'com' || parts.at(-2) === 'co' ? parts.at(-3) : parts.at(-2);
     return (name || host).replace(/^./, (c) => c.toUpperCase());
   }
-  function read(doc, host) {
+  function imageUrl(value, base) {
+    if (typeof value !== 'string' || !value.trim() || value.length > 4096) return null;
+    try {
+      const url = new URL(value, base);
+      if (['https:', 'http:'].includes(url.protocol) && !url.username && !url.password) return url.href;
+    } catch {}
+    return null;
+  }
+  function read(doc, host, pageUrl) {
     const meta = (selector) => doc.querySelector(selector)?.content;
     let product;
     function visit(value) {
@@ -35,12 +43,15 @@
     const raw = offer.price ?? offer.lowPrice ?? offer.priceSpecification?.price ?? meta('meta[property="product:price:amount"],meta[property="og:price:amount"],meta[itemprop="price"]');
     const currency = String(offer.priceCurrency || offer.priceSpecification?.priceCurrency || meta('meta[property="product:price:currency"],meta[property="og:price:currency"],meta[itemprop="priceCurrency"]') || '').toUpperCase();
     const price = raw == null ? null : Number(String(raw).replace(/\s/g, ''));
+    const images = [product?.image].flat().flatMap((item) => (typeof item === 'string' ? [item] : [item?.contentUrl, item?.url]));
+    images.push(...Array.from(doc.querySelectorAll('meta[property="og:image"],meta[property="og:image:secure_url"],meta[name="twitter:image"],meta[property="twitter:image"]'), (tag) => tag.content));
     return {
       title: String(product?.name || meta('meta[property="og:title"]') || doc.title || '').slice(0, 300),
       store: store(host, meta('meta[property="og:site_name"]')),
       price: Number.isFinite(price) && price >= 0 ? price : null,
       currency: /^[A-Z]{3}$/.test(currency) ? currency : null,
+      imageUrl: images.map((value) => imageUrl(value, pageUrl)).find(Boolean) || null,
     };
   }
-  return { store, read };
+  return { store, read, imageUrl };
 });

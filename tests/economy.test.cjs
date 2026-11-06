@@ -9,8 +9,8 @@ test('classic prices/gains preserved, balanced nonuniform and catalog complete',
   E.config.services.forEach((s) => assert.equal(a.prices[s.id], s.classic));
   assert.ok(new Set(E.config.services.map((s) => s.balanced / s.classic)).size > 5);
   assert.deepEqual(
-    E.config.services.slice(0, 12).map((s) => s.balanced),
-    [30, 50, 60, 70, 80, 90, 110, 130, 130, 220, 280, 450],
+    E.config.services.map((s) => s.balanced),
+    [180, 240, 330, 390, 450, 500, 650, 750, 850, 1200, 1800, 3000, 320, 560, 950, 2000, 2800],
   );
   assert.ok(b.prices[E.config.services[0].id] < a.prices[E.config.services[0].id]);
 });
@@ -68,8 +68,8 @@ test('catalog reconciliation accepts new array entries and preserves existing cu
 test('dinner quote applies guest supplement before one discount and validates quantities', () => {
   const settings = E.defaults();
   const item = E.config.services.find((item) => item.id === 'Cozinhar jantar');
-  assert.deepEqual(E.serviceCost(settings, item, 2, true), { original: 130, extra: 20, discounted: true, final: 110.5 });
-  assert.equal(E.serviceCost(settings, item, 0, false).final, 110);
+  assert.deepEqual(E.serviceCost(settings, item, 2, true), { original: 670, extra: 20, discounted: true, final: 569.5 });
+  assert.equal(E.serviceCost(settings, item, 0, false).final, 650);
   assert.throws(() => E.serviceCost(settings, item, -1));
   assert.throws(() => E.serviceCost(settings, item, 1.5));
   assert.throws(() => E.validate({ ...E.defaults('custom'), contractRules: { failurePenalty: -1, creamPenalty: 40, dinnerGuestPrice: 10 } }));

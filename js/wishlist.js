@@ -4,7 +4,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let editing = null,
     request = null,
     revision = 0,
-    autoRead = null;
+    autoRead = null,
+    draftImage = null;
   function conversion() {
     const value = $('wishPrice').value === '' ? null : Number($('wishPrice').value),
       currency = $('wishCurrency').value;
@@ -26,12 +27,31 @@ document.addEventListener('DOMContentLoaded', () => {
     AppStorage.flush();
     render();
   }
+  function thumbnail(value, lazy = false) {
+    const url = WishProduct.imageUrl(value);
+    if (!url) return null;
+    const image = document.createElement('img');
+    image.className = 'wish-thumbnail';
+    image.alt = '';
+    image.decoding = 'async';
+    image.referrerPolicy = 'no-referrer';
+    if (lazy) image.loading = 'lazy';
+    image.addEventListener('error', () => image.remove(), { once: true });
+    image.src = url;
+    return image;
+  }
+  function showDraftImage(value) {
+    draftImage = WishProduct.imageUrl(value);
+    const image = thumbnail(draftImage);
+    $('wishImagePreview').replaceChildren(...(image ? [image] : []));
+  }
   function reset() {
     editing = null;
     revision++;
     request?.abort();
     clearTimeout(autoRead);
     $('wishForm').reset();
+    showDraftImage(null);
     $('wishCancel').hidden = true;
     $('wishSave').textContent = 'Adicionar desejo';
     message('');
@@ -75,12 +95,19 @@ document.addEventListener('DOMContentLoaded', () => {
         check.setAttribute('aria-label', 'Comprado: ' + item.title);
         check.onchange = () => save(rows().map((x) => (x.id === item.id ? { ...x, bought: check.checked, updatedAt: Date.now() } : x)));
         const anchor = document.createElement('a');
+        anchor.className = 'wish-product-link';
         anchor.textContent = item.title;
         anchor.target = '_blank';
         anchor.rel = 'noopener noreferrer';
         try {
           anchor.href = link(item.url).href;
         } catch {}
+        const image = thumbnail(item.imageUrl, true);
+        if (image) {
+          const title = document.createElement('span');
+          title.textContent = item.title;
+          anchor.replaceChildren(image, title);
+        }
         if (item.bought) anchor.classList.add('is-bought');
         const price = document.createElement('span');
         const original = item.originalPrice ?? item.price,
@@ -97,6 +124,7 @@ document.addEventListener('DOMContentLoaded', () => {
           editing = item.id;
           $('wishEditor').open = true;
           $('wishUrl').value = item.url;
+          showDraftImage(item.imageUrl);
           $('wishTitle').value = item.title;
           $('wishStore').value = item.store;
           $('wishPrice').value = item.originalPrice ?? item.price ?? '';
@@ -136,7 +164,7 @@ document.addEventListener('DOMContentLoaded', () => {
         previous = list.find((x) => x.id === editing);
       if (editing && !previous) throw new Error('Este desejo foi removido no outro aparelho.');
       const currency = $('wishCurrency').value;
-      const next = { ...previous, id: editing || crypto.randomUUID(), url, title, store, originalPrice: price, currency, price: price == null ? null : WishFx.convert(price, currency), bought: previous?.bought || false, updatedAt: Date.now() };
+      const next = { ...previous, id: editing || crypto.randomUUID(), url, title, store, originalPrice: price, currency, price: price == null ? null : WishFx.convert(price, currency), bought: previous?.bought || false, updatedAt: Date.now(), imageUrl: draftImage || undefined };
       save(editing ? list.map((x) => (x.id === editing ? next : x)) : [...list, next]);
       reset();
       $('wishEditor').open = false;
@@ -153,9 +181,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const timeout = setTimeout(() => controller.abort(), 8000);
     try {
       const url = link($('wishUrl').value);
-      $('wishTitle').value = '';
-      $('wishPrice').value = '';
-      $('wishStore').value = WishProduct.store(url.hostname);
+      const savedItem = editing && rows().find((item) => item.id === editing);
+      const refreshImage = savedItem?.url === url.href;
+      if (!refreshImage) {
+        $('wishTitle').value = '';
+        $('wishPrice').value = '';
+        $('wishStore').value = WishProduct.store(url.hostname);
+      }
       message('Lendo link…');
       const response = await fetch(url.href, { credentials: 'omit', referrerPolicy: 'no-referrer', signal: request.signal });
       if (!response.ok || !response.headers.get('content-type')?.includes('text/html')) throw new Error();
@@ -163,17 +195,19 @@ document.addEventListener('DOMContentLoaded', () => {
       if (text.length > 2000000) throw new Error();
       const doc = new DOMParser().parseFromString(text, 'text/html');
       if (token !== revision) return;
-      $('wishTitle').value = (doc.querySelector('meta[property="og:title"]')?.content || doc.title || '').slice(0, 300);
-      const product = WishProduct.read(doc, url.hostname);
-      $('wishTitle').value = product.title;
-      $('wishStore').value = product.store;
-      $('wishPrice').value = product.price ?? '';
-      selectCurrency(product.currency || (url.hostname.startsWith('ca.') ? 'CAD' : 'BRL'));
-      conversion();
-      void WishFx.refresh();
-      message('Prévia pronta. Confira antes de adicionar.');
+      const product = WishProduct.read(doc, url.hostname, response.url || url.href);
+      if (product.imageUrl) showDraftImage(product.imageUrl);
+      if (!refreshImage) {
+        $('wishTitle').value = product.title;
+        $('wishStore').value = product.store;
+        $('wishPrice').value = product.price ?? '';
+        selectCurrency(product.currency || (url.hostname.startsWith('ca.') ? 'CAD' : 'BRL'));
+        conversion();
+        void WishFx.refresh();
+      }
+      message(refreshImage ? (product.imageUrl ? 'Foto encontrada. Salve para exibir na lista.' : 'A loja não informou uma foto para este produto.') : 'Prévia pronta. Confira antes de adicionar.');
     } catch {
-      if (token === revision) message('A loja não permitiu a leitura. Preencha produto e valor.');
+      if (token === revision) message(editing ? 'A loja não permitiu atualizar a prévia.' : 'A loja não permitiu a leitura. Preencha produto e valor.');
     } finally {
       clearTimeout(timeout);
     }
@@ -181,6 +215,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('wishUrl').addEventListener('input', () => {
     revision++;
     request?.abort();
+    showDraftImage(null);
     clearTimeout(autoRead);
     try {
       link($('wishUrl').value);

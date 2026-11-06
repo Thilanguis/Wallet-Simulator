@@ -1,5 +1,6 @@
 'use strict';
 let economySettings;
+const newPrivilegePrices = Economy.defaults().prices;
 function loadEconomy() {
   try {
     const stored = AppStorage.getItem('economy');
@@ -19,12 +20,24 @@ function loadEconomy() {
         catalog = JSON.stringify(data);
       }
     }
+    const updatePrivilegePrices = AppStorage.getItem('privilegePrices20261105') !== '1';
+    if (updatePrivilegePrices) {
+      if (previous?.prices) Object.assign(previous.prices, newPrivilegePrices);
+      if (catalog) {
+        const data = JSON.parse(catalog);
+        for (const service of data.services) {
+          if (Object.hasOwn(newPrivilegePrices, service.id)) service.price = newPrivilegePrices[service.id];
+        }
+        catalog = JSON.stringify(data);
+      }
+    }
     if (catalog) EconomyCatalog.apply(EconomyCatalog.prepare(JSON.parse(catalog), previous || Economy.defaults()).catalog);
     economySettings = Economy.syncCatalog(previous, JSON.parse(AppStorage.getItem('economyCatalogBaseline') || 'null'));
     AppStorage.setItem('economyCatalogBaseline', JSON.stringify(Economy.defaults('custom')));
     if (previous?.mode === 'classic') AppStorage.setItem('economyBeforeBalanced', stored);
     AppStorage.setItem('economy', JSON.stringify(economySettings));
     if (catalog) AppStorage.setItem('economyCatalog', catalog);
+    if (updatePrivilegePrices) AppStorage.setItem('privilegePrices20261105', '1');
     AppStorage.setItem('catalogExternalGamesSeparated', '3');
   } catch {
     economySettings = Economy.defaults('balanced');

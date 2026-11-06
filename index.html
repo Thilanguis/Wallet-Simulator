@@ -524,6 +524,7 @@
         <form id="wishForm">
           <div class="wish-link-row"><label>Produto ou link<input id="wishUrl" type="url" required placeholder="Cole o link do produto" /></label><button id="wishRead" type="button">Atualizar prévia</button></div>
           <p id="wishMessage" class="hint" role="status"></p>
+          <div id="wishImagePreview"></div>
           <div class="form-grid"><label>Produto<input id="wishTitle" maxlength="300" required /></label><label>Loja<input id="wishStore" maxlength="150" required /></label><label>Preço original<input id="wishPrice" type="number" min="0" step="0.01" /></label><label>Moeda<select id="wishCurrency"><option>BRL</option><option>CAD</option><option>USD</option><option>EUR</option><option>GBP</option><option>AUD</option><option>JPY</option><option>CNY</option><option>CHF</option></select></label></div>
           <p id="wishConversion" class="hint" role="status"></p>
           <div class="btn-row"><button type="submit" id="wishSave">Adicionar desejo</button><button type="button" id="wishCancel" class="subtle-btn" hidden>Cancelar edição</button></div>

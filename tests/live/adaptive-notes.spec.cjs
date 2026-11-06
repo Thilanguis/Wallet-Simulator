@@ -8,6 +8,9 @@ for (const width of [1280, 390, 320]) {
     const before = await page.evaluate(() => {
       const text = '1. Perfil\n• Jogo em partes: R$ 12,00 + R$ 3,00\n2. Match Masters\n• R$ 10,00 + R$ 2,00 + R$ 3,00\n3. Comida para Luana e Mel\n• $5 dólares = R$ 20,00\n4. Lista de Compras\n• Compra fictícia ✅: R$ 40,00';
       const state = Finance.commitPreview(Finance.empty(), Finance.preview(text, [], ''));
+      const profile = state.entries.filter((entry) => entry.category === 'Perfil');
+      profile[0].date = '2026-09-10';
+      profile[1].date = '2026-09-12';
       WalletStore.commitFinance(state);
       return { state, text: FinanceList.text(state.entries) };
     });
@@ -17,6 +20,8 @@ for (const width of [1280, 390, 320]) {
     await expect(notes.locator('.notebook-group')).toHaveCount(9);
     await expect(notes.locator('details, .note-amount, .note-values')).toHaveCount(0);
     await expect(notes.locator('[data-note-group="Perfil"] .note-content')).toContainText(/12,00.*3,00/);
+    await expect(notes.locator('[data-note-group="Perfil"] .note-dates')).toHaveText('1. 10/09/2026 · 2. 12/09/2026');
+    await expect(notes.locator('[data-note-group="Lista de Compras"] .note-dates')).toHaveText('Sem data');
     await expect(notes.locator('[data-note-group="Comida para Luana e Mel"] .note-content')).toContainText(/5,00 = R\$/);
     await expect(page.locator('#financeTopTotal [data-grand-total]')).toContainText('90,00');
     expect(await page.locator('#financeTopTotal').evaluate(el => el.getBoundingClientRect().top < document.getElementById('groupedFinanceList').getBoundingClientRect().top)).toBe(true);

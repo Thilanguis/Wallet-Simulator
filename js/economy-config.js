@@ -12,7 +12,7 @@
         description: 'Aturar tudo mesmo que doa',
         label: 'Tirar cravos',
         classic: 1500,
-        balanced: 30,
+        balanced: 180,
         reduceHours: 0,
       },
       {
@@ -20,7 +20,7 @@
         description: 'Proibido Ásia',
         label: 'Vale escolher filme/série 🚫🇰🇷',
         classic: 3000,
-        balanced: 50,
+        balanced: 240,
         reduceHours: 0,
       },
       {
@@ -28,7 +28,7 @@
         description: 'Sem creme se tiver chulé',
         label: 'Massagem nos pés',
         classic: 3500,
-        balanced: 60,
+        balanced: 330,
         reduceHours: 0,
       },
       {
@@ -36,7 +36,7 @@
         description: 'Servir na cama',
         label: 'Café da manhã na cama',
         classic: 4000,
-        balanced: 70,
+        balanced: 390,
         reduceHours: 0,
       },
       {
@@ -44,7 +44,7 @@
         description: 'Ficar no chão',
         label: 'Lavar os pés e esfoliar',
         classic: 4500,
-        balanced: 80,
+        balanced: 450,
         reduceHours: 0,
       },
       {
@@ -52,7 +52,7 @@
         description: 'Relaxamento profundo',
         label: 'Massagem',
         classic: 5000,
-        balanced: 90,
+        balanced: 500,
         reduceHours: 0,
       },
       {
@@ -60,7 +60,7 @@
         description: 'Dominado à disposição durante o jantar',
         label: 'Cozinhar jantar',
         classic: 6000,
-        balanced: 110,
+        balanced: 650,
         reduceHours: 0,
       },
       {
@@ -68,7 +68,7 @@
         description: 'Liberdade social',
         label: 'Vale sair sozinha com amiga',
         classic: 6500,
-        balanced: 130,
+        balanced: 750,
         reduceHours: 0,
       },
       {
@@ -77,7 +77,7 @@
         description: 'Intensifica sensação de controle',
         label: 'Obrigação de servir (2 tarefas)',
         classic: 6500,
-        balanced: 130,
+        balanced: 850,
         reduceHours: 0,
       },
       {
@@ -85,7 +85,7 @@
         description: 'Permitido Ásia',
         label: 'Vale escolher FILME ✔️🇰🇷',
         classic: 12250,
-        balanced: 220,
+        balanced: 1200,
         reduceHours: 0,
       },
       {
@@ -93,7 +93,7 @@
         description: 'Dominado obedece tudo',
         label: 'Ela decide toda a agenda do dia',
         classic: 15000,
-        balanced: 280,
+        balanced: 1800,
         reduceHours: 0,
       },
       {
@@ -105,7 +105,7 @@
         description: 'Dominado compra tudo ate 60 dólares',
         label: 'Ganha 60 dólares na vida real',
         classic: 25000,
-        balanced: 450,
+        balanced: 3000,
         reduceHours: 0,
       },
       {
@@ -113,7 +113,7 @@
         description: 'Aceleração ⏳ (Reduz 6h por 1mins)',
         label: 'Reduzir 6h ⌛',
         classic: 2000,
-        balanced: 40,
+        balanced: 320,
         reduceHours: 6,
       },
       {
@@ -121,7 +121,7 @@
         description: 'Aceleração ⏳ (Reduz 12h por 1mins)',
         label: 'Reduzir 12h ⌛',
         classic: 3500,
-        balanced: 60,
+        balanced: 560,
         reduceHours: 12,
       },
       {
@@ -129,7 +129,7 @@
         description: 'Aceleração ⏳ (Reduz 1d por 1mins)',
         label: 'Reduzir 1 dia ⌛',
         classic: 6000,
-        balanced: 110,
+        balanced: 950,
         reduceHours: 24,
       },
       {
@@ -137,7 +137,7 @@
         description: 'Aceleração ⏳ (Reduz 3d por 1mins)',
         label: 'Reduzir 3 dias ⌛',
         classic: 11000,
-        balanced: 200,
+        balanced: 2000,
         reduceHours: 72,
       },
       {
@@ -145,7 +145,7 @@
         description: 'Aceleração ⏳ (Reduz 4d por 1mins)',
         label: 'Reduzir 4 dias ⌛',
         classic: 18000,
-        balanced: 330,
+        balanced: 2800,
         reduceHours: 0,
       },
     ],

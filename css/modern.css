@@ -2551,6 +2551,13 @@ html:has(dialog[open]) {
   white-space: pre-line;
   overflow-wrap: anywhere;
 }
+#groupedFinanceList .note-dates {
+  margin-inline-start: 6px;
+  color: #afa796;
+  font-size: 0.86em;
+  font-variant-numeric: tabular-nums;
+}
+#groupedFinanceList .note-dates time { white-space: nowrap; }
 #groupedFinanceList .note-tools {
   flex-wrap: wrap;
   max-width: 118px;
@@ -2860,6 +2867,9 @@ body:not(.firebase-required) #firebaseAuthPanel {
 .wish-group { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 12px; }
 .wish-row { display: grid; grid-template-columns: 20px minmax(0,1fr) auto 24px 24px; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid #ffffff0b; }
 .wish-row a { color: #d7c6a4; overflow-wrap: anywhere; }
+.wish-product-link { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.wish-thumbnail { width: 42px; height: 42px; flex: none; object-fit: contain; border-radius: 6px; background: #f1ece4; }
+#wishImagePreview .wish-thumbnail { width: 72px; height: 72px; margin-bottom: 10px; }
 .wish-row input { width: 16px; height: 16px; margin: 0; }
 .wish-row .is-bought { text-decoration: line-through; opacity: .6; }
 .wish-row .wish-tool { padding: 0; min-width: 0; background: none; border: 0; box-shadow: none; font-size: 17px; }
@@ -2870,6 +2880,7 @@ body:not(.firebase-required) #firebaseAuthPanel {
   .wish-link-row { flex-wrap: wrap; }
   .wish-link-row label { flex-basis: 100%; }
   .wish-row { gap: 6px; font-size: 12px; }
+  .wish-row .wish-thumbnail { width: 34px; height: 34px; }
 }
 .firebase-checking .wallet-connection-loader {
   display: flex;
