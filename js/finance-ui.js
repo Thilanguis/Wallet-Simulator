@@ -137,11 +137,110 @@ document.addEventListener('DOMContentLoaded', () => {
       '</output></p><p class="hint">Valores somente em dólar ficam nas linhas originais e fora do total em reais.</p></section>'
     );
   }
+  const timeline = $('financeTimeline');
+  const monthLabel = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  const monthNumber = (month) => Number(month.slice(0, 4)) * 12 + Number(month.slice(5));
+  let selectedTimelineMonth;
+  let timelineMetric = 'count';
+  function renderTimeline() {
+    const content = $('financeTimelineContent');
+    const { months, undated } = FinanceList.timeline(state.entries);
+    const notes = undated ? `<p class="hint">${undated} lançamento(s) sem data ficam fora da linha do tempo.</p>` : '';
+    if (!months.length) {
+      content.innerHTML = '<p class="hint">Nenhum gasto com data registrada.</p>' + notes;
+      return;
+    }
+    const label = (month) => monthLabel.format(new Date(month + '-01T12:00:00Z'));
+    const byValue = timelineMetric === 'value';
+    const measure = ({ items, totals }) => byValue ? totals.total : items.length;
+    const peak = Math.max(1, ...months.map(measure));
+    const scaleMoney = new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 });
+    const scale = (value) => byValue ? 'R$ ' + scaleMoney.format(value / 100) : value;
+    const ordered = [...months].reverse();
+    const first = monthNumber(ordered[0].month);
+    const last = monthNumber(ordered.at(-1).month);
+    const x = (number) => first === last ? 50 : (number - first) / (last - first) * 100;
+    const y = (count) => 100 - count / peak * 100;
+    const coordinates = [];
+    for (const [index, row] of ordered.entries()) {
+      const { month } = row;
+      const number = monthNumber(month);
+      const previous = index ? monthNumber(ordered[index - 1].month) : number;
+      if (number - previous > 1) {
+        coordinates.push(`${x(previous + 1)},100`);
+        if (number - previous > 2) coordinates.push(`${x(number - 1)},100`);
+      }
+      coordinates.push(`${x(number)},${y(measure(row))}`);
+    }
+    const dots = ordered.map((row) => {
+      const { month, items, totals } = row;
+      const pointLabel = esc(label(month) + ' · ' + (byValue ? F.format(totals.total) : `${items.length} lançamento(s)`));
+      return `<button type="button" class="timeline-dot" data-month="${esc(month)}"
+        style="--month-x:${x(monthNumber(month))}%;--month-y:${y(measure(row))}%"
+        aria-label="${pointLabel}" title="${pointLabel}" aria-pressed="false"></button>`;
+    }).join('');
+    const rangeLabel = (month) => month.slice(5) + '/' + month.slice(0, 4);
+    const axisMonths = [first];
+    if (last > first) {
+      const step = Math.max(1, Math.ceil((last - first) / 3));
+      for (let number = first + step; number <= last - step; number += step) axisMonths.push(number);
+      axisMonths.push(last);
+    }
+    const ticks = axisMonths.map((number) => {
+      const year = Math.floor((number - 1) / 12);
+      const month = String(number - year * 12).padStart(2, '0');
+      return `<span style="--month-x:${x(number)}%">${rangeLabel(year + '-' + month)}</span>`;
+    }).join('');
+    const series = coordinates.join(' ');
+    content.innerHTML = `<div class="timeline-chart-header"><p class="hint">${byValue ? 'Total em reais por mês' : 'Lançamentos por mês'}</p>
+      <div class="timeline-metrics" role="group" aria-label="Métrica do gráfico">
+        <button type="button" data-metric="count" aria-pressed="${!byValue}">Frequência</button>
+        <button type="button" data-metric="value" aria-pressed="${byValue}">Gastos em R$</button>
+      </div></div>
+      <div class="timeline-chart"><div class="timeline-scale" aria-hidden="true"><span>${scale(peak)}</span><span>${scale(0)}</span></div>
+      <div class="timeline-plot"><svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <defs><linearGradient id="financeTimelineFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#d0ad67" stop-opacity=".26"/><stop offset="1" stop-color="#d0ad67" stop-opacity="0"/></linearGradient></defs>
+        <path class="timeline-grid" d="M0 0H100 M0 50H100 M0 100H100"/>
+        <polygon fill="url(#financeTimelineFill)" points="${x(first)},100 ${series} ${x(last)},100"/>
+        <polyline class="timeline-line" points="${series}"/>
+        <line class="timeline-cursor" x1="0" x2="0" y1="0" y2="100"/>
+      </svg>${dots}</div></div>
+      <div class="timeline-range">${ticks}</div>
+      <div class="timeline-selection"><label for="financeTimelineMonth">Mês em detalhe</label><select id="financeTimelineMonth">
+        ${months.map(({ month }) => `<option value="${esc(month)}">${esc(label(month))}</option>`).join('')}
+      </select></div><div id="financeTimelineMonthDetails" class="timeline-month" aria-live="polite"></div>${notes}`;
+    const picker = $('financeTimelineMonth');
+    function selectMonth(month) {
+      const { items, days, totals } = months.find((row) => row.month === month);
+      selectedTimelineMonth = month;
+      picker.value = month;
+      const position = x(monthNumber(month));
+      const cursor = content.querySelector('.timeline-cursor');
+      cursor.setAttribute('x1', position);
+      cursor.setAttribute('x2', position);
+      content.querySelectorAll('.timeline-dot').forEach((dot) => dot.setAttribute('aria-pressed', String(dot.dataset.month === month)));
+      const amounts = [totals.total ? F.format(totals.total) : '', totals.foreign.USD ? F.format(totals.foreign.USD, 'USD') : ''].filter(Boolean).join(' + ');
+      const entries = items.map((entry) => `<li><time datetime="${esc(entry.date)}">${esc(entry.date.slice(8))}/${esc(entry.date.slice(5, 7))}</time><span>${esc(entry.description)} <small>${esc(entry.category)}</small></span><strong>${F.format(entry.amount, entry.currency)}</strong></li>`).join('');
+      $('financeTimelineMonthDetails').innerHTML = `<p class="timeline-month-summary"><span>${items.length} ${items.length === 1 ? 'lançamento' : 'lançamentos'} · ${days} ${days === 1 ? 'dia' : 'dias'}</span><strong>${amounts}</strong></p><ul>${entries}</ul>`;
+    }
+    picker.onchange = () => selectMonth(picker.value);
+    content.querySelectorAll('[data-metric]').forEach((button) => {
+      button.onclick = () => {
+        timelineMetric = button.dataset.metric;
+        renderTimeline();
+        content.querySelector('[aria-pressed="true"][data-metric]').focus({ preventScroll: true });
+      };
+    });
+    content.querySelectorAll('.timeline-dot').forEach((dot) => { dot.onclick = () => selectMonth(dot.dataset.month); });
+    selectMonth(months.some(({ month }) => month === selectedTimelineMonth) ? selectedTimelineMonth : months[0].month);
+  }
+  timeline.addEventListener('toggle', () => { if (timeline.open) renderTimeline(); });
   function render() {
     const all = F.totals(state.entries, state.budget),
       entries = F.filtered(state.entries, filters()),
       t = F.totals(entries, state.budget);
     $('groupedFinanceList').innerHTML = notebookHTML(state.entries, true);
+    if (timeline.open) renderTimeline();
     const totalRow = $('groupedFinanceList').querySelector('.notebook-grand-total');
     const totalLabel = document.createElement('span'); totalLabel.textContent = 'Total Geral Atualizado 🔥';
     $('financeTopTotal').replaceChildren(totalLabel, totalRow.querySelector('output')); totalRow.remove();

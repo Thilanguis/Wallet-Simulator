@@ -69,5 +69,24 @@
     lines.push('---', '', '9. Resumo Final dos Itens 📊', '', ...groups.map((group) => group.number + '. ' + group.category + ' ... ' + money(group.total, 'BRL')), '', 'Total Geral Atualizado 🔥 = ' + money(total, 'BRL'));
     return lines.join('\n');
   }
-  return { calculate, sections, rowText, parts, money, text };
+  function timeline(entries) {
+    const byMonth = new Map();
+    let undated = 0;
+    for (const entry of entries) {
+      if (['cancelled', 'refunded'].includes(entry.status)) continue;
+      if (!entry.date) {
+        undated++;
+        continue;
+      }
+      const month = entry.date.slice(0, 7);
+      if (!byMonth.has(month)) byMonth.set(month, []);
+      byMonth.get(month).push(entry);
+    }
+    const months = [...byMonth.keys()].sort().reverse().map((month) => {
+      const items = byMonth.get(month).sort((a, b) => b.date.localeCompare(a.date));
+      return { month, items, days: new Set(items.map((entry) => entry.date)).size, totals: F.totals(items) };
+    });
+    return { months, undated };
+  }
+  return { calculate, sections, rowText, parts, money, text, timeline };
 });
