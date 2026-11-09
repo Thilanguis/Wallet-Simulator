@@ -6,6 +6,7 @@
 })(typeof window === 'object' ? window : globalThis, function () {
   const keys = [
     'wishlist',
+    'wishlistPeople',
     'wishlistFx',
     'saldoDominadora',
     'historico',

@@ -529,13 +529,76 @@
           <div class="wish-link-row"><label>Produto ou link<input id="wishUrl" type="url" required placeholder="Cole o link do produto" /></label><button id="wishRead" type="button">Atualizar prévia</button></div>
           <p id="wishMessage" class="hint" role="status"></p>
           <div id="wishImagePreview"></div>
+          <div class="wish-person-fields">
+            <label>Para quem?<select id="wishPerson"></select></label>
+            <div id="wishPersonNameField" hidden>
+              <label>Novo nome<input id="wishPersonName" maxlength="80" disabled /></label>
+              <button type="button" id="wishRegisterPerson" class="wish-share-button">Salvar pessoa</button>
+            </div>
+          </div>
           <div class="form-grid"><label>Produto<input id="wishTitle" maxlength="300" required /></label><label>Loja<input id="wishStore" maxlength="150" required /></label><label>Preço original<input id="wishPrice" type="number" min="0" step="0.01" /></label><label>Moeda<select id="wishCurrency"><option>BRL</option><option>CAD</option><option>USD</option><option>EUR</option><option>GBP</option><option>AUD</option><option>JPY</option><option>CNY</option><option>CHF</option></select></label></div>
           <p id="wishConversion" class="hint" role="status"></p>
           <div class="btn-row"><button type="submit" id="wishSave">Adicionar desejo</button><button type="button" id="wishCancel" class="subtle-btn" hidden>Cancelar edição</button></div>
         </form>
         </details>
-        <div class="wish-list-heading"><h3>Seus desejos</h3><p id="wishSummary" class="hint" role="status"></p></div>
+        <div class="wish-list-heading">
+          <div>
+            <h3>Seus desejos</h3>
+            <div class="wish-list-meta">
+              <p id="wishSummary" class="hint" role="status"></p>
+              <div id="wishQuotes" class="wish-quotes" aria-label="Câmbio de referência" hidden>
+                <span class="wish-quotes-title"><span aria-hidden="true">💱</span> Câmbio</span>
+                <ul id="wishQuoteList"></ul>
+              </div>
+            </div>
+          </div>
+          <button type="button" id="wishManagePeople" class="wish-share-button" aria-label="Gerenciar amigas" title="Gerenciar amigas" aria-haspopup="dialog">
+            <span aria-hidden="true">👤</span><span id="wishFriendCount" aria-hidden="true">0</span>
+          </button>
+        </div>
         <div id="wishList"></div>
+        <dialog id="wishPeopleDialog" class="app-dialog wish-people-dialog" aria-labelledby="wishPeopleHeading">
+          <form method="dialog"><button type="submit" class="app-dialog-close" aria-label="Fechar lista de amigas" autofocus>×</button></form>
+          <header class="wish-people-header">
+            <span class="wish-people-symbol" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3"/><path d="M5 20v-2a7 7 0 0 1 14 0v2"/></svg>
+            </span>
+            <h2 id="wishPeopleHeading">Lista de amigas</h2>
+          </header>
+          <ul id="wishPeopleList"></ul>
+          <form id="wishPeopleForm">
+            <label id="wishPeopleLabel" for="wishPeopleName">Nome da amiga</label>
+            <div class="wish-people-fields">
+              <input id="wishPeopleName" maxlength="80" placeholder="Digite um nome" required />
+              <button type="submit" id="wishPeopleSave" class="wish-share-button">Adicionar</button>
+              <button type="button" id="wishPeopleCancel" class="wish-share-button" hidden>Cancelar edição</button>
+            </div>
+          </form>
+          <p id="wishPeopleStatus" class="hint" role="status"></p>
+        </dialog>
+        <dialog id="wishShareDialog" class="app-dialog wish-share-dialog" aria-labelledby="wishShareHeading">
+          <form method="dialog"><button type="submit" class="app-dialog-close" aria-label="Fechar prévia">×</button></form>
+          <h2 id="wishShareHeading"></h2>
+          <p class="hint">Selecione os desejos para compartilhar. Volte à lista para editar preços e links.</p>
+          <div id="wishShareItems"></div>
+          <label class="wish-share-conversion"><input type="checkbox" id="wishShareConvert" checked /> Incluir conversão em reais</label>
+          <p class="wish-share-total">Total estimado <output id="wishShareTotal" aria-live="polite"></output></p>
+          <label for="wishSharePreview">Prévia da mensagem</label>
+          <textarea id="wishSharePreview" readonly rows="5"></textarea>
+          <p id="wishShareStatus" class="hint" role="status"></p>
+          <div class="app-dialog-actions">
+            <button type="button" id="wishShareCopy">Copiar mensagem</button>
+            <a id="wishShareWhatsApp" target="_blank" rel="noopener noreferrer">Abrir WhatsApp</a>
+            <button type="button" id="wishShareNative" hidden>Compartilhar…</button>
+            <button type="button" id="wishSharePhotos">Montar imagem</button>
+          </div>
+          <section id="wishImageExport" class="wish-image-export" aria-label="Prévia da lista em imagem" hidden>
+            <h3>Lista em imagem</h3>
+            <div id="wishImageCards"></div>
+            <button type="button" id="wishSendImages" hidden>Enviar imagem</button>
+          </section>
+          <form method="dialog"><button type="submit" class="subtle-btn">Voltar à lista</button></form>
+        </dialog>
       </section>
       <section id="backupPanel" class="app-panel section" hidden>
         <h2>Configurações e backup</h2>

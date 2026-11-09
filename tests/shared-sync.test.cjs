@@ -49,6 +49,34 @@ function hub(initial = doc()) {
 }
 const turn = () => new Promise((r) => setImmediate(r));
 
+test('concurrent wishlist edits preserve both accounts’ changes and reject competing prices', async () => {
+  const initial = doc();
+  const wish = { id: 'one', title: 'Teste', originalPrice: 20, price: 20, currency: 'BRL', bought: false };
+  initial.simulator.wishlist = JSON.stringify([wish]);
+  const h = hub(initial), a = h.device('a'), b = h.device('b');
+  await turn();
+  const edit = (device, fields, extra) => device.store.sim.setItem('wishlist', JSON.stringify([{ ...wish, ...fields }, { ...wish, id: extra }]));
+  edit(a, { person: 'Ana', updatedAt: 1 }, 'new-a');
+  edit(b, { bought: true, originalPrice: 30, price: 30, updatedAt: 2 }, 'new-b');
+  await turn();
+  const release = h.hold();
+  const pending = a.engine.flush();
+  await b.engine.flush();
+  release();
+  await pending;
+  await turn();
+  const items = JSON.parse(h.state().simulator.wishlist);
+  assert.deepEqual(new Set(items.map((item) => item.id)), new Set(['one', 'new-a', 'new-b']));
+  assert.deepEqual(items.find((item) => item.id === 'one'), { ...wish, person: 'Ana', bought: true, originalPrice: 30, price: 30, updatedAt: 2 });
+  assert.equal(a.store.sim.getItem('wishlist'), h.state().simulator.wishlist);
+  assert.equal(b.store.sim.getItem('wishlist'), h.state().simulator.wishlist);
+  assert.deepEqual(JSON.parse(h.state().financeJson), JSON.parse(initial.financeJson));
+  assert.equal(h.state().simulator.saldoDominadora, initial.simulator.saldoDominadora);
+
+  const priceEdit = (price) => ({ ...initial, simulator: { ...initial.simulator, wishlist: JSON.stringify([{ ...wish, originalPrice: price, price }]) } });
+  assert.throws(() => Merge.merge(initial, priceEdit(40), priceEdit(50)), /alterado/);
+});
+
 test('shared transport can finalize between checkpoints while projecting the server clock', async () => {
   const initial = doc();
   const timer = { active: true, running: true, seconds: 0, earnedUnits: 0, rate: 0.5, autoRateTotal: 0, tasks: 0, dynamicActivities: [] };

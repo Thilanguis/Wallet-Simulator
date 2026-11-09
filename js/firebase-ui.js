@@ -23,6 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
     Finance.validateState(wallet.finance);
     const sim = wallet.simulator;
     if (sim?.wishlist && !Array.isArray(JSON.parse(sim.wishlist))) throw new Error('Lista de desejos inválida.');
+    if (sim?.wishlistPeople && !Array.isArray(JSON.parse(sim.wishlistPeople))) throw new Error('Lista de amigas inválida.');
     if (!sim || Array.isArray(sim) || Object.entries(sim).some(([key, value]) => !Vault.keys.includes(key) || typeof value !== 'string')) throw new Error('Dados do Firebase incompatíveis. A cópia anterior foi preservada.');
     if (!Number.isFinite(Number(sim.saldoDominadora || 0))) throw new Error('Saldo inválido no Firebase.');
     for (const key of ['historico', 'archivedHistory', 'tarefasPendentes', 'tarefasBloqueadas', 'accelBoosts', 'rouletteAwards']) if (!Array.isArray(JSON.parse(sim[key] || '[]'))) throw new Error('Lista inválida no Firebase: ' + key);

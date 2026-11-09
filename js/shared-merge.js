@@ -23,7 +23,7 @@
   function conflict() {
     throw new Error('Este item foi alterado ao mesmo tempo. A cópia anterior foi preservada para conferência.');
   }
-  function list(base, local, remote, key = 'id') {
+  function list(base, local, remote, key = 'id', mergeItem) {
     if (equal(base, local)) return structuredClone(remote);
     const index = (items) => {
       const occurrences = new Map();
@@ -47,7 +47,11 @@
     for (const [id, item] of l) {
       const old = b.get(id);
       if (equal(item, old)) continue;
-      if (r.has(id) && !equal(r.get(id), old) && !equal(r.get(id), item)) conflict();
+      if (r.has(id) && !equal(r.get(id), old) && !equal(r.get(id), item)) {
+        if (!old || !mergeItem) conflict();
+        r.set(id, mergeItem(old, item, r.get(id)));
+        continue;
+      }
       if (old && !r.has(id)) conflict();
       r.set(id, item);
     }
@@ -70,6 +74,21 @@
       else out[key] = structuredClone(local[key]);
     }
     return out;
+  }
+  function mergeWish(base, local, remote) {
+    // Keep prices with their currency and photos with their product URL.
+    const fields = ({ updatedAt, price, originalPrice, currency, url, imageUrl, ...details }) => ({
+      details,
+      pricing: { price, originalPrice, currency },
+      productLink: { url, imageUrl },
+    });
+    const b = fields(base), l = fields(local), r = fields(remote);
+    const { pricing, productLink } = object(
+      { pricing: b.pricing, productLink: b.productLink },
+      { pricing: l.pricing, productLink: l.productLink },
+      { pricing: r.pricing, productLink: r.productLink },
+    );
+    return { ...object(b.details, l.details, r.details), ...pricing, ...productLink, updatedAt: Math.max(local.updatedAt || 0, remote.updatedAt || 0) };
   }
   function merge(base, local, current, { timerOwner = true, accelerationNow } = {}) {
     const originalBoostIds = (doc) => new Set(JSON.parse(doc.simulator.accelBoosts || '[]').map((boost) => boost.id));
@@ -94,7 +113,7 @@
       b = base.simulator,
       l = local.simulator,
       r = current.simulator;
-    const arrays = { wishlist: 'id', historico: 'id', archivedHistory: 'id', tarefasPendentes: 'id', tarefasBloqueadas: 'nome', accelBoosts: 'id', rouletteAwards: 'id' };
+    const arrays = { wishlist: 'id', wishlistPeople: 'id', historico: 'id', archivedHistory: 'id', tarefasPendentes: 'id', tarefasBloqueadas: 'nome', accelBoosts: 'id', rouletteAwards: 'id' };
     for (const key of new Set([...Object.keys(b), ...Object.keys(l)])) {
       if (equal(b[key], l[key])) continue;
       if (key === 'saldoDominadora') {
@@ -126,7 +145,7 @@
             }
           }
         }
-        out.simulator[key] = JSON.stringify(list(previous, localRows, remoteRows, arrays[key]));
+        out.simulator[key] = JSON.stringify(list(previous, localRows, remoteRows, arrays[key], key === 'wishlist' ? mergeWish : undefined));
       } else if (key === 'timerSession') {
         const bt = JSON.parse(b[key] || 'null'),
           lt = JSON.parse(l[key] || 'null'),
