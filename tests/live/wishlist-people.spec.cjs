@@ -79,7 +79,7 @@ test('groups old and new wishes and shares only the confirmed selection', async 
   expect(await page.evaluate(() => [window.lastCopiedWish, window.lastSharedWish])).toEqual([text, text]);
   expect(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
   await dialog.getByRole('button', { name: 'Voltar à lista' }).click();
-  await expect(page.getByRole('heading', { name: 'Dominadora', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Luana', exact: true })).toBeVisible();
   expect(await page.evaluate(() => JSON.parse(AppStorage.getItem('wishlist'))[0])).toEqual(legacy);
   await ana.getByRole('button', { name: 'Gerenciar itens de Ana' }).click();
   await expect(ana.getByRole('button', { name: 'Excluir selecionados' })).toBeHidden();
@@ -136,7 +136,7 @@ test('shares original currencies on request and shortens links without losing pr
     window.dispatchEvent(new Event('wallet:remote'));
   }, url);
   await page.locator('[data-panel=wishlistPanel]').click();
-  await page.getByRole('button', { name: 'Compartilhar desejos de Dominadora' }).click();
+  await page.getByRole('button', { name: 'Compartilhar desejos de Luana' }).click();
   const dialog = page.locator('#wishShareDialog');
   const preview = dialog.locator('#wishSharePreview');
   const cleaned = 'https://ca.pandora.net/anel?variant=azul#details';
@@ -152,7 +152,7 @@ test('shares original currencies on request and shortens links without losing pr
   expect(new URL(await dialog.locator('#wishShareWhatsApp').getAttribute('href')).searchParams.get('text')).toBe(shared);
   await expect(dialog.locator('.wish-share-row img')).toBeVisible();
   await dialog.getByRole('button', { name: 'Montar imagem' }).click();
-  await expect(dialog.getByRole('img', { name: 'Lista de itens de Dominadora' })).toBeVisible();
+  await expect(dialog.getByRole('img', { name: 'Lista de itens de Luana' })).toBeVisible();
   await expect(dialog.getByRole('link', { name: 'Salvar imagem' })).toHaveAttribute('download', 'lista-de-itens.jpg');
   expect(await page.evaluate(() => window.sharedWithPhoto)).toBeUndefined();
   await dialog.getByRole('button', { name: 'Enviar imagem', exact: true }).click();
@@ -193,7 +193,7 @@ test('automatically attaches a public Pandora photo when direct reading is block
     window.dispatchEvent(new Event('wallet:remote'));
   }, url);
   await page.locator('[data-panel=wishlistPanel]').click();
-  await page.getByRole('button', { name: 'Compartilhar desejos de Dominadora' }).click();
+  await page.getByRole('button', { name: 'Compartilhar desejos de Luana' }).click();
   const dialog = page.locator('#wishShareDialog');
   await expect(dialog.locator('img')).toBeVisible();
   await dialog.getByRole('button', { name: 'Montar imagem' }).click();
@@ -223,7 +223,7 @@ test('provides a usable fallback when native text and image sharing fail', async
     window.dispatchEvent(new Event('wallet:remote'));
   });
   await page.locator('[data-panel=wishlistPanel]').click();
-  await page.getByRole('button', { name: 'Compartilhar desejos de Dominadora' }).click();
+  await page.getByRole('button', { name: 'Compartilhar desejos de Luana' }).click();
   const dialog = page.locator('#wishShareDialog');
   await dialog.locator('#wishShareNative').click();
   await expect(dialog.locator('#wishShareStatus')).toContainText('Mensagem copiada');
@@ -258,7 +258,7 @@ test('uses native image sharing on Windows and keeps the preview usable after ca
     window.dispatchEvent(new Event('wallet:remote'));
   });
   await page.locator('[data-panel=wishlistPanel]').click();
-  await page.getByRole('button', { name: 'Compartilhar desejos de Dominadora' }).click();
+  await page.getByRole('button', { name: 'Compartilhar desejos de Luana' }).click();
   const dialog = page.locator('#wishShareDialog');
   await expect(dialog.locator('#wishShareNative')).toBeVisible();
   await expect(dialog.locator('#wishShareWhatsApp')).toBeVisible();
@@ -314,7 +314,7 @@ test('reads a product screenshot locally and reuses the saved photo without a li
   await page.reload();
   await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
   await page.locator('[data-panel=wishlistPanel]').click();
-  await page.getByRole('button', { name: 'Compartilhar desejos de Dominadora' }).click();
+  await page.getByRole('button', { name: 'Compartilhar desejos de Luana' }).click();
   const dialog = page.locator('#wishShareDialog');
   await expect(dialog.locator('.wish-share-row img')).toHaveAttribute('src', /^data:image\/jpeg;base64,/);
   await dialog.getByRole('button', { name: 'Montar imagem' }).click();

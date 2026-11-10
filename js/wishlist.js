@@ -30,10 +30,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   const rows = () => JSON.parse(AppStorage.getItem('wishlist') || '[]');
   const defaultPerson = 'Dominadora';
+  const defaultPersonLabel = 'Luana';
   const newPerson = '';
   const roster = () => JSON.parse(AppStorage.getItem('wishlistPeople') || '[]');
   const personOf = (item, registered = roster()) => registered.find((person) => person.id === item.personId)?.name || item.person?.trim() || defaultPerson;
   const personKey = (name) => name.normalize('NFC').toLocaleLowerCase('pt-BR');
+  const personLabel = (name) => personKey(name) === personKey(defaultPerson) ? defaultPersonLabel : name;
+  const personFromInput = (name, names) => names.get(personKey(name)) || (personKey(name) === personKey(defaultPersonLabel) ? defaultPerson : name);
   const normalizeName = (name) => name.trim().replace(/\s+/g, ' ').normalize('NFC');
   function groupByStore(items) {
     const groups = new Map();
@@ -65,7 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     const names = people(items, registered);
     const options = [...names.values()].sort((a, b) => a.localeCompare(b, 'pt-BR')).map((name) => {
-      const option = new Option(name, name);
+      const option = new Option(personLabel(name), name);
       const person = registered.find((entry) => personKey(entry.name) === personKey(name));
       if (person) option.dataset.personId = person.id;
       return option;
@@ -108,11 +111,11 @@ document.addEventListener('DOMContentLoaded', () => {
   $('wishRegisterPerson').onclick = () => {
     try {
       const name = checkedName($('wishPersonName').value);
-      const existingName = people(rows()).get(personKey(name));
+      const selectedName = personFromInput(name, people(rows()));
       const registered = roster();
-      if (personKey(name) !== personKey(defaultPerson)) registerPerson(existingName || name, registered);
+      if (personKey(selectedName) !== personKey(defaultPerson)) registerPerson(selectedName, registered);
       save(null, registered);
-      updatePeople(rows(), existingName || name);
+      updatePeople(rows(), selectedName);
       $('wishPersonName').value = '';
       message('Pessoa selecionada.');
     } catch (error) {
@@ -279,7 +282,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const name = checkedName($('wishPeopleName').value);
       const key = personKey(name), items = rows(), registered = roster();
       const names = people(items, registered);
-      if (key === personKey(defaultPerson)) throw new Error('Dominadora é o perfil padrão da lista.');
+      if (key === personKey(defaultPerson) || (key === personKey(defaultPersonLabel) && friendEditing?.name !== name)) throw new Error(defaultPersonLabel + ' é o perfil padrão da lista.');
       if (names.has(key) && (!friendEditing || personKey(friendEditing.name) !== key)) throw new Error('Esse nome já está na lista.');
       if (!friendEditing) {
         registerPerson(name, registered);
@@ -862,7 +865,7 @@ document.addEventListener('DOMContentLoaded', () => {
       group.className = 'wish-purchase-group';
       const heading = document.createElement('h3');
       const subtotal = document.createElement('output');
-      heading.append(person, subtotal);
+      heading.append(personLabel(person), subtotal);
       group.append(heading);
       for (const item of wishes) {
         const label = document.createElement('label');
@@ -1035,7 +1038,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     remove.onclick = async () => {
       const ids = new Set(selectedWishes);
-      if (!ids.size || !(await AppDialog.confirm('Excluir ' + ids.size + (ids.size === 1 ? ' item' : ' itens') + ' da lista de ' + person + '?'))) return;
+      if (!ids.size || !(await AppDialog.confirm('Excluir ' + ids.size + (ids.size === 1 ? ' item' : ' itens') + ' da lista de ' + personLabel(person) + '?'))) return;
       const current = rows();
       const registered = roster();
       const key = personKey(person);
@@ -1115,7 +1118,8 @@ document.addEventListener('DOMContentLoaded', () => {
       section.className = 'wish-group';
       section.classList.toggle('wish-group-featured', personKey(person) === personKey(defaultPerson));
       const heading = document.createElement('h3');
-      heading.textContent = person;
+      const name = personLabel(person);
+      heading.textContent = name;
       const header = document.createElement('header');
       header.className = 'wish-group-header';
       const pending = items.filter((item) => !item.bought);
@@ -1124,16 +1128,16 @@ document.addEventListener('DOMContentLoaded', () => {
       const purchaseGroup = { pending, total: groupTotal };
       purchaseGroups.push(purchaseGroup);
       const managing = managingPerson === person;
-      const share = wishGroupButton('Compartilhar', 'Compartilhar desejos de ' + person);
-      share.onclick = () => shareGroup(person, items);
-      const manage = wishGroupButton(managing ? 'Concluir' : 'Gerenciar', (managing ? 'Concluir gerenciamento de ' : 'Gerenciar itens de ') + person);
+      const share = wishGroupButton('Compartilhar', 'Compartilhar desejos de ' + name);
+      share.onclick = () => shareGroup(name, items);
+      const manage = wishGroupButton(managing ? 'Concluir' : 'Gerenciar', (managing ? 'Concluir gerenciamento de ' : 'Gerenciar itens de ') + name);
       manage.setAttribute('aria-pressed', String(managing));
       manage.onclick = () => {
         managingPerson = managing ? null : person;
         selectedWishes.clear();
         render();
         const buttons = [...host.querySelectorAll('.wish-group-header button')];
-        const focus = managing ? buttons.find((button) => button.getAttribute('aria-label') === 'Gerenciar itens de ' + person) : host.querySelector('.wish-bulk-actions input');
+        const focus = managing ? buttons.find((button) => button.getAttribute('aria-label') === 'Gerenciar itens de ' + name) : host.querySelector('.wish-bulk-actions input');
         focus?.focus();
       };
       const actions = document.createElement('div');
@@ -1143,7 +1147,7 @@ document.addEventListener('DOMContentLoaded', () => {
         label.className = 'wish-purchase-all';
         const selectGroup = document.createElement('input');
         selectGroup.type = 'checkbox';
-        selectGroup.setAttribute('aria-label', 'Selecionar todos de ' + person + ' para compra');
+        selectGroup.setAttribute('aria-label', 'Selecionar todos de ' + name + ' para compra');
         const ids = pending.map((item) => item.id);
         selectGroup.onchange = () => togglePurchaseSelection(ids, selectGroup.checked);
         purchaseGroup.check = selectGroup;
@@ -1254,7 +1258,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   function formValues(validateLink = true) {
     const enteredName = ($('wishPerson').value || $('wishPersonName').value).trim().replace(/\s+/g, ' ');
-    const person = people(rows()).get(personKey(enteredName)) || enteredName;
+    const person = personFromInput(enteredName, people(rows()));
     const url = $('wishUrl').value.trim();
     return {
       url: validateLink && url ? link(url).href : url,
@@ -1293,7 +1297,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const list = rows();
     const registered = roster();
     const enteredName = checkedName($('wishPerson').value || $('wishPersonName').value);
-    const person = people(list, registered).get(personKey(enteredName)) || enteredName;
+    const person = personFromInput(enteredName, people(list, registered));
     const personId = personKey(person) === personKey(defaultPerson) ? undefined : registerPerson(person, registered).id;
     const additions = [];
     const invalidFields = [];

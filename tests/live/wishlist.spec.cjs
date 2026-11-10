@@ -47,6 +47,7 @@ for (const width of [393, 1440])
     );
     await page.locator('#wishUrl').fill('https://example.invalid/product');
     await page.locator('#wishRead').click();
+    await expect(page.locator('#wishPerson option:checked')).toHaveText('Luana');
     await expect(page.locator('#wishTitle')).toHaveValue('Produto de teste');
     await expect(page.locator('#wishPrice')).toHaveValue('42.5');
     await expect(page.locator('#wishImagePreview img')).toHaveAttribute('src', 'https://example.invalid/product-photo.svg');
