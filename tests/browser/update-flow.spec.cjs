@@ -6,7 +6,8 @@ test('automatic update asks consent and shows progress before preserving data an
     window.__updateMessages = [];
     const registration = new EventTarget();
     registration.waiting = sessionStorage.getItem('updateTestApplied') ? null : worker;
-    registration.update = async () => {};
+    window.__updateChecks = 0;
+    registration.update = async () => { window.__updateChecks++; };
     const serviceWorker = new EventTarget();
     serviceWorker.controller = {};
     serviceWorker.register = async () => registration;
@@ -19,7 +20,8 @@ test('automatic update asks consent and shows progress before preserving data an
   });
   await page.goto('/');
   await expect(page.locator('body')).not.toHaveClass(/firebase-required/);
-  await expect(page.locator('.app-dialog')).toContainText('nova versão');
+  await expect(page.locator('.app-dialog[open]')).toContainText('nova versão');
+  await expect.poll(() => page.evaluate(() => window.__updateChecks)).toBeGreaterThan(0);
   expect(await page.evaluate(() => window.__updateMessages)).toEqual([]);
   await page.locator('[data-dialog-cancel]').click();
   await expect(page.locator('#updateBanner')).toBeVisible();
@@ -36,5 +38,22 @@ test('automatic update asks consent and shows progress before preserving data an
   await expect.poll(() => page.evaluate(() => window.__updateMessages)).toEqual([{ type: 'SKIP_WAITING' }]);
   await Promise.all([page.waitForEvent('load'), page.evaluate(() => window.__finishUpdate())]);
   await expect(page.locator('#saldoDominadora')).toHaveText('R$ 123,45');
-  await expect(page.locator('.app-dialog')).toHaveCount(0);
+  await expect(page.locator('.app-dialog[open]')).toHaveCount(0);
+});
+
+test('caches OCR files only when needed', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+    if (!navigator.serviceWorker.controller) {
+      await new Promise((resolve) => navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true }));
+    }
+  });
+  const cached = () => page.evaluate(async () => (await Promise.all((await caches.keys()).map(async (name) => (await (await caches.open(name)).keys()).map((request) => request.url)))).flat());
+  const before = await cached();
+  expect(before.some((url) => url.endsWith('/index.html'))).toBe(true);
+  expect(before.some((url) => url.includes('/vendor/'))).toBe(false);
+  const requested = await page.evaluate(async () => (await fetch('./vendor/tesseract/tesseract.min.js')).ok);
+  expect(requested).toBe(true);
+  await expect.poll(async () => (await cached()).some((url) => url.endsWith('/vendor/tesseract/tesseract.min.js'))).toBe(true);
 });

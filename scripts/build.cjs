@@ -22,7 +22,8 @@ function walk(dir) {
   }
 }
 walk(dest);
-const assets = files.filter((n) => !['service-worker.js', 'version.json'].includes(n));
+const assets = files.filter((n) => !['service-worker.js', 'version.json'].includes(n)).sort();
+const precache = assets.filter((name) => !name.startsWith('vendor/'));
 const digest = crypto.createHash('sha256');
 for (const name of [...assets, 'service-worker.js']) {
   digest.update(name);
@@ -31,7 +32,7 @@ for (const name of [...assets, 'service-worker.js']) {
 const version = '2.0.0-' + digest.digest('hex').slice(0, 10);
 const workerTemplate = fs.readFileSync(path.join(root, 'service-worker.js'), 'utf8');
 if (!workerTemplate.includes('__BUILD_VERSION__') || !/\/\*__PRECACHE__\*\/\s*\[\]/.test(workerTemplate)) throw new Error('Missing service worker build markers.');
-const sw = workerTemplate.replace('__BUILD_VERSION__', version).replace(/\/\*__PRECACHE__\*\/\s*\[\]/, JSON.stringify(assets));
+const sw = workerTemplate.replace('__BUILD_VERSION__', version).replace(/\/\*__PRECACHE__\*\/\s*\[\]/, JSON.stringify(precache));
 fs.writeFileSync(path.join(dest, 'service-worker.js'), sw);
 fs.writeFileSync(path.join(dest, 'version.json'), JSON.stringify({ version }));
-console.log('Build completo: dist/ · ' + version + ' · ' + assets.length + ' arquivos locais.');
+console.log('Build completo: dist/ · ' + version + ' · ' + precache.length + ' arquivos iniciais e ' + (assets.length - precache.length) + ' sob demanda.');

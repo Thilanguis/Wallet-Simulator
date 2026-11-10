@@ -81,16 +81,21 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
           if (worker.state === 'installed' && navigator.serviceWorker.controller) void offer();
         });
       });
-      await offer();
+      void offer();
       let lastCheck = 0;
+      let checking = false;
       async function check() {
-        if (Date.now() - lastCheck < 60000) return;
+        if (checking || applying || Date.now() - lastCheck < 30000) return;
+        checking = true;
         lastCheck = Date.now();
         try {
+          if (registration.waiting) void offer();
           await registration.update();
-          await offer();
+          void offer();
         } catch {
           /* Retry automatically when online again. */
+        } finally {
+          checking = false;
         }
       }
       document.addEventListener('visibilitychange', () => {
@@ -100,7 +105,11 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
         lastCheck = 0;
         void check();
       });
-      setInterval(check, 5 * 60 * 1000);
+      window.addEventListener('pageshow', () => void check());
+      window.addEventListener('focus', () => void check());
+      setInterval(() => {
+        if (!document.hidden) void check();
+      }, 60000);
       void check();
     } catch (error) {
       console.warn('PWA indisponível:', error);

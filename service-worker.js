@@ -2,6 +2,7 @@ const VERSION = '__BUILD_VERSION__';
 const PREFIX = 'findom-wallet-' + new URL(self.registration.scope).pathname + '-';
 const CACHE = PREFIX + VERSION;
 const ASSETS = /*__PRECACHE__*/ [];
+const VENDOR = new URL('vendor/', self.registration.scope).href;
 // Live Server serves editable source files. Avoid stale caches during local review.
 const LIVE_SERVER = ['127.0.0.1', 'localhost'].includes(self.location.hostname) && self.location.port === '5501';
 self.addEventListener('install', (event) => {
@@ -52,7 +53,13 @@ self.addEventListener('fetch', (event) => {
         const shell = await cache.match(new URL('index.html', self.registration.scope));
         if (shell) return shell;
       }
-      return fetch(event.request);
+      const response = await fetch(event.request);
+      // OCR libraries and language models are large. Cache them when used,
+      // without holding an app update open for their download.
+      if (event.request.url.startsWith(VENDOR) && response.status === 200 && !event.request.headers.has('Range')) {
+        event.waitUntil(cache.put(event.request, response.clone()).catch(() => {}));
+      }
+      return response;
     })(),
   );
 });
