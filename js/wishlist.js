@@ -1441,8 +1441,16 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
   }
+  async function copyPickedPhoto(file) {
+    if (!/^image\/(?:jpeg|png|webp|bmp)$/.test(file.type) || file.size > 12 * 1024 * 1024) return { warning: 'Escolha uma foto JPG, PNG, WebP ou BMP de até 12 MB.' };
+    try {
+      // Read Android picker files before resetting the form or starting OCR.
+      return { file: new File([await file.arrayBuffer()], file.name, { type: file.type }) };
+    } catch {
+      return { warning: 'O navegador não conseguiu ler este arquivo. Salve a foto no aparelho e selecione a cópia salva.' };
+    }
+  }
   async function readWishPhoto(file, url, recognize, onImage = () => {}) {
-    if (!/^image\/(?:jpeg|png|webp|bmp)$/.test(file.type) || file.size > 12 * 1024 * 1024) throw new Error('Escolha uma foto JPG, PNG, WebP ou BMP de até 12 MB.');
     const bitmap = await decodeWishPhoto(file);
     let detailPhoto, badgePhoto, badgesArea;
     let imageUrl;
@@ -1544,8 +1552,7 @@ document.addEventListener('DOMContentLoaded', () => {
       $('wishPhotoMessage').textContent = 'Na edição, escolha uma foto. Para cadastrar várias, abra Adicionar desejo.';
       return;
     }
-    if (photoBatch) reset();
-    const token = ++photoRevision;
+    let token = ++photoRevision;
     const status = $('wishPhotoMessage');
     revision++;
     request?.abort();
@@ -1556,6 +1563,15 @@ document.addEventListener('DOMContentLoaded', () => {
     $('wishUpload').disabled = true;
     status.textContent = 'Preparando fotos…';
     try {
+      const picked = await Promise.all(files.map(copyPickedPhoto));
+      if (token !== photoRevision) return;
+      if (photoBatch) {
+        reset();
+        token = ++photoRevision;
+        photoBusy = true;
+        $('wishSave').disabled = true;
+        $('wishUpload').disabled = true;
+      }
       if (files.length > 1) {
         const batch = [];
         setPhotoBatch(batch);
@@ -1563,16 +1579,23 @@ document.addEventListener('DOMContentLoaded', () => {
           for (const [i, file] of files.entries()) {
             if (token !== photoRevision) return;
             status.textContent = `Lendo foto ${i + 1} de ${files.length}…`;
-            const suggestion = await readWishPhoto(file, '', recognize).catch((error) => ({ warning: error.message || 'Não foi possível abrir a foto.' }));
+            const photo = picked[i];
+            const suggestion = photo.file
+              ? await readWishPhoto(photo.file, '', recognize).catch((error) => ({ warning: error.message || 'Não foi possível abrir a foto.' }))
+              : photo;
             if (token !== photoRevision) return;
             batch.push(suggestion);
             appendPhotoRow(file, suggestion, i);
           }
         });
-        if (token === photoRevision) status.textContent = 'Confira os produtos antes de adicionar.';
+        if (token === photoRevision) status.textContent = batch.some(({ imageUrl }) => imageUrl)
+          ? 'Confira os produtos antes de adicionar.'
+          : 'Nenhuma foto pôde ser aberta. Confira os avisos abaixo.';
         return;
       }
-      const suggestion = await withReceiptReader((recognize) => readWishPhoto(files[0], $('wishUrl').value, recognize, (imageUrl) => {
+      const photo = picked[0];
+      if (!photo.file) throw new Error(photo.warning);
+      const suggestion = await withReceiptReader((recognize) => readWishPhoto(photo.file, $('wishUrl').value, recognize, (imageUrl) => {
         if (token !== photoRevision) return;
         showDraftImage(imageUrl);
         status.textContent = 'Lendo o texto da foto…';

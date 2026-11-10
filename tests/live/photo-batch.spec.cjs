@@ -54,6 +54,43 @@ test('reads four product photos together and saves only the reviewed selections'
   await expect(page.locator('.wish-row a').filter({ hasText: names[1] })).toContainText('×2');
 });
 
+test('copies all picker files before OCR and preserves the readable photos in a replacement batch', async ({ page }) => {
+  await page.addInitScript(() => {
+    const nativeDecode = window.createImageBitmap;
+    const nativeRead = Blob.prototype.arrayBuffer;
+    const pickerFiles = new WeakSet();
+    document.addEventListener('change', ({ target }) => {
+      if (target.id === 'wishUpload') for (const file of target.files) pickerFiles.add(file);
+    }, true);
+    window.createImageBitmap = (file) => {
+      if (pickerFiles.has(file)) throw new Error('Cannot decode from the Android picker');
+      return nativeDecode(file);
+    };
+    Blob.prototype.arrayBuffer = function () {
+      if (pickerFiles.has(this) && (this.name === 'blocked.jpg' || ![...document.getElementById('wishUpload').files].includes(this))) {
+        throw new DOMException('Picker access lost', 'NotReadableError');
+      }
+      return nativeRead.call(this);
+    };
+  });
+  await page.goto('/');
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  await page.locator('[data-panel=wishlistPanel]').click();
+  await page.locator('#wishEditor > summary').click();
+  const upload = page.locator('#wishUpload');
+  const files = await photos(page, [['Pandora', 'Silver Moon Necklace', 'R$ 12,50'], ['Pandora', 'Pink Blossom Ring', 'R$ 13,00']]);
+  await upload.setInputFiles(files);
+  const batch = page.locator('#wishBatchRows .preview-row');
+  await expect(batch.locator('img')).toHaveCount(2);
+  await expect(page.locator('#wishSave')).toBeEnabled();
+  await upload.setInputFiles([{...files[0], name: 'blocked.jpg'}, files[1]]);
+  await expect(batch.first()).toContainText('O navegador não conseguiu ler este arquivo');
+  await expect(batch.first().getByRole('checkbox')).toBeDisabled();
+  await expect(batch.last().locator('[data-field=title]')).toHaveValue('Pink Blossom Ring');
+  await expect(batch.last().locator('[data-field=price]')).toHaveValue('13');
+  await expect(page.locator('.wish-row')).toHaveCount(0);
+});
+
 test('retries product photos when the primary image decoder fails', async ({ page }) => {
   await page.addInitScript(() => {
     window.createImageBitmap = async () => {
