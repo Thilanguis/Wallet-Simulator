@@ -3,7 +3,7 @@ const { test } = require('node:test'),
   fs = require('node:fs'),
   path = require('node:path'),
   { execFileSync } = require('node:child_process');
-test('production build injects complete offline shell and local OCR assets', () => {
+test('production build precaches the offline shell and ships OCR assets on demand', () => {
   const root = path.resolve(__dirname, '..');
   execFileSync(process.execPath, ['scripts/build.cjs'], { cwd: root, stdio: 'pipe' });
   const html = fs.readFileSync(path.join(root, 'dist/index.html'), 'utf8'),
@@ -13,7 +13,10 @@ test('production build injects complete offline shell and local OCR assets', () 
   const assets = JSON.parse(worker.match(/const ASSETS\s*=\s*(\[[\s\S]*?\]);/)[1]);
   assert.ok(assets.includes('index.html'));
   for (const match of html.matchAll(/(?:src|href)="((?:js|css)\/[^"]+)"/g)) assert.ok(assets.includes(match[1]), match[1] + ' missing from offline cache');
-  for (const asset of ['vendor/lang/por.traineddata.gz', 'vendor/lang/eng.traineddata.gz', 'vendor/pdf/pdf.mjs', 'vendor/pdf/pdf.worker.mjs', 'vendor/tesseract/worker.min.js']) assert.ok(assets.includes(asset));
+  assert.ok(assets.every((asset) => !asset.startsWith('vendor/')), 'optional vendor assets must stay out of the initial cache');
+  for (const asset of ['vendor/lang/por.traineddata.gz', 'vendor/lang/eng.traineddata.gz', 'vendor/pdf/pdf.mjs', 'vendor/pdf/pdf.worker.mjs', 'vendor/tesseract/worker.min.js']) {
+    assert.ok(fs.existsSync(path.join(root, 'dist', asset)), 'missing on-demand asset ' + asset);
+  }
   for (const asset of assets) assert.ok(fs.existsSync(path.join(root, 'dist', asset)), 'missing asset ' + asset);
 });
 
