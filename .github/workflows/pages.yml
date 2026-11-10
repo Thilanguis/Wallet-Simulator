@@ -14,6 +14,8 @@ jobs:
   publish:
     if: github.repository == 'Thilanguis/Wallet-Simulator'
     runs-on: ubuntu-latest
+    env:
+      PAGES_ARTIFACT: github-pages-${{ github.run_attempt }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -31,6 +33,10 @@ jobs:
           enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
+          name: ${{ env.PAGES_ARTIFACT }}
           path: dist
       - uses: actions/deploy-pages@v4
         id: deployment
+        with:
+          artifact_name: ${{ env.PAGES_ARTIFACT }}
+          timeout: 900000
