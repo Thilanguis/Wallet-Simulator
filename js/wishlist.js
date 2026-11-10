@@ -1387,7 +1387,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
   function drawWishPhoto(bitmap, max, crop = { x: 0, y: 0, w: 1, h: 1 }, maxScale = 1) {
-    const { width, height } = bitmap;
+    const width = bitmap.naturalWidth ?? bitmap.width;
+    const height = bitmap.naturalHeight ?? bitmap.height;
     const w = width * crop.w, h = height * crop.h;
     const scale = Math.min(maxScale, max / Math.max(w, h));
     const canvas = document.createElement('canvas');
@@ -1423,13 +1424,31 @@ document.addEventListener('DOMContentLoaded', () => {
     $('wishPhotoMessage').textContent = '';
     showDraftImage(null);
   };
+  async function decodeWishPhoto(file) {
+    try {
+      return await createImageBitmap(file);
+    } catch {
+      const image = new Image();
+      const url = URL.createObjectURL(file);
+      try {
+        image.src = url;
+        await image.decode();
+        return image;
+      } catch {
+        throw new Error('Não foi possível abrir esta foto. Tente selecionar o arquivo novamente ou use outro print em JPG ou PNG.');
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    }
+  }
   async function readWishPhoto(file, url, recognize, onImage = () => {}) {
     if (!/^image\/(?:jpeg|png|webp|bmp)$/.test(file.type) || file.size > 12 * 1024 * 1024) throw new Error('Escolha uma foto JPG, PNG, WebP ou BMP de até 12 MB.');
-    const bitmap = await createImageBitmap(file);
+    const bitmap = await decodeWishPhoto(file);
     let detailPhoto, badgePhoto, badgesArea;
     let imageUrl;
     try {
-      const sample = drawWishPhoto(bitmap, bitmap.height > bitmap.width ? 320 : 160);
+      const isPortrait = (bitmap.naturalHeight ?? bitmap.height) > (bitmap.naturalWidth ?? bitmap.width);
+      const sample = drawWishPhoto(bitmap, isPortrait ? 320 : 160);
       const regions = WishProduct.screenshotRegions(sample.getContext('2d').getImageData(0, 0, sample.width, sample.height));
       imageUrl = compressWishPhoto(bitmap, regions?.photo);
       onImage(imageUrl);
@@ -1444,7 +1463,7 @@ document.addEventListener('DOMContentLoaded', () => {
         badgesArea = await cropFile({ x: 0.79, y: 0.10, w: 0.21, h: 0.19 }, 3);
       }
     } finally {
-      bitmap.close();
+      bitmap.close?.();
     }
     const suggestion = { imageUrl };
     try {
@@ -1520,8 +1539,8 @@ document.addEventListener('DOMContentLoaded', () => {
   $('wishUpload').onchange = async () => {
     const files = [...$('wishUpload').files];
     if (!files.length) return;
-    $('wishUpload').value = '';
     if (editing && files.length > 1) {
+      $('wishUpload').value = '';
       $('wishPhotoMessage').textContent = 'Na edição, escolha uma foto. Para cadastrar várias, abra Adicionar desejo.';
       return;
     }
@@ -1577,6 +1596,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } finally {
       if (token === photoRevision) {
         photoBusy = false;
+        $('wishUpload').value = '';
         $('wishSave').disabled = false;
         $('wishUpload').disabled = false;
       }

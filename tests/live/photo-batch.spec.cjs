@@ -54,6 +54,27 @@ test('reads four product photos together and saves only the reviewed selections'
   await expect(page.locator('.wish-row a').filter({ hasText: names[1] })).toContainText('×2');
 });
 
+test('retries product photos when the primary image decoder fails', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.createImageBitmap = async () => {
+      throw new DOMException('The source image could not be decoded.', 'InvalidStateError');
+    };
+  });
+  await page.goto('/');
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  await page.locator('[data-panel=wishlistPanel]').click();
+  await page.locator('#wishEditor > summary').click();
+  const upload = page.locator('#wishUpload');
+  await upload.setInputFiles({ name: 'broken.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('invalid image') });
+  await expect(page.locator('#wishPhotoMessage')).toContainText('Não foi possível abrir esta foto');
+  const files = await photos(page, [['Pandora', 'Silver Moon Necklace', 'R$ 12,50']]);
+  await upload.setInputFiles(files);
+  await expect(page.locator('#wishImagePreview img')).toBeVisible();
+  await expect(page.locator('#wishTitle')).toHaveValue('Silver Moon Necklace', { timeout: 30000 });
+  await expect(page.locator('#wishPrice')).toHaveValue('12.5');
+  await expect(page.locator('.wish-row')).toHaveCount(0);
+});
+
 test('reviews multiple receipts independently and saves them only on confirmation', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
