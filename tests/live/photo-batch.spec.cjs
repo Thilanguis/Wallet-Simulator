@@ -59,6 +59,11 @@ test('copies all picker files before OCR and preserves the readable photos in a 
     const nativeDecode = window.createImageBitmap;
     const nativeRead = Blob.prototype.arrayBuffer;
     const nativeFileRead = FileReader.prototype.readAsArrayBuffer;
+    const nativeObjectUrl = URL.createObjectURL;
+    URL.createObjectURL = (file) => {
+      if (file.name === 'blocked.jpg') throw new DOMException('Picker access lost', 'NotReadableError');
+      return nativeObjectUrl(file);
+    };
     FileReader.prototype.readAsArrayBuffer = function (file) {
       if (file.name === 'blocked.jpg') throw new DOMException('Picker access lost', 'NotReadableError');
       return nativeFileRead.call(this, file);
@@ -93,6 +98,15 @@ test('copies all picker files before OCR and preserves the readable photos in a 
   await expect(batch.first().getByRole('checkbox')).toBeDisabled();
   await expect(batch.last().locator('[data-field=title]')).toHaveValue('Pink Blossom Ring');
   await expect(batch.last().locator('[data-field=price]')).toHaveValue('13');
+  await batch.last().locator('[data-field=price]').fill('14,90');
+  const [retry] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    batch.first().getByRole('button', { name: 'Escolher esta foto em Arquivos' }).click(),
+  ]);
+  await retry.setFiles(files[0]);
+  await expect(batch.first().getByRole('checkbox')).toBeChecked();
+  await expect(batch.first().locator('[data-field=title]')).toHaveValue('Silver Moon Necklace');
+  await expect(batch.last().locator('[data-field=price]')).toHaveValue('14,90');
   await expect(page.locator('.wish-row')).toHaveCount(0);
 });
 
@@ -118,6 +132,37 @@ test('opens the alternate picker and reads an image when arrayBuffer fails', asy
   await expect(page.locator('#wishTitle')).toHaveValue('Silver Moon Necklace');
   await expect(page.locator('#wishPrice')).toHaveValue('12.5');
   await expect(page.locator('.wish-row')).toHaveCount(0);
+});
+
+test('uses the general picker on Android and recovers files that only the image decoder can open', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'userAgent', { value: 'Mozilla/5.0 (Linux; Android 14)' });
+    const selectedFiles = new WeakSet();
+    document.addEventListener('change', ({ target }) => {
+      if (target.id === 'wishUpload') for (const file of target.files) selectedFiles.add(file);
+    }, true);
+    const nativeRead = Blob.prototype.arrayBuffer;
+    const nativeFileRead = FileReader.prototype.readAsArrayBuffer;
+    Blob.prototype.arrayBuffer = function () {
+      if (selectedFiles.has(this)) return Promise.reject(new DOMException('Picker access lost', 'NotReadableError'));
+      return nativeRead.call(this);
+    };
+    FileReader.prototype.readAsArrayBuffer = function (file) {
+      if (selectedFiles.has(file)) throw new DOMException('Picker access lost', 'NotReadableError');
+      return nativeFileRead.call(this, file);
+    };
+  });
+  await page.goto('/');
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  await page.locator('[data-panel=wishlistPanel]').click();
+  await page.locator('#wishEditor > summary').click();
+  const upload = page.locator('#wishUpload');
+  expect(await upload.getAttribute('accept')).toBeNull();
+  const [photo] = await photos(page, [['Pandora', 'Silver Moon Necklace', 'R$ 12,50']]);
+  await upload.setInputFiles({ ...photo, name: 'android.png' });
+  await expect(page.locator('#wishImagePreview img')).toBeVisible();
+  await expect(page.locator('#wishTitle')).toHaveValue('Silver Moon Necklace');
+  await expect(page.locator('#wishPrice')).toHaveValue('12.5');
 });
 
 test('retries product photos when the primary image decoder fails', async ({ page }) => {

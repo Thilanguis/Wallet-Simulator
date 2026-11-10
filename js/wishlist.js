@@ -1475,6 +1475,16 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
   }
+  async function recoverPickedPhoto(file) {
+    const image = await decodeWishPhoto(file);
+    try {
+      const canvas = drawWishPhoto(image, 1550);
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      return blob ? new File([blob], file.name, { type: blob.type }) : null;
+    } finally {
+      image.close?.();
+    }
+  }
   async function copyPickedPhoto(file) {
     const extension = file.name.match(/\.(jpe?g|png|webp|bmp)$/i)?.[1].toLowerCase();
     const type = !file.type || file.type === 'application/octet-stream'
@@ -1492,6 +1502,8 @@ document.addEventListener('DOMContentLoaded', () => {
       }));
       return { file: new File([bytes], file.name, { type }) };
     } catch {
+      const recovered = await recoverPickedPhoto(file).catch(() => null);
+      if (recovered) return { file: recovered };
       return { warning: 'O navegador não conseguiu ler este arquivo. Use Procurar em Arquivos e selecione a foto em Imagens ou Downloads.' };
     }
   }
@@ -1565,7 +1577,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     $('wishBatchRows').replaceChildren();
   }
-  function appendPhotoRow(file, suggestion, i) {
+  function createPhotoRow(file, suggestion, i) {
     const esc = escapeHTML;
     const row = document.createElement('div');
     row.className = 'preview-row';
@@ -1583,7 +1595,44 @@ document.addEventListener('DOMContentLoaded', () => {
     }${suggestion.warning ? `<p class="hint">${esc(suggestion.warning)}</p>` : ''}`;
     const image = thumbnail(suggestion.imageUrl);
     if (image) row.querySelector('.row-title').after(image);
-    $('wishBatchRows').append(row);
+    if (!suggestion.imageUrl) {
+      const retry = document.createElement('button');
+      retry.type = 'button';
+      retry.className = 'wish-share-button';
+      retry.textContent = 'Escolher esta foto em Arquivos';
+      const picker = document.createElement('input');
+      picker.type = 'file';
+      picker.hidden = true;
+      retry.onclick = () => { if (!photoBusy) picker.click(); };
+      picker.onchange = () => {
+        if (picker.files[0] && !photoBusy) void retryPhotoRow(picker, row, i);
+      };
+      row.append(retry, picker);
+    }
+    return row;
+  }
+  async function retryPhotoRow(picker, row, index) {
+    const file = picker.files[0];
+    const token = ++photoRevision;
+    setPhotoBusy(true);
+    try {
+      const photo = await copyPickedPhoto(file);
+      if (token !== photoRevision) return;
+      const suggestion = photo.file
+        ? await withReceiptReader((recognize) => readWishPhoto(photo.file, '', recognize)).catch((error) => ({ warning: error.message || 'Não foi possível abrir a foto.' }))
+        : photo;
+      if (token !== photoRevision) return;
+      photoBatch[index] = suggestion;
+      row.replaceWith(createPhotoRow(file, suggestion, index));
+      $('wishPhotoMessage').textContent = photoBatch.some(({ imageUrl }) => imageUrl)
+        ? 'Confira os produtos antes de adicionar.'
+        : 'Nenhuma foto pôde ser aberta. Confira os avisos abaixo.';
+    } finally {
+      if (token === photoRevision) {
+        picker.value = '';
+        setPhotoBusy(false);
+      }
+    }
   }
   $('wishBatchRows').addEventListener('input', ({ target }) => {
     if (target.matches('input[aria-invalid]')) batchFieldError(target, '');
@@ -1592,6 +1641,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (!$('wishBatchRows').querySelector('input[aria-invalid]')) $('wishSaveError').textContent = '';
   });
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  // Chromium can route image-only inputs through the Android photo picker.
+  if (isAndroid) $('wishUpload').removeAttribute('accept');
   $('wishBrowseFiles').onclick = () => $('wishFileUpload').click();
   $('wishUpload').onchange = $('wishFileUpload').onchange = ({ currentTarget: input }) =>
     importWishPhotos([...input.files], () => { input.value = ''; });
@@ -1636,7 +1688,11 @@ document.addEventListener('DOMContentLoaded', () => {
     status.textContent = '';
     setPhotoBusy(true, count);
     try {
-      const picked = await Promise.all(files.map(copyPickedPhoto));
+      const picked = [];
+      for (const file of files) {
+        picked.push(await copyPickedPhoto(file));
+        if (token !== photoRevision) return;
+      }
       if (token !== photoRevision) return;
       if (photoBatch) {
         reset();
@@ -1655,7 +1711,7 @@ document.addEventListener('DOMContentLoaded', () => {
               : photo;
             if (token !== photoRevision) return;
             batch.push(suggestion);
-            appendPhotoRow(file, suggestion, i);
+            $('wishBatchRows').append(createPhotoRow(file, suggestion, i));
             $('wishPhotoProgress').textContent = (i + 1) + '/' + files.length;
           }
         });
