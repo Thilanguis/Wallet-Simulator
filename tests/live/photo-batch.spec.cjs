@@ -58,6 +58,11 @@ test('copies all picker files before OCR and preserves the readable photos in a 
   await page.addInitScript(() => {
     const nativeDecode = window.createImageBitmap;
     const nativeRead = Blob.prototype.arrayBuffer;
+    const nativeFileRead = FileReader.prototype.readAsArrayBuffer;
+    FileReader.prototype.readAsArrayBuffer = function (file) {
+      if (file.name === 'blocked.jpg') throw new DOMException('Picker access lost', 'NotReadableError');
+      return nativeFileRead.call(this, file);
+    };
     const pickerFiles = new WeakSet();
     document.addEventListener('change', ({ target }) => {
       if (target.id === 'wishUpload') for (const file of target.files) pickerFiles.add(file);
@@ -91,6 +96,30 @@ test('copies all picker files before OCR and preserves the readable photos in a 
   await expect(page.locator('.wish-row')).toHaveCount(0);
 });
 
+test('opens the alternate picker and reads an image when arrayBuffer fails', async ({ page }) => {
+  await page.addInitScript(() => {
+    const nativeRead = Blob.prototype.arrayBuffer;
+    Blob.prototype.arrayBuffer = function () {
+      if (this instanceof File && this.type === 'application/octet-stream') {
+        return Promise.reject(new DOMException('Picker access lost', 'NotReadableError'));
+      }
+      return nativeRead.call(this);
+    };
+  });
+  await page.goto('/');
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  await page.locator('[data-panel=wishlistPanel]').click();
+  await page.locator('#wishEditor > summary').click();
+  const files = await photos(page, [['Pandora', 'Silver Moon Necklace', 'R$ 12,50']]);
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.locator('#wishBrowseFiles').click()]);
+  expect(await chooser.element().getAttribute('id')).toBe('wishFileUpload');
+  await chooser.setFiles({...files[0], mimeType: 'application/octet-stream'});
+  await expect(page.locator('#wishImagePreview img')).toBeVisible();
+  await expect(page.locator('#wishTitle')).toHaveValue('Silver Moon Necklace');
+  await expect(page.locator('#wishPrice')).toHaveValue('12.5');
+  await expect(page.locator('.wish-row')).toHaveCount(0);
+});
+
 test('retries product photos when the primary image decoder fails', async ({ page }) => {
   await page.addInitScript(() => {
     window.createImageBitmap = async () => {
@@ -109,6 +138,47 @@ test('retries product photos when the primary image decoder fails', async ({ pag
   await expect(page.locator('#wishImagePreview img')).toBeVisible();
   await expect(page.locator('#wishTitle')).toHaveValue('Silver Moon Necklace', { timeout: 30000 });
   await expect(page.locator('#wishPrice')).toHaveValue('12.5');
+  await expect(page.locator('.wish-row')).toHaveCount(0);
+});
+
+test('accepts a pasted print and dropped JPEG and WebP photos without intercepting plain text', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  await page.locator('[data-panel=wishlistPanel]').click();
+  await page.locator('#wishEditor > summary').click();
+  await page.evaluate(() => {
+    const form = document.querySelector('#wishForm');
+    const clipboardData = new DataTransfer();
+    clipboardData.setData('text/plain', 'ordinary link or text');
+    const event = new ClipboardEvent('paste', {clipboardData, cancelable: true});
+    if (!form.dispatchEvent(event)) throw new Error('Text paste was intercepted');
+  });
+  const [file] = await photos(page, [['Pandora', 'Silver Moon Necklace', 'R$ 12,50']]);
+  await page.evaluate((data) => {
+    const clipboardData = new DataTransfer();
+    clipboardData.items.add(new File([Uint8Array.from(data)], 'print.png', {type: 'image/png'}));
+    document.querySelector('#wishForm').dispatchEvent(new ClipboardEvent('paste', {clipboardData, cancelable: true}));
+  }, [...file.buffer]);
+  await expect(page.locator('#wishTitle')).toHaveValue('Silver Moon Necklace');
+  await expect(page.locator('#wishSave')).toBeEnabled();
+  await page.evaluate(async (data) => {
+    const source = await createImageBitmap(new Blob([Uint8Array.from(data)], {type: 'image/png'}));
+    const canvas = document.createElement('canvas');
+    canvas.width = source.width;
+    canvas.height = source.height;
+    canvas.getContext('2d').drawImage(source, 0, 0);
+    source.close();
+    const dataTransfer = new DataTransfer();
+    for (const [extension, type] of [['jpg', 'image/jpeg'], ['webp', 'image/webp']]) {
+      const encoded = await new Promise((resolve) => canvas.toBlob(resolve, type));
+      if (encoded.type !== type) throw new Error('Unexpected format ' + encoded.type);
+      dataTransfer.items.add(new File([encoded], 'photo.' + extension, {type}));
+    }
+    document.querySelector('#wishForm').dispatchEvent(new DragEvent('drop', {dataTransfer, cancelable: true}));
+  }, [...file.buffer]);
+  const batch = page.locator('#wishBatchRows .preview-row');
+  await expect(batch.locator('img')).toHaveCount(2);
+  await expect(batch.last().locator('[data-field=price]')).toHaveValue('12.5');
   await expect(page.locator('.wish-row')).toHaveCount(0);
 });
 

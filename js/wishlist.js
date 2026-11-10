@@ -154,6 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setPhotoBatch(null);
     $('wishSave').disabled = false;
     $('wishUpload').disabled = false;
+    $('wishBrowseFiles').disabled = false;
     updatePeople(rows(), defaultPerson);
     showDraftImage(null);
     $('wishPhotoMessage').textContent = '';
@@ -1386,18 +1387,20 @@ document.addEventListener('DOMContentLoaded', () => {
       $('wishSaveError').textContent = error.message;
     }
   };
-  function drawWishPhoto(bitmap, max, crop = { x: 0, y: 0, w: 1, h: 1 }, maxScale = 1) {
+  function drawWishPhoto(bitmap, max, crop = { x: 0, y: 0, w: 1, h: 1 }, maxScale = 1, padding = 0) {
     const width = bitmap.naturalWidth ?? bitmap.width;
     const height = bitmap.naturalHeight ?? bitmap.height;
     const w = width * crop.w, h = height * crop.h;
     const scale = Math.min(maxScale, max / Math.max(w, h));
     const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round(w * scale));
-    canvas.height = Math.max(1, Math.round(h * scale));
+    const outputWidth = Math.max(1, Math.round(w * scale));
+    const outputHeight = Math.max(1, Math.round(h * scale));
+    canvas.width = outputWidth + 2 * padding;
+    canvas.height = outputHeight + 2 * padding;
     const ctx = canvas.getContext('2d', { alpha: false });
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(bitmap, width * crop.x, height * crop.y, w, h, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bitmap, width * crop.x, height * crop.y, w, h, padding, padding, outputWidth, outputHeight);
     return canvas;
   }
   function compressWishPhoto(bitmap, crop) {
@@ -1420,7 +1423,9 @@ document.addEventListener('DOMContentLoaded', () => {
     photoBusy = false;
     $('wishSave').disabled = false;
     $('wishUpload').disabled = false;
+    $('wishBrowseFiles').disabled = false;
     $('wishUpload').value = '';
+    $('wishFileUpload').value = '';
     $('wishPhotoMessage').textContent = '';
     showDraftImage(null);
   };
@@ -1442,12 +1447,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
   async function copyPickedPhoto(file) {
-    if (!/^image\/(?:jpeg|png|webp|bmp)$/.test(file.type) || file.size > 12 * 1024 * 1024) return { warning: 'Escolha uma foto JPG, PNG, WebP ou BMP de até 12 MB.' };
+    const extension = file.name.match(/\.(jpe?g|png|webp|bmp)$/i)?.[1].toLowerCase();
+    const type = !file.type || file.type === 'application/octet-stream'
+      ? extension && 'image/' + (extension === 'jpg' ? 'jpeg' : extension)
+      : file.type;
+    if (!/^image\/(?:jpeg|png|webp|bmp)$/.test(type) || file.size > 12 * 1024 * 1024) return { warning: 'Escolha uma foto JPG, PNG, WebP ou BMP de até 12 MB.' };
     try {
-      // Read Android picker files before resetting the form or starting OCR.
-      return { file: new File([await file.arrayBuffer()], file.name, { type: file.type }) };
+      // Keep a readable copy before resetting the picker or starting OCR.
+      const bytes = await Promise.resolve().then(() => file.arrayBuffer()).catch(() => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error);
+        reader.onabort = () => reject();
+        reader.readAsArrayBuffer(file);
+      }));
+      return { file: new File([bytes], file.name, { type }) };
     } catch {
-      return { warning: 'O navegador não conseguiu ler este arquivo. Salve a foto no aparelho e selecione a cópia salva.' };
+      return { warning: 'O navegador não conseguiu ler este arquivo. Use Procurar em Arquivos e selecione a foto em Imagens ou Downloads.' };
     }
   }
   async function readWishPhoto(file, url, recognize, onImage = () => {}) {
@@ -1460,15 +1476,19 @@ document.addEventListener('DOMContentLoaded', () => {
       const regions = WishProduct.screenshotRegions(sample.getContext('2d').getImageData(0, 0, sample.width, sample.height));
       imageUrl = compressWishPhoto(bitmap, regions?.photo);
       onImage(imageUrl);
-      const cropFile = async (region, scale) => {
-        const canvas = drawWishPhoto(bitmap, 1550, region, scale);
+      const cropFile = async (region, scale, padding) => {
+        const canvas = drawWishPhoto(bitmap, 1550, region, scale, padding);
         const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
         return blob && new File([blob], file.name, { type: blob.type });
       };
       if (regions?.text) detailPhoto = await cropFile(regions.text, 2);
-      if (regions?.badge) {
-        badgePhoto = await cropFile(regions.badge, 5);
-        badgesArea = await cropFile({ x: 0.79, y: 0.10, w: 0.21, h: 0.19 }, 3);
+      if (regions && isPortrait) {
+        const badgeSample = drawWishPhoto(bitmap, 1280);
+        const badge = WishProduct.mobileStoreBadge(badgeSample.getContext('2d').getImageData(0, 0, badgeSample.width, badgeSample.height));
+        if (badge) {
+          badgePhoto = await cropFile(badge, 5, 16);
+          badgesArea = await cropFile({ x: 0.79, y: 0.10, w: 0.21, h: 0.19 }, 3);
+        }
       }
     } finally {
       bitmap.close?.();
@@ -1481,7 +1501,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!suggestion.store && badgePhoto) {
         const badge = await recognize(badgePhoto, () => {}, { tessedit_pageseg_mode: '7' });
         const yesStyle = /\b(?:y[eo]sstyle|esstyle)\b/i;
-        if (yesStyle.test(badge.text) || (badgesArea && yesStyle.test((await recognize(badgesArea, () => {}, { tessedit_pageseg_mode: '11' })).text))) {
+        const badgeName = /\b(?:y[eo]sstyl[eo]|esstyle)\b/i;
+        if (badgeName.test(badge.text) || (badgesArea && yesStyle.test((await recognize(badgesArea, () => {}, { tessedit_pageseg_mode: '11' })).text))) {
           suggestion.store = 'YesStyle';
         }
       }
@@ -1544,11 +1565,31 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (!$('wishBatchRows').querySelector('input[aria-invalid]')) $('wishSaveError').textContent = '';
   });
-  $('wishUpload').onchange = async () => {
-    const files = [...$('wishUpload').files];
-    if (!files.length) return;
+  $('wishBrowseFiles').onclick = () => $('wishFileUpload').click();
+  $('wishUpload').onchange = $('wishFileUpload').onchange = ({ currentTarget: input }) =>
+    importWishPhotos([...input.files], () => { input.value = ''; });
+  function transferredPhotos(transfer) {
+    return [...transfer.files].filter((file) => file.type.startsWith('image/') || /\.(?:jpe?g|png|webp|bmp)$/i.test(file.name));
+  }
+  $('wishForm').addEventListener('paste', (event) => {
+    const photos = transferredPhotos(event.clipboardData);
+    if (!photos.length) return;
+    event.preventDefault();
+    void importWishPhotos(photos);
+  });
+  $('wishForm').addEventListener('dragover', (event) => {
+    if (event.dataTransfer.types.includes('Files')) event.preventDefault();
+  });
+  $('wishForm').addEventListener('drop', (event) => {
+    if (!event.dataTransfer.types.includes('Files')) return;
+    event.preventDefault();
+    const photos = transferredPhotos(event.dataTransfer);
+    if (photos.length) void importWishPhotos(photos);
+  });
+  async function importWishPhotos(files, clearInput = () => {}) {
+    if (!files.length || photoBusy) return;
     if (editing && files.length > 1) {
-      $('wishUpload').value = '';
+      clearInput();
       $('wishPhotoMessage').textContent = 'Na edição, escolha uma foto. Para cadastrar várias, abra Adicionar desejo.';
       return;
     }
@@ -1561,6 +1602,7 @@ document.addEventListener('DOMContentLoaded', () => {
     photoBusy = true;
     $('wishSave').disabled = true;
     $('wishUpload').disabled = true;
+    $('wishBrowseFiles').disabled = true;
     status.textContent = 'Preparando fotos…';
     try {
       const picked = await Promise.all(files.map(copyPickedPhoto));
@@ -1571,6 +1613,7 @@ document.addEventListener('DOMContentLoaded', () => {
         photoBusy = true;
         $('wishSave').disabled = true;
         $('wishUpload').disabled = true;
+        $('wishBrowseFiles').disabled = true;
       }
       if (files.length > 1) {
         const batch = [];
@@ -1619,12 +1662,13 @@ document.addEventListener('DOMContentLoaded', () => {
     } finally {
       if (token === photoRevision) {
         photoBusy = false;
-        $('wishUpload').value = '';
+        clearInput();
         $('wishSave').disabled = false;
         $('wishUpload').disabled = false;
+        $('wishBrowseFiles').disabled = false;
       }
     }
-  };
+  }
   $('wishRead').onclick = async () => {
     clearTimeout(autoRead);
     const token = ++revision;

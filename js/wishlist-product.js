@@ -78,6 +78,38 @@
     const title = (lastTitle >= 0 ? beforePrice.slice(start, lastTitle + 1).join(' ') : '').slice(0, 300);
     return { title, store: storeName.slice(0, 150), price: best?.price ?? null, currency: best?.currency ?? null };
   }
+  function mobileStoreBadge({ data, width, height }) {
+    const limit = Math.floor(height * 0.33);
+    const minYellow = Math.ceil(width * 0.028);
+    const minHeight = Math.ceil(height * 0.005);
+    let first = -1, left = width, right = 0;
+    for (let y = Math.floor(height * 0.10); y <= limit; y++) {
+      let yellow = 0, rowLeft = width, rowRight = 0;
+      for (let x = Math.floor(width * 0.80); y < limit && x < width; x++) {
+        const i = (y * width + x) * 4;
+        if (data[i] > 205 && data[i + 1] > 165 && data[i + 2] < 135) {
+          yellow++;
+          rowLeft = Math.min(rowLeft, x);
+          rowRight = x + 1;
+        }
+      }
+      if (yellow >= minYellow) {
+        if (first < 0) first = y;
+        left = Math.min(left, rowLeft);
+        right = Math.max(right, rowRight);
+        continue;
+      }
+      if (first >= 0 && y - first >= minHeight && y - first <= height * 0.025) {
+        left = Math.max(0, left - 1);
+        right = Math.min(width, right + 1);
+        return { x: left / width, y: (first - 1) / height, w: (right - left) / width, h: (y - first + 2) / height };
+      }
+      first = -1;
+      left = width;
+      right = 0;
+    }
+    return null;
+  }
   function mobileSaleRegions(data, width, height) {
     if (height < width * 1.5) return null;
     const pixel = (x, y) => (y * width + x) * 4;
@@ -95,21 +127,7 @@
         return Math.min(data[i], data[i + 1], data[i + 2]) > 235;
       });
       if (band >= height * 0.025 && band <= height * 0.10 && whiteBelow) {
-        const badgeLeft = Math.floor(width * 0.83);
-        const badgeRight = Math.floor(width * 0.97);
-        let badge;
-        for (let row = Math.floor(height * 0.10); row < start - 3; row++) {
-          let yellow = 0;
-          for (let x = badgeLeft; x <= badgeRight; x++) {
-            const i = pixel(x, row);
-            if (data[i] > 205 && data[i + 1] > 165 && data[i + 2] < 135) yellow++;
-          }
-          if (yellow > (badgeRight - badgeLeft) * 0.7) {
-            badge = { x: 0.829, y: (row - 3.5) / height, w: 0.15, h: 0.022 };
-            break;
-          }
-        }
-        return { photo: { x: 0, y: 0.035, w: 1, h: start / height - 0.088 }, text: { x: 0, y: (y + 1) / height, w: 0.89, h: 0.19 }, badge };
+        return { photo: { x: 0, y: 0.035, w: 1, h: start / height - 0.088 }, text: { x: 0, y: (y + 1) / height, w: 0.89, h: 0.19 } };
       }
       start = -1;
     }
@@ -213,5 +231,5 @@
       imageUrl: images.map((value) => imageUrl(value, pageUrl)).find(Boolean) || null,
     };
   }
-  return { store, read, imageUrl, savedImageUrl, readPhotoText, screenshotRegions, photoLimit };
+  return { store, read, imageUrl, savedImageUrl, readPhotoText, screenshotRegions, mobileStoreBadge, photoLimit };
 });
