@@ -360,39 +360,81 @@ document.addEventListener('DOMContentLoaded', () => {
     }));
     try {
       const canvas = document.createElement('canvas');
-      const width = 420, header = 76, rowHeight = 78, scale = 2;
-      const footer = header + items.length * rowHeight;
-      const height = footer + 65;
-      canvas.width = width * scale;
-      canvas.height = height * scale;
+      const width = 420;
       const ctx = canvas.getContext('2d');
       if (!ctx) return null;
+      const titleFont = 'bold 14px system-ui';
+      const detailFont = '12px system-ui';
+      const headerFont = 'bold 19px system-ui';
+      const totalFont = 'bold 17px system-ui';
+      const wrap = (text, font, available) => {
+        ctx.font = font;
+        const lines = [];
+        let line = '';
+        for (const word of text.trim().split(/\s+/)) {
+          const next = line ? line + ' ' + word : word;
+          if (ctx.measureText(next).width <= available) {
+            line = next;
+            continue;
+          }
+          if (line) lines.push(line);
+          line = '';
+          for (const char of word) {
+            if (line && ctx.measureText(line + char).width > available) {
+              lines.push(line);
+              line = '';
+            }
+            line += char;
+          }
+        }
+        if (line) lines.push(line);
+        return lines;
+      };
+      const write = (lines, font, color, x, y, step) => {
+        ctx.font = font;
+        ctx.fillStyle = color;
+        lines.forEach((line, index) => ctx.fillText(line, x, y + index * step));
+      };
+      const heading = wrap('Lista de itens · ' + person, headerFont, width - 32);
+      const header = 54 + heading.length * 22;
+      const rows = items.map((item) => {
+        const bitmap = bitmaps.get(WishProduct.savedImageUrl(item.imageUrl));
+        const x = bitmap ? 72 : 16;
+        const available = width - x - 16;
+        const titles = wrap(item.title, titleFont, available);
+        const quantity = quantityOf(item);
+        const detail = [quantity > 1 && quantity + ' un.', prices.get(item.id), item.store].filter(Boolean).join(' · ');
+        const details = wrap(detail, detailFont, available);
+        const url = links.get(item.id);
+        const linkText = url?.replace(/^https?:\/\//, '') || '';
+        const firstLinkLine = wrap(linkText.slice(0, 150), detailFont, available)[0];
+        let linkLine = firstLinkLine;
+        if (firstLinkLine && firstLinkLine !== linkText) {
+          const characters = Array.from(firstLinkLine);
+          while (characters.length && ctx.measureText(characters.join('') + '…').width > available) characters.pop();
+          linkLine = characters.join('') + '…';
+        }
+        const height = Math.max(78, 37 + 18 * titles.length + 16 * details.length + (linkLine ? 16 : 0));
+        return { bitmap, x, titles, details, linkLine, height };
+      });
+      const footer = rows.reduce((y, row) => y + row.height, header);
+      const totalLines = wrap(total, totalFont, width - 32);
+      const height = footer + 45 + totalLines.length * 20;
+      const scale = Math.min(2, 4000 / height);
+      canvas.width = Math.ceil(width * scale);
+      canvas.height = Math.ceil(height * scale);
       ctx.scale(scale, scale);
       ctx.fillStyle = '#20161e';
       ctx.fillRect(0, 0, width, height);
       ctx.fillStyle = '#4d2639';
-      ctx.fillRect(0, 0, width, 66);
-      function write(text, x, y, available) {
-        const label = String(text).replace(/\s+/g, ' ').trim();
-        if (ctx.measureText(label).width <= available) {
-          ctx.fillText(label, x, y);
-          return;
-        }
-        const characters = Array.from(label).slice(0, 100);
-        while (characters.length && ctx.measureText(characters.join('') + '…').width > available) characters.pop();
-        ctx.fillText(characters.join('') + '…', x, y);
-      }
-      ctx.font = 'bold 19px system-ui';
-      ctx.fillStyle = '#ffe0ea';
-      write('Lista de itens · ' + person, 16, 34, width - 32);
-      ctx.font = '12px system-ui';
-      ctx.fillStyle = '#efd2df';
+      ctx.fillRect(0, 0, width, header - 10);
+      write(heading, headerFont, '#ffe0ea', 16, 34, 22);
       const units = countUnits(items);
-      write(pageCount > 1 ? 'Parte ' + page + ' de ' + pageCount : units + (units === 1 ? ' item' : ' itens'), 16, 53, width - 32);
-      items.forEach((item, index) => {
-        const y = header + index * rowHeight;
-        const bitmap = bitmaps.get(WishProduct.savedImageUrl(item.imageUrl));
-        const x = bitmap ? 72 : 16;
+      const subtitle = pageCount > 1 ? 'Parte ' + page + ' de ' + pageCount : units + (units === 1 ? ' item' : ' itens');
+      write([subtitle], detailFont, '#efd2df', 16, header - 23, 16);
+      let y = header;
+      for (const row of rows) {
+        const { bitmap, x, titles, details, linkLine } = row;
         if (bitmap) {
           const size = 44;
           const ratio = Math.min(size / bitmap.width, size / bitmap.height);
@@ -401,24 +443,16 @@ document.addEventListener('DOMContentLoaded', () => {
           ctx.fillRect(16, y + 7, size, size);
           ctx.drawImage(bitmap, 16 + (size - w) / 2, y + 7 + (size - h) / 2, w, h);
         }
-        ctx.font = 'bold 14px system-ui';
-        ctx.fillStyle = '#fff0f6';
-        write(titleWithQuantity(item), x, y + 23, width - x - 16);
-        ctx.font = '12px system-ui';
-        ctx.fillStyle = '#ffe1a2';
-        write([prices.get(item.id), item.store].filter(Boolean).join(' · '), x, y + 42, width - x - 16);
-        ctx.fillStyle = '#e3adc4';
-        const url = links.get(item.id);
-        if (url) write(url.replace(/^https?:\/\//, ''), x, y + 60, width - x - 16);
+        write(titles, titleFont, '#fff0f6', x, y + 23, 18);
+        const detailY = y + 24 + 18 * titles.length;
+        write(details, detailFont, '#ffe1a2', x, detailY, 16);
+        if (linkLine) write([linkLine], detailFont, '#e3adc4', x, detailY + 16 * details.length, 16);
+        y += row.height;
         ctx.fillStyle = '#563748';
-        ctx.fillRect(16, y + 71, width - 32, 1);
-      });
-      ctx.font = '12px system-ui';
-      ctx.fillStyle = '#efd2df';
-      write('Total estimado da lista', 16, footer + 20, width - 32);
-      ctx.font = 'bold 17px system-ui';
-      ctx.fillStyle = '#ffe1a2';
-      write(total, 16, footer + 45, width - 32);
+        ctx.fillRect(16, y - 7, width - 32, 1);
+      }
+      write(['Total estimado da lista'], detailFont, '#efd2df', 16, footer + 20, 16);
+      write(totalLines, totalFont, '#ffe1a2', 16, footer + 45, 20);
       const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.88));
       const filename = 'lista-de-itens' + (pageCount > 1 ? '-' + page : '') + '.jpg';
       return blob ? new File([blob], filename, { type: 'image/jpeg' }) : null;

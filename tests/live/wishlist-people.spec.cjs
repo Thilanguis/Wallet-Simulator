@@ -208,6 +208,47 @@ test('automatically attaches a public Pandora photo when direct reading is block
   await expect(dialog.getByRole('button', { name: 'Montar imagem' })).toBeHidden();
 });
 
+test('renders full product names and multi-unit quantities in the shared JPEG', async ({ page }) => {
+  await page.setViewportSize({ width: 393, height: 852 });
+  await page.goto('/');
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  const longTitle = 'Kit de cuidados para a pele com embalagem especial e refil de viagem edição comemorativa ' + 'X'.repeat(75) + ' Acabamento lavanda';
+  await page.evaluate((title) => {
+    const canvas = document.createElement('canvas');
+    const imageUrl = canvas.toDataURL('image/jpeg');
+    AppStorage.setItem('wishlist', JSON.stringify([
+      { id: 'long', title, store: 'Loja Aurora', imageUrl, originalPrice: 12.5, currency: 'BRL', quantity: 3 },
+      { id: 'legacy', title: 'Produto seguinte', store: 'Loja Aurora', originalPrice: 7.25, currency: 'BRL' },
+    ]));
+    AppStorage.flush();
+    window.dispatchEvent(new Event('wallet:remote'));
+    window.cardLines = [];
+    const nativeFillText = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function (text, x, y) {
+      window.cardLines.push({ text, x, y, width: this.measureText(text).width, color: this.fillStyle });
+      return nativeFillText.call(this, text, x, y);
+    };
+  }, longTitle);
+  await page.locator('[data-panel=wishlistPanel]').click();
+  await page.getByRole('button', { name: 'Compartilhar desejos de Luana' }).click();
+  const dialog = page.locator('#wishShareDialog');
+  await dialog.getByRole('button', { name: 'Montar imagem' }).click();
+  const preview = dialog.locator('#wishImageCards img');
+  await expect(preview).toBeVisible();
+  expect(await preview.evaluate(async (image) => { await image.decode(); return image.naturalHeight; })).toBeGreaterThan(594);
+  const lines = await page.evaluate(() => window.cardLines);
+  const titles = lines.filter(({ color }) => color === '#fff0f6');
+  expect(titles.at(-1).text).toBe('Produto seguinte');
+  expect(titles.slice(0, -1).map(({ text }) => text).join('').replace(/\s/g, '')).toBe(longTitle.replace(/\s/g, ''));
+  expect(titles[0].x).toBe(72);
+  const quantity = lines.find(({ text }) => text.includes('3 un.'));
+  expect(quantity.text).toContain('37,50');
+  expect(quantity.y).toBeGreaterThan(titles.at(-2).y);
+  expect(quantity.y).toBeLessThan(titles.at(-1).y);
+  expect(lines.some(({ text }) => text.includes('44,75'))).toBe(true);
+  expect(lines.every(({ x, width }) => x + width <= 405)).toBe(true);
+});
+
 test('provides a usable fallback when native text and image sharing fail', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.addInitScript(() => {
