@@ -63,7 +63,7 @@
       && (line.split(/\s+/).length < 4 || (line.match(/\p{L}{3,}/gu) || []).length >= 2)
       && !/^(?:loja|store|vendido por|sold by)\s*:/i.test(line)
       && !/^(?:sterling si\s*l?\s*ver|prata(?: esterlina| 925)?|stainless steel|aço inoxidável|(?:\d+\s*k\s+)?(?:yellow |rose |white )?gold|gold plated|platinum plated)$/i.test(line)
-      && !/(?:https?:\/\/|\bwww\.|\b(?:CAD|USD|BRL|EUR|GBP|AUD)\b|[$€£]|\b(?:shipping|delivery|frete|subtotal|checkout|carrinho|add to|shop now|adicionar|sale price|view product details|style your own|reviews?|pick up|select a store|get it delivered|business hours|points?|pontos?|cashback)\b)/i.test(line)
+      && !/(?:https?:\/\/|\bwww\.|\b(?:CAD|USD|BRL|EUR|GBP|AUD)\b|[$€£]|\b(?:shipping|delivery|frete|subtotal|checkout|carrinho|add to|shop now|adicionar|sale price|view product details|style your own|sold|reviews?|pick up|select a store|get it delivered|business hours|points?|pontos?|cashback)\b)/i.test(line)
       && !/^(?:\W*(?:black friday|best seller|gallery)\W*|(?:home|shop|bag|saved|account|menu|search|busca)(?:\s+(?:home|shop|bag|saved|account|menu|search|busca))*|novo|new|sale|oferta|ofertas|preço|price|produto|product|cadastro|login|sign in)$/i.test(line)
       && !/^\W*(?:black friday|deal is|\d+\s*(?:ml|g|oz)\s+in.stock)\b/i.test(line);
     const beforePrice = lines.slice(0, first?.index ?? lines.length);
@@ -75,7 +75,18 @@
         break;
       }
     }
-    const title = (lastTitle >= 0 ? beforePrice.slice(start, lastTitle + 1).join(' ') : '').slice(0, 300);
+    const productHeading = /^[\p{L}\d][\p{L}\d &.'-]{1,40}\s+-\s+\p{L}/u;
+    const headingIndex = beforePrice.findLastIndex((line) => titleLine(line) && productHeading.test(line));
+    let titleLines = lastTitle >= 0 ? beforePrice.slice(start, lastTitle + 1) : [];
+    if (headingIndex >= 0) {
+      const name = beforePrice[headingIndex].split(/\s+-\s+/)[0].toLowerCase();
+      titleLines = [beforePrice[headingIndex]];
+      for (const line of beforePrice.slice(headingIndex + 1)) {
+        if (!titleLine(line) || line.toLowerCase() === name || /^(?:[*★☆]|(?:[Aa]\s+)?[AaKk]{3,}\s+\d)/.test(line)) break;
+        titleLines.push(line);
+      }
+    }
+    const title = titleLines.join(' ').slice(0, 300);
     return { title, store: storeName.slice(0, 150), price: best?.price ?? null, currency: best?.currency ?? null };
   }
   function mobileStoreBadge({ data, width, height }) {
@@ -127,7 +138,7 @@
         return Math.min(data[i], data[i + 1], data[i + 2]) > 235;
       });
       if (band >= height * 0.025 && band <= height * 0.10 && whiteBelow) {
-        return { photo: { x: 0, y: 0.035, w: 1, h: start / height - 0.088 }, text: { x: 0, y: (y + 1) / height, w: 0.89, h: 0.19 } };
+        return { photo: { x: 0, y: 0.035, w: 1, h: start / height - 0.088 }, text: { x: 0, y: (y + 1) / height, w: 0.89, h: 0.28 } };
       }
       start = -1;
     }

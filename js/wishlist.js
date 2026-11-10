@@ -147,14 +147,11 @@ document.addEventListener('DOMContentLoaded', () => {
     editItem = null;
     revision++;
     photoRevision++;
-    photoBusy = false;
+    setPhotoBusy(false);
     request?.abort();
     clearTimeout(autoRead);
     $('wishForm').reset();
     setPhotoBatch(null);
-    $('wishSave').disabled = false;
-    $('wishUpload').disabled = false;
-    $('wishBrowseFiles').disabled = false;
     updatePeople(rows(), defaultPerson);
     showDraftImage(null);
     $('wishPhotoMessage').textContent = '';
@@ -1369,7 +1366,8 @@ document.addEventListener('DOMContentLoaded', () => {
     checkPhotoSpace(next);
     save(next, personId ? registered : undefined);
     reset();
-    $('wishPhotoMessage').textContent = additions.length + ' produtos adicionados.';
+    $('wishEditor').open = false;
+    message(additions.length + ' produtos adicionados.');
   }
   $('wishForm').onsubmit = (event) => {
     event.preventDefault();
@@ -1454,10 +1452,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   $('wishRemovePhoto').onclick = () => {
     photoRevision++;
-    photoBusy = false;
-    $('wishSave').disabled = false;
-    $('wishUpload').disabled = false;
-    $('wishBrowseFiles').disabled = false;
+    setPhotoBusy(false);
     $('wishUpload').value = '';
     $('wishFileUpload').value = '';
     $('wishPhotoMessage').textContent = '';
@@ -1515,14 +1510,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
         return blob && new File([blob], file.name, { type: blob.type });
       };
-      if (regions?.text) detailPhoto = await cropFile(regions.text, 2);
-      if (regions && isPortrait) {
+      const textRegion = regions?.text || (isPortrait ? { x: 0, y: 0.43, w: 0.84, h: 0.48 } : null);
+      if (textRegion) detailPhoto = await cropFile(textRegion, 2);
+      if (isPortrait) {
         const badgeSample = drawWishPhoto(bitmap, 1280);
         const badge = WishProduct.mobileStoreBadge(badgeSample.getContext('2d').getImageData(0, 0, badgeSample.width, badgeSample.height));
-        if (badge) {
-          badgePhoto = await cropFile(badge, 5, 16);
-          badgesArea = await cropFile({ x: 0.79, y: 0.10, w: 0.21, h: 0.19 }, 3);
-        }
+        if (badge) badgePhoto = await cropFile(badge, 5, 16);
+        badgesArea = await cropFile({ x: 0.80, y: 0.105, w: 0.20, h: 0.10 }, 4, 16);
       }
     } finally {
       bitmap.close?.();
@@ -1532,11 +1526,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const { text } = await recognize(detailPhoto || file, () => {});
       Object.assign(suggestion, WishProduct.readPhotoText(text, url));
       suggestion.store ||= knownWishStore(suggestion.title);
-      if (!suggestion.store && badgePhoto) {
-        const badge = await recognize(badgePhoto, () => {}, { tessedit_pageseg_mode: '7' });
-        const yesStyle = /\b(?:y[eo]sstyle|esstyle)\b/i;
-        const badgeName = /\b(?:y[eo]sstyl[eo]|esstyle)\b/i;
-        if (badgeName.test(badge.text) || (badgesArea && yesStyle.test((await recognize(badgesArea, () => {}, { tessedit_pageseg_mode: '11' })).text))) {
+      if (!suggestion.store && badgesArea) {
+        const yesStyle = /\b(?:[yv][eo]sstyl[eo]|esstyle)\b/i;
+        const badge = badgePhoto && await recognize(badgePhoto, () => {}, { tessedit_pageseg_mode: '7' });
+        if ((badge && yesStyle.test(badge.text)) || yesStyle.test((await recognize(badgesArea, () => {}, { tessedit_pageseg_mode: '11' })).text)) {
           suggestion.store = 'YesStyle';
         }
       }
@@ -1620,6 +1613,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const photos = transferredPhotos(event.dataTransfer);
     if (photos.length) void importWishPhotos(photos);
   });
+  function setPhotoBusy(busy, progress = '') {
+    photoBusy = busy;
+    $('wishPhotoProgress').textContent = progress;
+    $('wishPhotoLoading').hidden = !busy;
+    for (const id of ['wishSave', 'wishUpload', 'wishBrowseFiles']) $(id).disabled = busy;
+  }
   async function importWishPhotos(files, clearInput = () => {}) {
     if (!files.length || photoBusy) return;
     if (editing && files.length > 1) {
@@ -1633,21 +1632,16 @@ document.addEventListener('DOMContentLoaded', () => {
     request?.abort();
     clearTimeout(autoRead);
     message('');
-    photoBusy = true;
-    $('wishSave').disabled = true;
-    $('wishUpload').disabled = true;
-    $('wishBrowseFiles').disabled = true;
-    status.textContent = 'Preparando fotos…';
+    const count = files.length > 1 ? '0/' + files.length : '';
+    status.textContent = '';
+    setPhotoBusy(true, count);
     try {
       const picked = await Promise.all(files.map(copyPickedPhoto));
       if (token !== photoRevision) return;
       if (photoBatch) {
         reset();
         token = ++photoRevision;
-        photoBusy = true;
-        $('wishSave').disabled = true;
-        $('wishUpload').disabled = true;
-        $('wishBrowseFiles').disabled = true;
+        setPhotoBusy(true, count);
       }
       if (files.length > 1) {
         const batch = [];
@@ -1655,7 +1649,6 @@ document.addEventListener('DOMContentLoaded', () => {
         await withReceiptReader(async (recognize) => {
           for (const [i, file] of files.entries()) {
             if (token !== photoRevision) return;
-            status.textContent = `Lendo foto ${i + 1} de ${files.length}…`;
             const photo = picked[i];
             const suggestion = photo.file
               ? await readWishPhoto(photo.file, '', recognize).catch((error) => ({ warning: error.message || 'Não foi possível abrir a foto.' }))
@@ -1663,6 +1656,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (token !== photoRevision) return;
             batch.push(suggestion);
             appendPhotoRow(file, suggestion, i);
+            $('wishPhotoProgress').textContent = (i + 1) + '/' + files.length;
           }
         });
         if (token === photoRevision) status.textContent = batch.some(({ imageUrl }) => imageUrl)
@@ -1675,7 +1669,6 @@ document.addEventListener('DOMContentLoaded', () => {
       const suggestion = await withReceiptReader((recognize) => readWishPhoto(photo.file, $('wishUrl').value, recognize, (imageUrl) => {
         if (token !== photoRevision) return;
         showDraftImage(imageUrl);
-        status.textContent = 'Lendo o texto da foto…';
       }));
       if (token !== photoRevision) return;
       if (!$('wishTitle').value.trim()) $('wishTitle').value = suggestion.title || '';
@@ -1695,11 +1688,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (token === photoRevision) status.textContent = error.message || 'Não foi possível abrir a foto.';
     } finally {
       if (token === photoRevision) {
-        photoBusy = false;
         clearInput();
-        $('wishSave').disabled = false;
-        $('wishUpload').disabled = false;
-        $('wishBrowseFiles').disabled = false;
+        setPhotoBusy(false);
       }
     }
   }

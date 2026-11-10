@@ -48,7 +48,7 @@ test('reads four product photos together and saves only the reviewed selections'
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.locator('#wishSave').click();
   await expect(page.locator('.wish-row img')).toHaveCount(3);
-  await page.locator('#wishEditor').getByRole('button', { name: 'Fechar painel' }).click();
+  await expect(page.locator('#wishEditor')).not.toHaveAttribute('open', '');
   await page.locator('#wishSelectAllPurchase').check();
   await expect(page.locator('#wishTotal')).toContainText('47,00');
   await expect(page.locator('.wish-row a').filter({ hasText: names[1] })).toContainText('×2');
@@ -180,6 +180,32 @@ test('accepts a pasted print and dropped JPEG and WebP photos without intercepti
   await expect(batch.locator('img')).toHaveCount(2);
   await expect(batch.last().locator('[data-field=price]')).toHaveValue('12.5');
   await expect(page.locator('.wish-row')).toHaveCount(0);
+});
+
+test('shows a spinner and batch progress only while photos are being read', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  await page.locator('[data-panel=wishlistPanel]').click();
+  await page.locator('#wishEditor > summary').click();
+  const files = await photos(page, [['Pandora', 'Silver Moon Necklace', 'R$ 10,00'], ['Pandora', 'Pink Blossom Ring', 'R$ 12,00']]);
+  await page.evaluate(() => {
+    window.withReceiptReader = (read) => read(async () => {
+      await new Promise(resolve => { window.releasePhoto = resolve; });
+      return {text: 'Pandora\nSilver Moon Necklace\nR$ 10,00'};
+    });
+  });
+  const loading = page.locator('#wishPhotoLoading');
+  await expect(loading).toBeHidden();
+  await page.locator('#wishUpload').setInputFiles(files);
+  await expect(loading).toBeVisible();
+  await expect(page.locator('#wishPhotoProgress')).toHaveText('0/2');
+  await expect.poll(() => page.evaluate(() => typeof window.releasePhoto)).toBe('function');
+  await page.evaluate(() => { window.releasePhoto(); window.releasePhoto = null; });
+  await expect(page.locator('#wishPhotoProgress')).toHaveText('1/2');
+  await expect.poll(() => page.evaluate(() => typeof window.releasePhoto)).toBe('function');
+  await page.evaluate(() => window.releasePhoto());
+  await expect(loading).toBeHidden();
+  await expect(page.locator('#wishSave')).toBeEnabled();
 });
 
 test('reviews multiple receipts independently and saves them only on confirmation', async ({ page }) => {
