@@ -1,5 +1,11 @@
 const { test, expect } = require('../firebase-fixture.cjs');
 
+function useSharePlatform(page, platform) {
+  return page.addInitScript((value) => {
+    Object.defineProperty(navigator, 'userAgentData', { value: { platform: value } });
+  }, platform);
+}
+
 async function productImage(page) {
   return Buffer.from(await page.evaluate(() => {
     const canvas = document.createElement('canvas');
@@ -49,10 +55,12 @@ test('groups old and new wishes and shares only the confirmed selection', async 
   await add('Bolsa', 200, 'new');
   await add('Relógio', 75, 'existing');
   const ana = page.locator('.wish-group').filter({ has: page.getByRole('heading', { name: 'Ana', exact: true }) });
-  await expect(ana).toContainText(/2 a comprar.*275,00/);
+  await expect(ana.locator('.wish-group-total')).toHaveText(/2 a comprar.*R\$\s*0,00/);
   await expect(ana).toContainText('Loja teste');
   await ana.getByRole('checkbox', { name: 'Comprado: Relógio' }).check();
-  await expect(ana).toContainText(/1 a comprar.*200,00/);
+  await page.getByRole('button', { name: 'Registrar compra', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirmar compra', exact: true }).click();
+  await expect(ana.locator('.wish-group-total')).toHaveText(/1 a comprar.*R\$\s*0,00/);
   await ana.getByRole('button', { name: 'Compartilhar desejos de Ana' }).click();
   const dialog = page.locator('#wishShareDialog');
   const preview = dialog.locator('#wishSharePreview');
@@ -198,6 +206,70 @@ test('automatically attaches a public Pandora photo when direct reading is block
   await expect(dialog.locator('input[type=file]')).toHaveCount(0);
   await dialog.getByRole('checkbox', { name: 'Pingente' }).uncheck();
   await expect(dialog.getByRole('button', { name: 'Montar imagem' })).toBeHidden();
+});
+
+test('provides a usable fallback when native text and image sharing fail', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'canShare', { value: () => true });
+    Object.defineProperty(navigator, 'share', { value: async () => { throw new DOMException('Share unavailable', 'NotAllowedError'); } });
+  });
+  await page.goto('/');
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  await page.evaluate(() => {
+    const item = { id: 'a', title: 'Anel', store: 'Loja', originalPrice: 50, currency: 'BRL' };
+    AppStorage.setItem('wishlist', JSON.stringify([item]));
+    AppStorage.flush();
+    window.dispatchEvent(new Event('wallet:remote'));
+  });
+  await page.locator('[data-panel=wishlistPanel]').click();
+  await page.getByRole('button', { name: 'Compartilhar desejos de Dominadora' }).click();
+  const dialog = page.locator('#wishShareDialog');
+  await dialog.locator('#wishShareNative').click();
+  await expect(dialog.locator('#wishShareStatus')).toContainText('Mensagem copiada');
+  const message = await dialog.locator('#wishSharePreview').inputValue();
+  expect((await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g, '\n')).toBe(message);
+  expect(new URL(await dialog.locator('#wishShareWhatsApp').getAttribute('href')).searchParams.get('text')).toBe(message);
+  await dialog.getByRole('button', { name: 'Montar imagem' }).click();
+  await dialog.getByRole('button', { name: 'Copiar imagem', exact: true }).click();
+  await expect(dialog.locator('#wishImageShareStatus')).toContainText('Imagem copiada');
+  expect(await page.evaluate(async () => (await navigator.clipboard.read()).some((item) => item.types.includes('image/png')))).toBe(true);
+  const download = page.waitForEvent('download');
+  await dialog.getByRole('button', { name: 'Enviar imagem', exact: true }).click();
+  expect((await download).suggestedFilename()).toBe('lista-de-itens.jpg');
+  await expect(dialog.locator('#wishImageShareStatus')).toContainText('Imagem baixada');
+});
+
+test('uses native image sharing on Windows and keeps the preview usable after cancellation', async ({ page, context }) => {
+  await useSharePlatform(page, 'Windows');
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'canShare', { value: () => true });
+    Object.defineProperty(navigator, 'share', { value: async ({ files }) => {
+      window.nativeSharedFile = files[0].name;
+      throw new DOMException('Share canceled', 'AbortError');
+    } });
+  });
+  await page.goto('/');
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  await page.evaluate(() => {
+    AppStorage.setItem('wishlist', JSON.stringify([{ id: 'a', title: 'Anel', store: 'Loja', originalPrice: 50, currency: 'BRL' }]));
+    AppStorage.flush();
+    window.dispatchEvent(new Event('wallet:remote'));
+  });
+  await page.locator('[data-panel=wishlistPanel]').click();
+  await page.getByRole('button', { name: 'Compartilhar desejos de Dominadora' }).click();
+  const dialog = page.locator('#wishShareDialog');
+  await expect(dialog.locator('#wishShareNative')).toBeVisible();
+  await expect(dialog.locator('#wishShareWhatsApp')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Montar imagem' }).click();
+  await dialog.getByRole('button', { name: 'Enviar imagem', exact: true }).click();
+  expect(await page.evaluate(() => window.nativeSharedFile)).toBe('lista-de-itens.jpg');
+  await expect(dialog.locator('#wishImageShareStatus')).toBeEmpty();
+  await dialog.getByRole('button', { name: 'Copiar imagem', exact: true }).click();
+  await expect(dialog.locator('#wishImageShareStatus')).toContainText('Imagem copiada');
+  await dialog.getByRole('button', { name: 'Fechar prévia' }).click();
+  await expect(dialog).toBeHidden();
 });
 
 test('reads a product screenshot locally and reuses the saved photo without a link', async ({ page }) => {

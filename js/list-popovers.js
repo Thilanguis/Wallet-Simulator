@@ -1,6 +1,6 @@
 'use strict';
 document.addEventListener('DOMContentLoaded', () => {
-  const editors = ['financeAdd','financeImport','wishEditor'].map(id => document.getElementById(id));
+  const editors = ['financeAdd','financeImport','financeFilters','wishEditor'].map(id => document.getElementById(id));
   function place(editor) {
     const container = editor.closest('#wishlistPanel') || document.querySelector('#financePanel > .section');
     const panel = editor.querySelector('.list-popover'), summary = editor.querySelector(':scope > summary');

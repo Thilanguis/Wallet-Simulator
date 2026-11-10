@@ -18,8 +18,9 @@ document.addEventListener('DOMContentLoaded', () => {
     previewRevision = null;
   const draftKey = 'findom.notes-import-draft';
   const selectedFinance = new Set();
+  const filterFields = ['financeSearch', 'financeFrom', 'financeTo', 'financeCategory', 'financeStore', 'financeStatus'];
   function selectableEntries() {
-    return F.filtered(state.entries, filters()).filter((entry) => !entry.redemptionId);
+    return matchingEntries().filter((entry) => !entry.redemptionId);
   }
   function updateSelection() {
     const visible = selectableEntries(),
@@ -71,7 +72,20 @@ document.addEventListener('DOMContentLoaded', () => {
     render();
     window.dispatchEvent(new Event('finance:changed'));
   }
-  const filters = () => ({ from: $('financeFrom').value, to: $('financeTo').value, category: $('financeCategory').value, store: $('financeStore').value, status: $('financeStatus').value });
+  const filters = () => ({ search: $('financeSearch').value.trim(), from: $('financeFrom').value, to: $('financeTo').value, category: $('financeCategory').value, store: $('financeStore').value.trim(), status: $('financeStatus').value });
+  function matchingEntries({ search, store, ...criteria } = filters()) {
+    const terms = search ? F.norm(search).split(' ') : [];
+    const shop = F.norm(store);
+    return F.filtered(state.entries, criteria).filter((entry) => {
+      if (shop && !F.norm(entry.store || '').includes(shop)) {
+        const noteStores = entry.source === 'wishlist' ? [...(entry.note || '').matchAll(/ · Loja: ([^\r\n]+?) · R\$/g)] : [];
+        if (!noteStores.some(([, name]) => F.norm(name).includes(shop))) return false;
+      }
+      if (!terms.length) return true;
+      const text = F.norm([entry.description, entry.store, entry.category, entry.note, entry.date, entry.date?.split('-').reverse().join('/'), F.format(entry.amount, entry.currency)].join(' '));
+      return terms.every((term) => text.includes(term));
+    });
+  }
   function entryHTML(e) {
     return `<article class="finance-entry" data-entry="${esc(e.id)}"><header><label class="entry-select"><input type="checkbox" data-select-entry="${esc(e.id)}" aria-label="Selecionar ${esc(e.description)}" ${e.redemptionId ? 'disabled' : ''} /><strong>${esc(e.description)}</strong></label><strong>${F.format(e.amount, e.currency)}</strong></header><p>${esc(e.date || 'Data não informada')} · ${esc(e.category)}${e.store ? ' · ' + esc(e.store) : ''}</p>${e.note ? `<p class="hint finance-note">${esc(e.note)}</p>` : ''}<span class="status ${e.status}">${statusLabel(e)}</span>${e.redemptionId ? '<span class="status">Registro vinculado · protegido</span>' : ''}<div><button data-action="edit">Editar / corrigir</button><button data-action="status">Alterar situação</button><button data-action="refund">Estornar</button><button data-action="delete" class="danger">Excluir</button></div></article>`;
   }
@@ -84,10 +98,69 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     return ` <span class="note-dates">${labels.join(' · ')}</span>`;
   }
-  function notebookHTML(listEntries, editable = false) {
+  function purchaseBreakdown(entry) {
+    if (entry.source !== 'wishlist' || !entry.note) return null;
+    const groups = [];
+    const lines = entry.note.trim().split(/\r?\n/);
+    const footer = /^Contribuições: (R\$\s*[\d.]+,\d{2})\nPago pela Dominadora: (R\$\s*[\d.]+,\d{2})$/.exec(lines.slice(-2).join('\n'));
+    if (footer) lines.splice(-2);
+    for (const line of lines) {
+      const item = /^\s*• (.+?)(?: · Loja: (.+?))? · (R\$\s*[\d.]+,\d{2})$/.exec(line);
+      if (item && groups.length) {
+        const [, title, store = '', amount] = item;
+        groups.at(-1).items.push({ title, store, amount });
+        continue;
+      }
+      const person = /^(.+?) · (R\$\s*[\d.]+,\d{2})(?: · contribuição (R\$\s*[\d.]+,\d{2}))?$/.exec(line);
+      if (!person || item || line.trimStart().startsWith('•')) return null;
+      const [, name, subtotal, contribution] = person;
+      groups.push({ name, subtotal, contribution, items: [] });
+    }
+    if (!groups.length || groups.some((group) => !group.items.length)) return null;
+    const storeKey = (name) => name.trim().normalize('NFC').toLocaleLowerCase('pt-BR');
+    const storeKeys = new Set(groups.flatMap(({ items }) => items.map((item) => storeKey(item.store))));
+    const store = entry.description === 'Compra da Dominadora' && storeKeys.size === 1 ? groups[0].items[0].store.trim() : '';
+    const showStores = !store && [...storeKeys].some(Boolean);
+    const products = (items) => `<ul>${items.map((item) =>
+      `<li><span>${esc(item.title)}</span><span class="note-purchase-value">${esc(item.amount)}</span></li>`,
+    ).join('')}</ul>`;
+    function productsByStore(items) {
+      if (!showStores) return products(items);
+      const stores = new Map();
+      for (const item of items) {
+        const key = storeKey(item.store);
+        if (!stores.has(key)) stores.set(key, { name: item.store.trim(), items: [] });
+        stores.get(key).items.push(item);
+      }
+      return [...stores.values()].map(({ name, items }) =>
+        `<div class="note-purchase-store"><strong>${esc(name || 'Sem loja informada')}</strong>${products(items)}</div>`,
+      ).join('');
+    }
+    const people = groups.map(({ name, subtotal, contribution, items }) =>
+      `<div class="note-purchase-person"><div class="note-purchase-person-heading">
+        <strong>${esc(name)}</strong><strong class="note-purchase-value">${esc(subtotal)}</strong>
+      </div>${contribution ? `<small>Contribuição · ${esc(contribution)}</small>` : ''}
+      ${productsByStore(items)}</div>`,
+    ).join('');
+    const payment = footer ? `<div class="note-purchase-payment"><span>Contribuições · ${esc(footer[1])}</span><strong>Pago pela Dominadora · ${esc(footer[2])}</strong></div>` : '';
+    return { store, html: `<div class="note-purchase-breakdown">${people}${payment}</div>` };
+  }
+  function notebookEntryHTML(row, shopping, breakdown) {
+    const date = notebookDates(row.entries);
+    if (row.noteOnly) return esc(row.note) + date;
+    const { description, amount, note } = FinanceList.parts(breakdown?.store ? { ...row, label: breakdown.store } : row, shopping);
+    const title = description ? `<strong class="note-entry-title">${esc(description)}</strong> ` : '';
+    const observation = note && !breakdown ? `<span class="note-entry-observation">${esc(note)}</span>` : '';
+    const headingClass = breakdown ? 'note-entry-heading note-entry-featured' : 'note-entry-heading';
+    return `<span class="${headingClass}">${title}<strong class="note-entry-amount">${esc(amount)}</strong>${date}</span>${observation}${breakdown?.html || ''}`;
+  }
+  function notebookHTML(listEntries, editable = false, filtering = false) {
+    if (filtering && !listEntries.length) return '';
     const { groups, total } = FinanceList.calculate(listEntries);
+    const visibleGroups = filtering ? groups.filter((group) => group.rows.length) : groups;
+    const linkedPurchases = editable ? new Set(JSON.parse(AppStorage.getItem('wishlist') || '[]').map((item) => item.purchaseNoteId)) : new Set();
     return (
-      groups
+      visibleGroups
         .map(
           (group) =>
             '<section class="notebook-group" data-note-group="' +
@@ -101,6 +174,13 @@ document.addEventListener('DOMContentLoaded', () => {
               .map((row) => {
                 const ids = row.entries.map((entry) => entry.id).join(',');
                 const controls = editable && row.entries.every((entry) => !entry.redemptionId);
+                const breakdown = editable && row.entries.length === 1 && !row.noteOnly ? purchaseBreakdown(row.entries[0]) : null;
+                const shopping = group.category === F.categories[7];
+                const content = editable ? notebookEntryHTML(row, shopping, breakdown) : esc(FinanceList.rowText(row, shopping));
+                const contentTag = breakdown ? 'div' : 'span';
+                const showWishes = editable && row.entries.length === 1 && row.entries[0].source === 'wishlist' && linkedPurchases.has(ids)
+                  ? `<button type="button" class="note-icon" data-note-wishlist="${esc(ids)}" aria-label="Desfazer compra" title="Desfazer compra e devolver itens aos desejos">↩</button>`
+                  : '';
                 return (
                   '<li class="notebook-line ' +
                   row.entries[0].status +
@@ -108,13 +188,13 @@ document.addEventListener('DOMContentLoaded', () => {
                   '" data-note-ids="' +
                   esc(ids) +
                   '">' +
-                  (controls ? '<button type="button" class="note-icon note-grip" draggable="true" data-note-drag aria-label="Mover item" title="Arraste para reordenar ou mudar de grupo. Pelo teclado: Alt + setas.">⠿</button>' : '') +
-                  '<span class="note-content">' +
-                  esc(FinanceList.rowText(row, group.category === F.categories[7])) +
-                  (editable ? notebookDates(row.entries) : '') +
-                  '</span>' +
+                  (controls && !filtering ? '<button type="button" class="note-icon note-grip" draggable="true" data-note-drag aria-label="Mover item" title="Arraste para reordenar ou mudar de grupo. Pelo teclado: Alt + setas.">⠿</button>' : '') +
+                  `<${contentTag} class="note-content">` +
+                  content +
+                  `</${contentTag}>` +
                   (controls
                     ? '<span class="note-tools">' +
+                      showWishes +
                       row.entries.map((entry) => '<button type="button" class="note-icon" data-note-edit="' + esc(entry.id) + '" aria-label="Editar ' + esc(entry.description) + '" title="Editar">✎</button>').join('') +
                       '<button type="button" class="note-icon note-delete" data-note-delete aria-label="Excluir item" title="Excluir"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7m4-7v7"/></svg></button></span>'
                     : '') +
@@ -130,11 +210,11 @@ document.addEventListener('DOMContentLoaded', () => {
             '</strong></output></p></section>',
         )
         .join('') +
-      '<section class="notebook-group notebook-final"><h3>9. Resumo Final dos Itens 📊</h3><ol>' +
-      groups.map((group) => '<li><span>' + esc(group.category) + '</span><output data-summary-total="' + esc(group.category) + '"><strong>' + F.format(group.total) + '</strong></output></li>').join('') +
-      '</ol><p class="notebook-grand-total">Total Geral Atualizado 🔥 = <output data-grand-total aria-live="polite">' +
-      F.format(total) +
-      '</output></p><p class="hint">Valores somente em dólar ficam nas linhas originais e fora do total em reais.</p></section>'
+      '<section class="notebook-group notebook-final"><h3>' + (filtering ? 'Resumo dos resultados' : '9. Resumo Final dos Itens 📊') + '</h3><ol>' +
+      visibleGroups.map((group) => '<li><span>' + esc(group.category) + '</span><output data-summary-total="' + esc(group.category) + '"><strong>' + F.format(group.total) + '</strong></output></li>').join('') +
+      '</ol>' +
+      (editable ? '' : '<p class="notebook-grand-total">Total Geral Atualizado 🔥 = <output data-grand-total aria-live="polite">' + F.format(total) + '</output></p>') +
+      '</section>'
     );
   }
   const timeline = $('financeTimeline');
@@ -236,30 +316,18 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   timeline.addEventListener('toggle', () => { if (timeline.open) renderTimeline(); });
   function render() {
-    const all = F.totals(state.entries, state.budget),
-      entries = F.filtered(state.entries, filters()),
-      t = F.totals(entries, state.budget);
-    $('groupedFinanceList').innerHTML = notebookHTML(state.entries, true);
+    const activeFilters = filters();
+    const filtering = Object.values(activeFilters).some(Boolean);
+    const entries = matchingEntries(activeFilters);
+    const matchingIds = new Set(entries.map((entry) => entry.id));
+    const displayed = filtering ? state.entries.filter((entry) => matchingIds.has(entry.id)) : state.entries;
+    $('groupedFinanceList').innerHTML = notebookHTML(displayed, true, filtering);
     if (timeline.open) renderTimeline();
-    const totalRow = $('groupedFinanceList').querySelector('.notebook-grand-total');
-    const totalLabel = document.createElement('span'); totalLabel.textContent = 'Total Geral Atualizado 🔥';
-    $('financeTopTotal').replaceChildren(totalLabel, totalRow.querySelector('output')); totalRow.remove();
-    $('homeTotal').textContent = F.format(all.total);
-    $('homeRemaining').textContent = F.format(all.remaining);
-    $('homeRemaining').classList.toggle('negative', all.remaining < 0);
-    $('financeBudget').value = decimal(state.budget);
-    $('financeTotals').textContent = `Filtro atual: ${F.format(t.total)} em gastos registrados\nSomente USD, fora dos reais: ${F.format(t.foreign.USD, 'USD')}. Cancelados e reembolsados são excluídos dos totais.`;
-    $('categoryTotals').innerHTML = F.categories
-      .map(
-        (c) =>
-          `<details><summary class="category-row"><span>${esc(c)}</span><span>${F.format(t.byCategory[c])}</span></summary>${
-            entries
-              .filter((e) => e.category === c)
-              .map((e) => `<div class="category-note"><p>${esc(e.description)} · <strong>${F.format(e.amount, e.currency)}</strong> · ${statusLabel(e)}</p>${e.note ? `<p class="hint finance-note">${esc(e.note)}</p>` : ''}</div>`)
-              .join('') || '<p class="hint">Sem registros neste filtro.</p>'
-          }</details>`,
-      )
-      .join('');
+    const total = F.format(F.totals(state.entries, state.budget).total);
+    if ($('homeTotal').textContent !== total) $('homeTotal').textContent = total;
+    const result = $('financeSearchResults');
+    result.hidden = !filtering;
+    result.textContent = entries.length ? entries.length + (entries.length === 1 ? ' lançamento encontrado' : ' lançamentos encontrados') : 'Nenhum lançamento encontrado.';
     $('financeHistory').innerHTML = entries.map(entryHTML).join('') || '<p class="hint">Nenhum lançamento neste período.</p>';
     updateSelection();
     $('shareText').value = FinanceList.text(state.entries);
@@ -407,6 +475,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const button = event.target.closest('button');
     if (!button) return;
     try {
+      if (button.hasAttribute('data-note-wishlist')) {
+        const id = button.dataset.noteWishlist;
+        if (!(await AppDialog.confirm('Desfazer esta compra? Isso vai excluir o lançamento de Notas e Gastos Reais e devolver os itens vinculados à Lista de Desejos como não comprados.'))) return;
+        const snapshot = WalletStore.snapshot();
+        const entry = snapshot.finance.entries.find((item) => item.id === id && item.source === 'wishlist');
+        const wishes = JSON.parse(snapshot.simulator.wishlist || '[]');
+        if (!entry || !wishes.some((item) => item.purchaseNoteId === id)) throw new Error('A compra ou seus itens mudaram. Confira a lista antes de tentar novamente.');
+        const updatedAt = Date.now();
+        snapshot.simulator.wishlist = JSON.stringify(wishes.map((item) =>
+          item.purchaseNoteId === id ? { ...item, bought: false, purchaseNoteId: undefined, updatedAt } : item,
+        ));
+        const next = F.update(snapshot.finance, { type: 'delete', id });
+        WalletStore.commitBoth(next, snapshot.simulator);
+        refreshFinance();
+        window.dispatchEvent(new Event('finance:changed'));
+        document.querySelector('[data-panel="wishlistPanel"]').click();
+        window.dispatchEvent(new Event('wishlist:purchase-undone'));
+        return;
+      }
       if (button.hasAttribute('data-note-edit'))
         openInlineEditor(
           state.entries.find((entry) => entry.id === button.dataset.noteEdit),
@@ -586,19 +673,9 @@ document.addEventListener('DOMContentLoaded', () => {
       message(error.message, true);
     }
   };
-  $('saveBudget').onclick = () => {
-    try {
-      const budget = F.cents($('financeBudget').value);
-      if (budget < 0) throw new Error('Orçamento deve ser zero ou positivo.');
-      save({ ...state, budget, revision: state.revision + 1 });
-      message('Orçamento salvo.');
-    } catch (error) {
-      message(error.message, true);
-    }
-  };
-  ['financeFrom', 'financeTo', 'financeCategory', 'financeStore', 'financeStatus'].forEach((id) => $(id).addEventListener('input', render));
+  filterFields.forEach((id) => $(id).addEventListener('input', render));
   $('clearFinanceFilters').onclick = () => {
-    ['financeFrom', 'financeTo', 'financeCategory', 'financeStore', 'financeStatus'].forEach((id) => ($(id).value = ''));
+    filterFields.forEach((id) => ($(id).value = ''));
     render();
   };
   $('copySummary').onclick = async () => {
@@ -721,11 +798,98 @@ document.addEventListener('DOMContentLoaded', () => {
     receiptSuggestion = result;
     $('entryOrigin').textContent = result.warnings.join(' ');
   }
-  $('processReceipt').onclick = async () => {
-    const file = $('receiptFile').files[0];
-    $('processReceipt').disabled = true;
+  function receiptBatchMode(active) {
+    $('receiptBatch').hidden = !active;
+    $('receiptSingle').hidden = active;
+    $('receiptBatchRows').replaceChildren();
+  }
+  function appendReceiptRow(file, index, result, repeated) {
+    const { entry, warnings } = result;
+    const row = document.createElement('div');
+    row.className = 'preview-row';
+    row.innerHTML = `<label class="row-title"><input type="checkbox" ${repeated ? '' : 'checked'}> <span>${index + 1}. ${esc(file.name)}</span></label>
+      <div class="form-grid">
+        <label>Descrição<input data-field="description" maxlength="1000" value="${esc(entry.description)}"></label>
+        <label>Loja<input data-field="store" maxlength="200" value="${esc(entry.store)}"></label>
+        <label>Valor<input data-field="amount" inputmode="decimal" value="${entry.amount ? decimal(entry.amount) : ''}"></label>
+        <label>Moeda<select data-field="currency">${['BRL', 'USD'].map((c) => `<option ${c === entry.currency ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
+        <label>Data<input data-field="date" type="date" value="${esc(entry.date)}"></label>
+        <label>Categoria<select data-field="category">${F.categories.map((c) => `<option ${c === entry.category ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
+        <label>Situação<select data-field="status">${Object.entries(statusLabels).map(([key, label]) => `<option value="${key}">${esc(label)}</option>`).join('')}</select></label>
+      </div>
+      <p class="hint">${esc(warnings.join(' '))}</p>`;
+    $('receiptBatchRows').append(row);
+  }
+  $('cancelReceiptBatch').onclick = () => {
+    receiptBatchMode(false);
+    $('ocrProgress').textContent = '';
+  };
+  $('saveReceiptBatch').onclick = async () => {
+    $('saveReceiptBatch').disabled = true;
     try {
-      const result = await recognizeReceipt(file, (text) => ($('ocrProgress').textContent = text));
+      const candidates = [];
+      for (const [i, row] of [...$('receiptBatchRows').children].entries()) {
+        if (!row.querySelector('input[type=checkbox]').checked) continue;
+        try {
+          const entry = Object.fromEntries([...row.querySelectorAll('[data-field]')].map((field) => [field.dataset.field, field.value]));
+          entry.amount = F.cents(entry.amount, entry.currency);
+          entry.source = 'receipt';
+          entry.originalMoney = [{ currency: entry.currency, amount: entry.amount }];
+          candidates.push(F.validate(entry));
+        } catch (error) {
+          throw new Error('Comprovante ' + (i + 1) + ' · ' + error.message);
+        }
+      }
+      if (!candidates.length) throw new Error('Selecione pelo menos um comprovante.');
+      const revision = state.revision;
+      const repeated = candidates.some((entry, i) => F.duplicates([...state.entries, ...candidates.slice(0, i)], entry).length);
+      const warning = repeated ? ' Há itens com a mesma loja, data, valor e moeda. Confirme apenas se forem compras distintas.' : '';
+      if (!(await AppDialog.confirm('Registrar ' + candidates.length + ' lançamentos conferidos?' + warning))) return;
+      if (state.revision !== revision) throw new Error('Os registros mudaram. Confira os itens e confirme novamente.');
+      const next = candidates.reduce((ledger, entry) => F.update(ledger, { type: 'add', entry }), state);
+      save(next);
+      receiptBatchMode(false);
+      $('ocrProgress').textContent = candidates.length + ' lançamentos registrados. Totais atualizados.';
+    } catch (error) {
+      $('ocrProgress').textContent = error.message;
+    } finally {
+      $('saveReceiptBatch').disabled = false;
+    }
+  };
+  $('processReceipt').onclick = async () => {
+    const files = [...$('receiptFile').files];
+    if (!files.length) {
+      $('ocrProgress').textContent = 'Escolha pelo menos um comprovante.';
+      return;
+    }
+    $('processReceipt').disabled = true;
+    $('receiptFile').disabled = true;
+    receiptBatchMode(files.length > 1);
+    try {
+      if (files.length > 1) {
+        $('saveReceiptBatch').disabled = true;
+        $('cancelReceiptBatch').disabled = true;
+        const earlier = [];
+        await withReceiptReader(async (recognize) => {
+          for (const [i, file] of files.entries()) {
+            const prefix = `Comprovante ${i + 1} de ${files.length}`;
+            $('ocrProgress').textContent = prefix + ' · lendo…';
+            let text = '', confidence = null, warning = '';
+            try {
+              ({ text, confidence } = await recognize(file, (progress) => ($('ocrProgress').textContent = prefix + ' · ' + progress)));
+            } catch (error) {
+              warning = error.message || 'Leitura indisponível. Preencha os campos manualmente.';
+            }
+            const result = Receipt.suggest(text, [...state.entries, ...earlier], confidence);
+            if (warning) result.warnings.unshift(warning);
+            appendReceiptRow(file, i, result, result.possibleDuplicates.length > 0);
+            if (result.entry.amount) earlier.push(result.entry);
+          }
+        });
+        $('ocrProgress').textContent = 'Confira os lançamentos. Possíveis duplicatas começam desmarcadas.';
+        return;
+      }
+      const result = await recognizeReceipt(files[0], (text) => ($('ocrProgress').textContent = text));
       $('receiptText').value = result.text;
       suggest(result.confidence);
       $('ocrProgress').textContent = 'Leitura concluída. Confira a sugestão no formulário; nada foi registrado.';
@@ -733,6 +897,9 @@ document.addEventListener('DOMContentLoaded', () => {
       $('ocrProgress').textContent = error.message + ' O cadastro manual continua disponível.';
     } finally {
       $('processReceipt').disabled = false;
+      $('receiptFile').disabled = false;
+      $('saveReceiptBatch').disabled = false;
+      $('cancelReceiptBatch').disabled = false;
       $('receiptFile').value = '';
     }
   };
@@ -757,9 +924,14 @@ document.addEventListener('DOMContentLoaded', () => {
   } catch {
     /* Invalid drafts never replace the financial ledger. */
   }
-  window.addEventListener('redemptions:changed', () => {
+  function refreshFinance() {
     state = F.validateState(WalletStore.finance());
     render();
+  }
+  window.addEventListener('redemptions:changed', refreshFinance);
+  window.addEventListener('wishlist:purchase', () => {
+    refreshFinance();
+    window.dispatchEvent(new Event('finance:changed'));
   });
   window.addEventListener('wallet:remote', (event) => {
     if (event.detail && !event.detail.initial && !event.detail.financeChanged) return;

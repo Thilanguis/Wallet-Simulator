@@ -336,41 +336,35 @@
       </main>
       <section id="financePanel" class="app-panel" hidden>
         <div class="section">
-          <div class="list-title-row"><h2>🎮 Resumo de Jogos e Finanças 💰</h2><div id="financeTopTotal" class="list-top-total"></div></div>
+          <div class="list-title-row"><h2>🎮 Resumo de Jogos e Finanças 💰</h2><div id="financeTopTotal" class="list-top-total"><span>Total Geral Atualizado 🔥</span><output id="homeTotal" data-grand-total aria-live="polite">R$ 0,00</output></div></div>
           <div id="financeMessage" role="status" aria-live="polite"></div>
-          <div class="list-tools"><details id="financeAdd" class="list-editor"><summary data-finance-jump="entry">＋ Nota / gasto</summary></details><details id="financeImport" class="list-editor"><summary>⇧ Importar</summary><div class="list-import-actions"><button type="button" data-finance-jump="receipt">Comprovante</button><button type="button" data-finance-jump="import">Lista</button></div></details></div>
+          <div class="list-tools">
+            <input id="financeSearch" type="search" aria-label="Pesquisar notas e gastos" placeholder="Pesquisar notas e gastos" />
+            <details id="financeFilters" class="list-editor">
+              <summary>Filtros</summary>
+              <div class="filters">
+                <label>De<input id="financeFrom" type="date" /></label>
+                <label>Até<input id="financeTo" type="date" /></label>
+                <label>Categoria<select id="financeCategory"></select></label>
+                <label>Loja<input id="financeStore" placeholder="Todas as lojas" /></label>
+                <label>Situação<select id="financeStatus">
+                  <option value="">Todas</option>
+                  <option value="paid">Gasto registrado</option>
+                  <option value="cancelled">Cancelado</option>
+                  <option value="refunded">Reembolsado</option>
+                </select></label>
+              </div>
+              <button type="button" id="clearFinanceFilters" class="subtle-btn">Limpar filtros</button>
+            </details>
+            <details id="financeAdd" class="list-editor"><summary data-finance-jump="entry">＋ Nota / gasto</summary></details>
+            <details id="financeImport" class="list-editor"><summary>⇧ Importar</summary><div class="list-import-actions"><button type="button" data-finance-jump="receipt">Comprovante</button><button type="button" data-finance-jump="import">Lista</button></div></details>
+          </div>
+          <p id="financeSearchResults" class="hint" role="status" hidden></p>
           <details id="financeTimeline" class="finance-timeline">
             <summary>Linha do tempo dos gastos</summary>
             <div id="financeTimelineContent"></div>
           </details>
           <div id="groupedFinanceList"></div>
-          <details id="financeIndicators">
-            <summary>Indicadores e orçamento</summary>
-            <div class="summary-grid" aria-label="Resumo dos gastos reais">
-              <div class="metric">
-                <span>Total registrado · reais</span>
-                <strong id="homeTotal">0,00</strong>
-              </div>
-            </div>
-
-            <details>
-              <summary>Orçamento (opcional)</summary>
-              <div class="form-grid">
-                <label>
-                  Orçamento total (R$)
-                  <input id="financeBudget" inputmode="decimal" placeholder="0,00" value="0,00" />
-                </label>
-                <button type="button" id="saveBudget">Salvar orçamento</button>
-              </div>
-              <p class="hint">
-                Restante do orçamento:
-                <strong id="homeRemaining">R$ 0,00</strong>
-              </p>
-            </details>
-            <p id="financeTotals" class="notice"></p>
-          </details>
-          <h3 hidden>Registros por categoria · filtro atual</h3>
-          <div id="categoryTotals" hidden></div>
         </div>
         <div class="section">
           <h2 id="entryTitle">Novo lançamento</h2>
@@ -440,20 +434,28 @@
             <button type="button" id="previewImport">Analisar e mostrar prévia</button>
           </details>
           <details>
-            <summary id="receiptToggle">Ler imagem ou PDF com OCR local</summary>
-            <p class="hint">Até 12 MB e 10 páginas. A leitura acontece neste dispositivo. Nenhum comprovante é enviado ou salvo. A primeira leitura pode demorar para carregar o motor.</p>
+            <summary id="receiptToggle">Ler fotos ou PDFs com OCR local</summary>
+            <p class="hint">Até 12 MB por arquivo e 10 páginas por PDF. Os comprovantes são lidos neste dispositivo.</p>
             <label>
-              Comprovante
-              <input id="receiptFile" type="file" accept="image/png,image/jpeg,image/webp,image/bmp,application/pdf" />
+              Comprovantes
+              <input id="receiptFile" type="file" accept="image/png,image/jpeg,image/webp,image/bmp,application/pdf" multiple />
             </label>
-            <button type="button" id="processReceipt">Ler comprovante</button>
+            <button type="button" id="processReceipt">Ler comprovantes</button>
             <p id="ocrProgress" role="status" aria-live="polite"></p>
-            <label>
-              Texto reconhecido (pode corrigir)
-              <textarea id="receiptText"></textarea>
-            </label>
-            <button type="button" id="suggestReceipt">Preparar sugestão pelo texto</button>
-            <div id="receiptWarnings" class="notice" hidden></div>
+            <div id="receiptBatch" hidden>
+              <h3>Conferir lançamentos</h3>
+              <div id="receiptBatchRows" class="scroll-area"></div>
+              <button type="button" id="saveReceiptBatch">Registrar selecionados</button>
+              <button type="button" id="cancelReceiptBatch" class="subtle-btn">Descartar prévia</button>
+            </div>
+            <div id="receiptSingle">
+              <label>
+                Texto reconhecido (pode corrigir)
+                <textarea id="receiptText"></textarea>
+              </label>
+              <button type="button" id="suggestReceipt">Preparar sugestão pelo texto</button>
+              <div id="receiptWarnings" class="notice" hidden></div>
+            </div>
           </details>
           <div id="importPreview" hidden>
             <h3>Prévia · confira antes de salvar</h3>
@@ -468,35 +470,7 @@
           </div>
         </div>
         <details class="section" id="financeManager">
-          <summary>Gerenciar lançamentos e filtros</summary>
-          <div class="filters">
-            <label>
-              De
-              <input id="financeFrom" type="date" />
-            </label>
-            <label>
-              Até
-              <input id="financeTo" type="date" />
-            </label>
-            <label>
-              Categoria
-              <select id="financeCategory"></select>
-            </label>
-            <label>
-              Loja
-              <input id="financeStore" placeholder="Todas as lojas" />
-            </label>
-            <label>
-              Situação
-              <select id="financeStatus">
-                <option value="">Todas</option>
-                <option value="paid">Gasto registrado</option>
-                <option value="cancelled">Cancelado</option>
-                <option value="refunded">Reembolsado</option>
-              </select>
-            </label>
-          </div>
-          <button type="button" id="clearFinanceFilters" class="subtle-btn">Limpar filtros</button>
+          <summary>Ações em lote e exportação</summary>
           <div class="bulk-finance-actions">
             <label>
               <input type="checkbox" id="selectAllFinance" />
@@ -523,13 +497,21 @@
         </details>
       </section>
       <section id="wishlistPanel" class="app-panel section" hidden>
-        <div class="list-title-row"><h2>Lista de Desejos</h2><div class="list-top-total"><span>Falta comprar · estimativa</span><output id="wishTotal" aria-live="polite">R$ 0,00</output></div></div>
+        <div class="list-title-row">
+          <h2>Lista de Desejos</h2>
+          <div class="list-top-total" aria-hidden="true">
+            <span id="wishTotalLabel">Seleção · estimativa</span>
+            <span id="wishOriginalTotal">CAD 0,00</span>
+            <output id="wishTotal">≈ R$ 0,00</output>
+          </div>
+          <span id="wishTotalStatus" role="status" aria-atomic="true">Seleção · estimativa: CAD 0,00 · aproximadamente R$ 0,00</span>
+        </div>
         <details id="wishEditor" class="list-editor"><summary>＋ Adicionar desejo</summary>
         <form id="wishForm">
           <div class="wish-link-row"><label>Link do produto<input id="wishUrl" type="url" placeholder="Cole o link, se tiver" /></label><button id="wishRead" type="button">Atualizar prévia</button></div>
           <p id="wishMessage" class="hint" role="status"></p>
           <div class="wish-upload-row">
-            <label>Foto ou print do produto<input id="wishUpload" type="file" accept="image/jpeg,image/png,image/webp,image/bmp" /></label>
+            <label>Fotos ou prints dos produtos<input id="wishUpload" type="file" accept="image/jpeg,image/png,image/webp,image/bmp" multiple /></label>
             <button id="wishRemovePhoto" type="button" class="wish-share-button" hidden>Remover foto</button>
           </div>
           <p id="wishPhotoMessage" class="hint" role="status"></p>
@@ -541,8 +523,19 @@
               <button type="button" id="wishRegisterPerson" class="wish-share-button">Salvar pessoa</button>
             </div>
           </div>
-          <div class="form-grid"><label>Produto<input id="wishTitle" maxlength="300" required /></label><label>Loja<input id="wishStore" maxlength="150" required /></label><label>Preço original<input id="wishPrice" type="number" min="0" step="0.01" /></label><label>Moeda<select id="wishCurrency"><option>BRL</option><option>CAD</option><option>USD</option><option>EUR</option><option>GBP</option><option>AUD</option><option>JPY</option><option>CNY</option><option>CHF</option></select></label></div>
+          <div id="wishSingleFields" class="form-grid">
+            <label>Produto<input id="wishTitle" maxlength="300" required /></label>
+            <label>Loja<input id="wishStore" maxlength="150" required /></label>
+            <label>Preço unitário<input id="wishPrice" type="number" min="0" step="0.01" /></label>
+            <label>Moeda<select id="wishCurrency"><option>BRL</option><option>CAD</option><option>USD</option><option>EUR</option><option>GBP</option><option>AUD</option><option>JPY</option><option>CNY</option><option>CHF</option></select></label>
+            <label>Quantidade<input id="wishQuantity" type="number" inputmode="numeric" min="1" step="1" value="1" required /></label>
+          </div>
           <p id="wishConversion" class="hint" role="status"></p>
+          <div id="wishBatch" hidden>
+            <p class="hint">Confira cada produto e selecione os que quer adicionar. A pessoa escolhida vale para o lote.</p>
+            <div id="wishBatchRows" class="scroll-area"></div>
+          </div>
+          <p id="wishSaveError" class="hint" role="alert"></p>
           <div class="btn-row"><button type="submit" id="wishSave">Adicionar desejo</button><button type="button" id="wishCancel" class="subtle-btn" hidden>Cancelar edição</button></div>
         </form>
         </details>
@@ -557,11 +550,37 @@
               </div>
             </div>
           </div>
-          <button type="button" id="wishManagePeople" class="wish-share-button" aria-label="Gerenciar amigas" title="Gerenciar amigas" aria-haspopup="dialog">
-            <span aria-hidden="true">👤</span><span id="wishFriendCount" aria-hidden="true">0</span>
-          </button>
+          <div class="wish-group-actions">
+            <select id="wishSelectStore" aria-label="Filtrar por loja" hidden></select>
+            <label class="wish-purchase-all"><input type="checkbox" id="wishHideBought" /> Ocultar comprados</label>
+            <label id="wishSelectAllPurchaseLabel" class="wish-purchase-all" hidden>
+              <input type="checkbox" id="wishSelectAllPurchase" /> Selecionar todos
+            </label>
+            <button type="button" id="wishManagePeople" class="wish-share-button" aria-label="Gerenciar amigas" title="Gerenciar amigas" aria-haspopup="dialog">
+              <span aria-hidden="true">👤</span><span id="wishFriendCount" aria-hidden="true">0</span>
+            </button>
+          </div>
         </div>
+        <div id="wishPurchaseBar" hidden>
+          <span id="wishPurchaseCount" class="hint" role="status"></span>
+          <button type="button" id="wishReviewPurchase" class="wish-share-button">Registrar compra</button>
+          <button type="button" id="wishClearPurchase" class="wish-share-button">Limpar seleção</button>
+        </div>
+        <p id="wishPurchaseFeedback" class="hint" role="status"></p>
         <div id="wishList"></div>
+        <dialog id="wishPurchaseDialog" class="app-dialog wish-share-dialog" aria-labelledby="wishPurchaseTitle">
+          <form method="dialog"><button type="submit" class="app-dialog-close" aria-label="Fechar revisão da compra">×</button></form>
+          <h2 id="wishPurchaseTitle">Compra da Dominadora</h2>
+          <p class="hint">A estimativa em reais usa a cotação da lista e inclui todas as unidades de cada produto. Confira ou informe o valor pago antes de registrar a compra em Notas e Gastos Reais.</p>
+          <form id="wishPurchaseForm">
+            <label>Data da compra<input id="wishPurchaseDate" type="date" required /></label>
+            <div id="wishPurchaseItems"></div>
+            <p class="wish-share-total"><strong>Total da compra</strong><output id="wishPurchaseTotal" aria-live="polite"></output></p>
+            <p class="wish-share-total" id="wishPurchaseNetRow" hidden><span>Pago pela Dominadora</span><output id="wishPurchaseNet"></output></p>
+            <div id="wishPurchaseError" class="hint" role="alert"></div>
+            <div class="app-dialog-actions"><button type="submit">Confirmar compra</button></div>
+          </form>
+        </dialog>
         <dialog id="wishPeopleDialog" class="app-dialog wish-people-dialog" aria-labelledby="wishPeopleHeading">
           <form method="dialog"><button type="submit" class="app-dialog-close" aria-label="Fechar lista de amigas" autofocus>×</button></form>
           <header class="wish-people-header">
@@ -584,23 +603,24 @@
         <dialog id="wishShareDialog" class="app-dialog wish-share-dialog" aria-labelledby="wishShareHeading">
           <form method="dialog"><button type="submit" class="app-dialog-close" aria-label="Fechar prévia">×</button></form>
           <h2 id="wishShareHeading"></h2>
-          <p class="hint">Selecione os desejos para compartilhar. Volte à lista para editar preços e links.</p>
+          <p class="hint">Selecione os itens para compartilhar.</p>
           <div id="wishShareItems"></div>
           <label class="wish-share-conversion"><input type="checkbox" id="wishShareConvert" checked /> Incluir conversão em reais</label>
           <p class="wish-share-total">Total estimado <output id="wishShareTotal" aria-live="polite"></output></p>
           <label for="wishSharePreview">Prévia da mensagem</label>
           <textarea id="wishSharePreview" readonly rows="5"></textarea>
-          <p id="wishShareStatus" class="hint" role="status"></p>
-          <div class="app-dialog-actions">
+          <div class="wish-share-actions">
             <button type="button" id="wishShareCopy">Copiar mensagem</button>
             <a id="wishShareWhatsApp" target="_blank" rel="noopener noreferrer">Abrir WhatsApp</a>
             <button type="button" id="wishShareNative" hidden>Compartilhar…</button>
-            <button type="button" id="wishSharePhotos">Montar imagem</button>
           </div>
+          <button type="button" id="wishSharePhotos">Montar imagem</button>
+          <p id="wishShareStatus" class="hint" role="status"></p>
           <section id="wishImageExport" class="wish-image-export" aria-label="Prévia da lista em imagem" hidden>
             <h3>Lista em imagem</h3>
             <div id="wishImageCards"></div>
             <button type="button" id="wishSendImages" hidden>Enviar imagem</button>
+            <p id="wishImageShareStatus" class="hint" role="status"></p>
           </section>
           <form method="dialog"><button type="submit" class="subtle-btn">Voltar à lista</button></form>
         </dialog>

@@ -234,6 +234,17 @@ summary {
 .preview-row input[type='checkbox'] {
   flex: 0 0 20px;
 }
+#wishBatchRows .row-title span,
+#receiptBatchRows .row-title span {
+  overflow-wrap: anywhere;
+}
+#wishBatchRows .form-grid,
+#receiptBatchRows .form-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 155px), 1fr));
+}
+#wishBatchRows .wish-thumbnail {
+  margin-top: 6px;
+}
 .scroll-area {
   max-height: 650px;
   overflow: auto;
@@ -831,9 +842,6 @@ dialog button {
 }
 #financeManager > summary {
   font-size: 18px;
-}
-#financeIndicators {
-  margin-top: 20px;
 }
 @media (max-width: 600px) {
   .notebook-group {
@@ -2558,6 +2566,54 @@ html:has(dialog[open]) {
   font-variant-numeric: tabular-nums;
 }
 #groupedFinanceList .note-dates time { white-space: nowrap; }
+#groupedFinanceList .note-entry-heading,
+#groupedFinanceList .note-entry-observation { display: block; }
+#groupedFinanceList .note-entry-title { color: #eee4d4; font-weight: 650; }
+#groupedFinanceList .note-entry-amount { color: #e3ca97; font-weight: 700; font-variant-numeric: tabular-nums; }
+#groupedFinanceList .note-entry-observation { color: #c9c0b1; }
+#groupedFinanceList .note-entry-featured {
+  padding: 5px 9px;
+  border: 1px solid #58452f;
+  border-radius: 7px;
+  background: linear-gradient(100deg, #35291f, #231f1a);
+}
+#groupedFinanceList .note-entry-featured .note-entry-title { font-size: 1.06em; }
+#groupedFinanceList .note-entry-featured .note-entry-amount { color: #f5dca7; font-size: 1.12em; }
+#groupedFinanceList .note-entry-featured .note-dates {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: #ffffff0c;
+  color: #cfc0a7;
+}
+#groupedFinanceList .note-purchase-breakdown {
+  margin-top: 6px;
+  padding-inline-start: 10px;
+  border-inline-start: 1px solid #62533b;
+  white-space: normal;
+  font-size: 0.93em;
+}
+#groupedFinanceList .note-purchase-person + .note-purchase-person,
+#groupedFinanceList .note-purchase-payment {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #62533b55;
+}
+#groupedFinanceList .note-purchase-person-heading,
+#groupedFinanceList .note-purchase-breakdown li,
+#groupedFinanceList .note-purchase-payment {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px 10px;
+}
+#groupedFinanceList .note-purchase-person-heading,
+#groupedFinanceList .note-purchase-payment strong { color: #d7c394; }
+#groupedFinanceList .note-purchase-breakdown ul { padding: 0; margin: 2px 0 0; }
+#groupedFinanceList .note-purchase-breakdown small,
+#groupedFinanceList .note-purchase-store > strong { font-size: 0.9em; color: #bdb4a3; }
+#groupedFinanceList .note-purchase-store { margin-block-start: 3px; padding-inline-start: 8px; }
+#groupedFinanceList .note-purchase-value { white-space: nowrap; font-variant-numeric: tabular-nums; }
+#groupedFinanceList .note-purchase-payment { flex-wrap: wrap; }
 .finance-timeline { margin: 14px 0 20px; }
 .finance-timeline > summary { color: #e1ca91; font-weight: 650; }
 #financeTimelineContent { margin-top: 12px; }
@@ -2879,6 +2935,15 @@ body:not(.firebase-required) #firebaseAuthPanel {
 .wish-group-header { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
 .wish-group-header h3 { flex: 1 1 120px; min-width: 0; overflow-wrap: anywhere; }
 .wish-group-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.wish-purchase-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 4px 0 0;
+  color: #f3d4df;
+  font: 12px/1.5 system-ui;
+}
+.wish-purchase-all input { width: 16px; height: 16px; min-height: 0; margin: 0; accent-color: #d984a0; }
 .wish-bulk-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 0; border-bottom: 1px solid #553445; color: #dfc0cd; font: 12px/1.5 system-ui; }
 .wish-bulk-actions label { display: inline-flex; align-items: center; gap: 7px; margin: 0; color: #ffe0ea; font: inherit; }
 .wish-bulk-actions input { width: 16px; height: 16px; min-height: 0; margin: 0; accent-color: #d984a0; }
@@ -2900,8 +2965,6 @@ body:not(.firebase-required) #firebaseAuthPanel {
 #wishPeopleList small { display: block; font: 12px/1.5 system-ui; color: #bdb4a3; }
 #wishPeopleStatus:empty { display: none; }
 .wish-product { min-width: 0; }
-.wish-product small { display: block; color: #bdb4a3; font: 11px/1.5 system-ui; overflow-wrap: anywhere; }
-.wish-product.has-thumbnail:has(img) small { padding-inline-start: 50px; }
 .wish-row-price { overflow-wrap: anywhere; }
 .wish-share-dialog { max-height: 88dvh; overflow: auto; }
 .wish-share-dialog h2 { overflow-wrap: anywhere; }
@@ -2916,32 +2979,46 @@ body:not(.firebase-required) #firebaseAuthPanel {
 #wishImageCards { display: grid; gap: 12px; max-height: 40dvh; overflow-y: auto; }
 #wishImageCards figure { margin: 0; }
 #wishImageCards img { display: block; width: 100%; height: auto; border-radius: 8px; }
-#wishImageCards a { display: inline-block; margin-top: 6px; color: #f3bfd5; font: 13px/1.5 system-ui; }
-#wishlistPanel #wishSendImages { margin: 10px 0 0; }
+.wish-share-actions, .wish-image-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.wish-share-dialog :is(.wish-share-actions, .wish-image-actions) :is(a, button),
+.wish-share-dialog :is(#wishSendImages, #wishSharePhotos) {
+  min-height: 36px;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font: 600 12px/1.35 system-ui;
+  letter-spacing: normal;
+  text-transform: none;
+}
+.wish-share-dialog :is(.wish-share-actions, .wish-image-actions) a {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #75465a;
+  color: #f3d4df;
+  text-decoration: none;
+}
+.wish-share-dialog :is(.wish-share-actions, .wish-image-actions) a:hover { background: #402837; }
+.wish-share-dialog :is(#wishSendImages, #wishSharePhotos) { margin-top: 10px; }
+:is(#wishShareStatus, #wishImageShareStatus):empty { display: none; }
 .wish-share-conversion { display: flex; align-items: center; gap: 8px; font: 13px/1.5 system-ui; }
 .wish-share-conversion input { width: auto; min-height: 0; margin: 0; }
 .wish-share-total { display: flex; justify-content: space-between; gap: 12px; }
 #wishShareTotal { color: #f0d7a2; }
 #wishSharePreview { width: 100%; resize: vertical; font: 13px/1.5 system-ui; }
-#wishShareWhatsApp { display: inline-flex; align-items: center; color: #f0d7a2; font: 600 13px/1.5 system-ui; }
 #wishShareWhatsApp[hidden] { display: none; }
 @media (max-width: 500px) {
   .wish-group-header h3 { flex: 1 0 100%; }
   .wish-group-header .wish-share-button { margin-inline-start: auto; }
   #wishlistPanel .wish-row { grid-template-columns: 16px minmax(0, 1fr) 24px 24px; }
   .wish-row-price { grid-column: 2; grid-row: 2; }
-  .wish-product.has-thumbnail:has(img) small { padding-inline-start: 42px; }
   .wish-share-row { grid-template-columns: 1fr; }
 }
-#financeTopTotal { margin: 0; }
 /* Compact entry forms; the lists and their totals remain the main content. */
 .list-title-row { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 10px 24px; margin-bottom: 18px; }
 .list-title-row h2 { margin: 0; }
 .list-top-total { color: #dfc47d; font-size: 20px; font-variant-numeric: tabular-nums; }
 .list-top-total > span { display: block; color: #b0a590; font: 11px/1.5 system-ui; }
-#financeTopTotal { margin: 8px 0 18px; }
-#financeTopTotal .notebook-grand-total { margin: 0; padding: 0; border: 0; font-size: 20px; justify-content: flex-start; gap: 10px; }
-#wishForm .form-grid { grid-template-columns: minmax(0,2fr) minmax(0,1.2fr) minmax(0,1fr) minmax(0,.7fr); }
+#wishForm .form-grid { grid-template-columns: minmax(0,2fr) minmax(0,1.2fr) minmax(0,1fr) minmax(0,.75fr) minmax(0,.75fr); }
 #entryForm .form-grid { grid-template-columns: repeat(4,minmax(0,1fr)); }
 #entryForm .form-grid > label:nth-child(3) { grid-column: span 2; }
 #wishForm label, #entryForm label, #financePanel > .section:has(#financeImportTitle) label { font-size: 12px; margin: 0; }
@@ -2957,6 +3034,10 @@ body:not(.firebase-required) #firebaseAuthPanel {
 .wish-upload-row label { flex: 1 1 210px; min-width: 0; max-width: 360px; }
 #wishForm #wishUpload { width: 100%; height: auto; max-width: 100%; }
 #wishForm .hint:empty, #entryOrigin:empty { display: none; }
+#wishForm input[aria-invalid="true"] { border-color: #ff92a8; outline: 1px solid #ff92a8; }
+#wishSaveError, .wish-field-error { color: #ffb4c5; }
+.wish-field-error { display: block; margin-top: 4px; font: 12px/1.4 system-ui; }
+.wish-field-error:empty { display: none; }
 #entryForm details { margin-top: 12px; padding: 9px 12px; }
 #entryForm details summary { font-size: 12px; }
 #financePanel > .section:has(#financeImportTitle) { padding-top: 18px; padding-bottom: 18px; }
@@ -2969,7 +3050,6 @@ body:not(.firebase-required) #firebaseAuthPanel {
   #wishForm .form-grid, #entryForm .form-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   #wishForm .form-grid > label:first-child, #wishForm .form-grid > label:nth-child(2), #entryForm .form-grid > label:nth-child(3) { grid-column: 1/-1; }
   #wishForm input, #wishForm select, #entryForm input, #entryForm select { font-size: 16px; }
-  #financeTopTotal .notebook-grand-total { font-size: 17px; }
 }
 .wallet-header-line { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 20px; margin: 18px 0; }
 .wallet-header-line > .hint, .wallet-header-line .firebase-account-actions { margin: 0; }
@@ -3143,7 +3223,7 @@ body:not(.firebase-required) #firebaseAuthPanel {
 
 /* Anchored editors keep the heading and trigger in place while open. */
 #financePanel > .section:first-child, #wishlistPanel { position: relative; }
-#financePanel .list-tools, #financeAdd, #financeImport, #wishEditor { position: static; }
+#financePanel .list-tools, #financePanel .list-editor, #wishEditor { position: static; }
 #financePanel.app-panel .list-tools:has(.list-editor[open]) { display: flex; grid-column: 2; grid-row: 1; margin: 0; }
 #financePanel .list-tools .list-editor[open] { margin: 0; }
 #wishlistPanel #wishEditor[open] { grid-column: 2; grid-row: 1; width: max-content; margin: 0; }
@@ -3165,6 +3245,26 @@ body:not(.firebase-required) #firebaseAuthPanel {
 .wish-list-heading { grid-column: 1/-1; display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; margin: 6px 0 12px; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
 .wish-list-heading h3 { margin: 0; color: #d4c3a3; font-size: 17px; }
 .wish-list-heading #wishSummary { margin: 0; font: 12px/1.5 system-ui; color: #bdb4a3; }
+#wishPurchaseBar {
+  grid-column: 1/-1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  border: 1px solid #75465a;
+  border-radius: 10px;
+  background: #2a1d26;
+}
+#wishPurchaseCount { margin-inline-end: auto; }
+#wishPurchaseFeedback:empty, #wishPurchaseError:empty { display: none; }
+#wishPurchaseFeedback { grid-column: 1/-1; }
+.wish-purchase-group { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
+.wish-purchase-group h3 { display: flex; justify-content: space-between; gap: 8px; overflow-wrap: anywhere; }
+.wish-purchase-group label { display: grid; grid-template-columns: minmax(0, 1fr) minmax(90px, 120px); align-items: center; gap: 8px; overflow-wrap: anywhere; }
+.wish-purchase-group input { width: 100%; margin: 0; }
+.wish-purchase-group .hint { display: block; }
 #wishList > .wish-group:first-child { margin-top: 0; }
 @keyframes list-popover-in { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 @media(max-width: 820px) {
@@ -3184,10 +3284,9 @@ body:not(.firebase-required) #firebaseAuthPanel {
 #financePanel .list-title-row > h2, #wishlistPanel .list-title-row > h2 {
   grid-column: 1; grid-row: 1; margin: 0; align-self: center;
 }
-#financePanel .list-tools { grid-column: 2; grid-row: 1; margin: 0; gap: 8px; }
+#financePanel .list-tools { grid-column: 2; grid-row: 1; margin: 0; gap: 8px; align-items: center; }
 #financePanel .list-tools:has(.list-editor[open]) { grid-column: 1/-1; grid-row: 3; margin-top: 12px; }
-#financePanel #financeMessage, #financePanel #groupedFinanceList,
-#financePanel #financeIndicators, #financePanel #categoryTotals,
+#financePanel :is(#financeMessage, #groupedFinanceList, #financeSearchResults, #financeTimeline),
 #wishlistPanel > #wishSummary, #wishlistPanel > #wishList { grid-column: 1/-1; }
 #financeTopTotal, #wishlistPanel .list-title-row > .list-top-total {
   grid-column: 1/-1; grid-row: 2;
@@ -3199,6 +3298,26 @@ body:not(.firebase-required) #firebaseAuthPanel {
   font: 14px/1.5 system-ui; color: #d5c298;
 }
 #financeTopTotal > output, #wishTotal { font-size: 28px; font-weight: 700; color: #ecd080; }
+#financeTopTotal {
+  position: sticky;
+  top: max(8px, env(safe-area-inset-top));
+  z-index: 5;
+  padding: 12px 16px;
+  border: 1px solid #6b5034;
+  border-radius: 12px;
+  background: linear-gradient(110deg, #38291e, #221d18 75%);
+}
+#financePanel #financeSearch {
+  width: clamp(145px, 16vw, 210px);
+  min-width: 0;
+  min-height: 34px;
+  padding: 6px 9px;
+  margin: 0;
+  font-size: 13px;
+}
+#financePanel #financeSearchResults { margin: 0 0 8px; }
+#financeFilters .filters { gap: 8px 12px; }
+#financeFilters .filters :is(input, select) { min-height: 34px; padding: 6px 8px; margin: 4px 0 0; font-size: 13px; }
 #wishEditor { grid-column: 2; grid-row: 1; width: max-content; max-width: 100%; margin: 0; }
 #wishEditor[open] { grid-column: 1/-1; grid-row: 3; width: auto; margin-bottom: 12px; }
 #wishEditor > summary, #financePanel .list-tools .list-editor > summary {
@@ -3213,6 +3332,10 @@ body:not(.firebase-required) #firebaseAuthPanel {
   #wishEditor[open], #financePanel .list-tools:has(.list-editor[open]) { grid-row: 4; justify-self: stretch; }
   #financeTopTotal > output, #wishTotal { font-size: 25px; }
 }
+@media (max-width: 520px) {
+  #financePanel .list-tools { width: 100%; }
+  #financePanel #financeSearch { flex: 1 1 100%; width: 100%; }
+}
 
 /* Wishlist: wine and rose accents over the shared dark palette. */
 #wishlistPanel {
@@ -3223,13 +3346,19 @@ body:not(.firebase-required) #firebaseAuthPanel {
 }
 #wishlistPanel .list-title-row > h2 { color: #ffe0e9; }
 #wishlistPanel .list-title-row > .list-top-total {
+  position: sticky;
+  top: max(8px, env(safe-area-inset-top));
+  z-index: 5;
   padding: 12px 16px;
   border: 1px solid #784156;
   border-radius: 12px;
   background: linear-gradient(110deg, #492031, #281c25 75%);
 }
+#wishlistPanel .list-title-row > .list-top-total.is-selection { border-color: #bd738f; }
 #wishlistPanel .list-top-total > span { color: #f2c6d4; }
 #wishlistPanel #wishTotal { color: #ffe1a2; }
+#wishlistPanel #wishOriginalTotal { font-weight: 650; font-variant-numeric: tabular-nums; }
+#wishTotalStatus { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 #wishlistPanel .wish-list-heading { align-items: center; gap: 10px 16px; border-color: #4a303e; }
 #wishlistPanel .wish-list-heading > div { min-width: 0; }
 #wishlistPanel .wish-list-heading h3 { color: #f3d4df; }
@@ -3284,7 +3413,23 @@ body:not(.firebase-required) #firebaseAuthPanel {
 }
 #wishlistPanel .wish-group-header h3 { color: var(--wish-rose); }
 #wishlistPanel .wish-group-featured h3 { color: #ffe1a2; }
-#wishlistPanel .wish-group-total { color: #dfc0cd; }
+#wishlistPanel .wish-group-total { color: #dfc0cd; font-variant-numeric: tabular-nums; }
+#wishlistPanel .wish-group-total.has-selection { color: #ffe1a2; }
+#wishlistPanel #wishSelectStore {
+  width: auto;
+  max-width: 100%;
+  min-height: 32px;
+  margin: 0;
+  padding: 4px 8px;
+  font: 12px/1.5 system-ui;
+}
+#wishlistPanel .wish-store-group + .wish-store-group { border-top: 1px solid #553445; }
+#wishlistPanel .wish-store-group h4 {
+  margin: 8px 0 0;
+  color: #d1b6c0;
+  font: 600 12px/1.5 system-ui;
+  overflow-wrap: anywhere;
+}
 #wishlistPanel .wish-row:last-child { border-bottom: 0; }
 #wishlistPanel .wish-row a { color: #f3e0e7; text-decoration-color: #a87588; text-underline-offset: 3px; }
 #wishlistPanel .wish-row input, #wishlistPanel dialog input[type="checkbox"] { accent-color: #d984a0; }
@@ -3380,6 +3525,5 @@ body:not(.firebase-required) #firebaseAuthPanel {
 #wishlistPanel #wishPeopleSave:hover { background: #864965; }
 #wishPeopleDialog :is(button, input):focus-visible { outline: 2px solid #f1a9c5; outline-offset: 2px; }
 @media (max-width: 500px) {
-  #wishlistPanel .wish-list-heading { flex-wrap: nowrap; }
   #wishlistPanel .wish-row-price { justify-self: start; }
 }

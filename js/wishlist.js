@@ -9,13 +9,24 @@ document.addEventListener('DOMContentLoaded', () => {
     autoRead = null,
     draftImage = null,
     photoRevision = 0,
-    photoBusy = false;
+    photoBusy = false,
+    photoBatch = null;
+  const validQuantity = (value) => Number.isSafeInteger(value) && value > 0;
+  const quantityOf = (item) => validQuantity(item.quantity) ? item.quantity : 1;
+  const countUnits = (items) => items.reduce((sum, item) => sum + quantityOf(item), 0);
+  const titleWithQuantity = (item) => item.title + (quantityOf(item) > 1 ? ' ×' + quantityOf(item) : '');
+  function originalSubtotal(item) {
+    const unitPrice = item.originalPrice ?? item.price;
+    return unitPrice == null ? null : Math.round(unitPrice * 100) * quantityOf(item) / 100;
+  }
   function conversion() {
-    const value = $('wishPrice').value === '' ? null : Number($('wishPrice').value),
-      currency = $('wishCurrency').value;
+    const currency = $('wishCurrency').value;
+    const quantity = $('wishQuantity').valueAsNumber;
+    const unitPrice = $('wishPrice').valueAsNumber;
+    const value = validQuantity(quantity) && Number.isFinite(unitPrice) ? originalSubtotal({ originalPrice: unitPrice, quantity }) : null;
     const estimate = value == null ? null : WishFx.convert(value, currency);
     const date = WishFx.current()?.dates[currency];
-    $('wishConversion').textContent = value == null ? '' : estimate == null ? 'Cotação indisponível · preço original preservado' : '≈ ' + formatBR(estimate) + (currency === 'BRL' ? '' : ' · cotação ' + (date || 'salva') + ' · sem taxas/frete');
+    $('wishConversion').textContent = value == null ? '' : estimate == null ? 'Cotação indisponível' : (quantity > 1 ? 'Total para ' + quantity + ' unidades · ' : '') + '≈ ' + formatBR(estimate) + (currency === 'BRL' ? '' : ' · cotação ' + (date || 'salva') + ' · sem taxas/frete');
   }
   const rows = () => JSON.parse(AppStorage.getItem('wishlist') || '[]');
   const defaultPerson = 'Dominadora';
@@ -24,6 +35,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const personOf = (item, registered = roster()) => registered.find((person) => person.id === item.personId)?.name || item.person?.trim() || defaultPerson;
   const personKey = (name) => name.normalize('NFC').toLocaleLowerCase('pt-BR');
   const normalizeName = (name) => name.trim().replace(/\s+/g, ' ').normalize('NFC');
+  function groupByStore(items) {
+    const groups = new Map();
+    for (const item of items) {
+      const name = normalizeName(item.store || '');
+      const key = personKey(name);
+      if (!groups.has(key)) groups.set(key, { name, items: [] });
+      groups.get(key).items.push(item);
+    }
+    return groups;
+  }
   function people(items, registered = roster()) {
     const names = [...items.map((item) => personOf(item, registered)), ...registered.map((person) => person.name), defaultPerson];
     return new Map(names.map((name) => [personKey(name), name]));
@@ -127,20 +148,25 @@ document.addEventListener('DOMContentLoaded', () => {
     request?.abort();
     clearTimeout(autoRead);
     $('wishForm').reset();
+    setPhotoBatch(null);
+    $('wishSave').disabled = false;
+    $('wishUpload').disabled = false;
     updatePeople(rows(), defaultPerson);
     showDraftImage(null);
     $('wishPhotoMessage').textContent = '';
     $('wishCancel').hidden = true;
+    $('wishCancel').textContent = 'Cancelar edição';
     $('wishSave').textContent = 'Adicionar desejo';
+    $('wishSaveError').textContent = '';
     message('');
     conversion();
   }
   function estimate(items) {
     let cents = 0, missing = 0;
     for (const item of items) {
-      const original = item.originalPrice ?? item.price;
+      const original = originalSubtotal(item);
       const value = original == null ? null : WishFx.convert(original, item.currency || 'BRL');
-      if (value == null) missing++;
+      if (value == null) missing += quantityOf(item);
       else cents += Math.round(value * 100);
     }
     return { cents, missing };
@@ -150,7 +176,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return currency + ' ' + original.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
   }
   function priceLabel(item, convert = true) {
-    const original = item.originalPrice ?? item.price;
+    const original = originalSubtotal(item);
     const currency = item.currency || 'BRL';
     if (original == null) return 'Preço não informado';
     const label = originalPriceLabel(original, currency);
@@ -277,11 +303,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
   const shareDialog = $('wishShareDialog');
+  const supportsNativeShare = typeof navigator.share === 'function';
   let photoPreparation;
   const photoPreviewUrls = [];
   function clearPhotoPreview() {
     photoPreparation?.abort();
     $('wishImageExport').hidden = true;
+    $('wishImageShareStatus').textContent = '';
     $('wishImageCards').replaceChildren();
     for (const url of photoPreviewUrls.splice(0)) URL.revokeObjectURL(url);
   }
@@ -355,7 +383,8 @@ document.addEventListener('DOMContentLoaded', () => {
       write('Lista de itens · ' + person, 16, 34, width - 32);
       ctx.font = '12px system-ui';
       ctx.fillStyle = '#efd2df';
-      write(pageCount > 1 ? 'Parte ' + page + ' de ' + pageCount : items.length + (items.length === 1 ? ' item' : ' itens'), 16, 53, width - 32);
+      const units = countUnits(items);
+      write(pageCount > 1 ? 'Parte ' + page + ' de ' + pageCount : units + (units === 1 ? ' item' : ' itens'), 16, 53, width - 32);
       items.forEach((item, index) => {
         const y = header + index * rowHeight;
         const bitmap = bitmaps.get(WishProduct.savedImageUrl(item.imageUrl));
@@ -370,7 +399,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         ctx.font = 'bold 14px system-ui';
         ctx.fillStyle = '#fff0f6';
-        write(item.title, x, y + 23, width - x - 16);
+        write(titleWithQuantity(item), x, y + 23, width - x - 16);
         ctx.font = '12px system-ui';
         ctx.fillStyle = '#ffe1a2';
         write([prices.get(item.id), item.store].filter(Boolean).join(' · '), x, y + 42, width - x - 16);
@@ -393,21 +422,26 @@ document.addEventListener('DOMContentLoaded', () => {
       for (const bitmap of bitmaps.values()) bitmap.close();
     }
   }
-  function originalTotals(items) {
-    const totals = new Map();
+  function sumOriginalAmounts(items, totals = new Map(), foreignOnly = false) {
     let missing = 0;
     for (const item of items) {
-      const original = item.originalPrice ?? item.price;
+      const currency = item.currency || 'BRL';
+      if (foreignOnly && currency === 'BRL') continue;
+      const original = originalSubtotal(item);
       if (original == null) {
-        missing++;
+        missing += quantityOf(item);
         continue;
       }
-      const currency = item.currency || 'BRL';
       totals.set(currency, (totals.get(currency) || 0) + Math.round(original * 100));
     }
-    const labels = [...totals].map(([currency, cents]) => originalPriceLabel(cents / 100, currency));
-    if (missing) labels.push(missing + ' sem preço');
-    return labels.join(' + ') || '—';
+    return { totals, missing };
+  }
+  function originalAmountLabels(totals) {
+    return [...totals].map(([currency, cents]) => originalPriceLabel(cents / 100, currency)).join(' + ');
+  }
+  function originalTotals(items) {
+    const { totals, missing } = sumOriginalAmounts(items);
+    return [originalAmountLabels(totals), missing ? missing + ' sem preço' : ''].filter(Boolean).join(' + ') || '—';
   }
   function sharedProductUrl(value) {
     const url = link(value);
@@ -421,6 +455,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }).join('&');
     return url.href;
   }
+  async function shareImagePng(file) {
+    const bitmap = await createImageBitmap(file);
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      canvas.getContext('2d').drawImage(bitmap, 0, 0);
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      if (!blob) throw new Error('Imagem indisponível');
+      return blob;
+    } finally {
+      bitmap.close();
+    }
+  }
+  function copyShareImage(file) {
+    return navigator.clipboard.write([new ClipboardItem({ 'image/png': shareImagePng(file) })]);
+  }
   function shareGroup(person, items) {
     clearPhotoPreview();
     const selected = new Set(items.filter((item) => !item.bought).map((item) => item.id));
@@ -429,6 +480,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const conversionOption = $('wishShareConvert');
     const photoButton = $('wishSharePhotos');
     const photoStatus = $('wishShareStatus');
+    const imageStatus = $('wishImageShareStatus');
     const sendImages = $('wishSendImages');
     const chosenItems = () => items.filter((item) => selected.has(item.id));
     function resetPhotos() {
@@ -450,7 +502,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const files = [];
       let missingPhotos = false;
       photoButton.disabled = true;
-      photoStatus.textContent = 'Montando a imagem da lista…';
+      photoStatus.textContent = 'Montando imagem…';
       try {
         for (let page = 1; page <= pageCount; page++) {
           const cardItems = chosen.slice((page - 1) * itemsPerCard, page * itemsPerCard);
@@ -464,6 +516,7 @@ document.addEventListener('DOMContentLoaded', () => {
           files.push(card);
         }
         if (controller.signal.aborted || !shareDialog.open) return;
+        const canCopyImage = typeof navigator.clipboard?.write === 'function' && typeof ClipboardItem === 'function' && (ClipboardItem.supports?.('image/png') ?? true);
         $('wishImageCards').replaceChildren(...files.map((file, index) => {
           const figure = document.createElement('figure');
           const url = URL.createObjectURL(file);
@@ -475,23 +528,51 @@ document.addEventListener('DOMContentLoaded', () => {
           download.href = url;
           download.download = file.name;
           download.textContent = pageCount > 1 ? 'Salvar imagem ' + (index + 1) : 'Salvar imagem';
-          figure.append(preview, download);
+          const actions = document.createElement('div');
+          actions.className = 'wish-image-actions';
+          actions.append(download);
+          if (canCopyImage) {
+            const copy = document.createElement('button');
+            copy.type = 'button';
+            copy.textContent = pageCount > 1 ? 'Copiar imagem ' + (index + 1) : 'Copiar imagem';
+            copy.onclick = async () => {
+              try {
+                await copyShareImage(file);
+                if (!controller.signal.aborted) imageStatus.textContent = 'Imagem copiada. Cole na conversa do WhatsApp.';
+              } catch {
+                if (!controller.signal.aborted) {
+                  download.click();
+                  imageStatus.textContent = 'Cópia indisponível. Imagem baixada.';
+                }
+              }
+            };
+            actions.append(copy);
+          }
+          figure.append(preview, actions);
           return figure;
         }));
-        sendImages.hidden = typeof navigator.share !== 'function' || !navigator.canShare?.({ files });
+        sendImages.hidden = !supportsNativeShare || !navigator.canShare?.({ files });
         sendImages.textContent = files.length > 1 ? 'Enviar imagens' : 'Enviar imagem';
         sendImages.onclick = async () => {
+          imageStatus.textContent = '';
           try {
             await navigator.share({ files });
           } catch (error) {
-            if (error.name !== 'AbortError') photoStatus.textContent = 'Não foi possível abrir o compartilhamento. Use Salvar imagem.';
+            if (controller.signal.aborted || error.name === 'AbortError') return;
+            if (files.length === 1) {
+              $('wishImageCards').querySelector('a[download]').click();
+              imageStatus.textContent = 'Envio indisponível. Imagem baixada.';
+            } else {
+              imageStatus.textContent = 'Envio indisponível. Copie ou salve cada imagem.';
+            }
           }
         };
         $('wishImageExport').hidden = false;
         $('wishImageExport').scrollIntoView({ block: 'nearest' });
-        photoStatus.textContent = missingPhotos ? 'Algumas lojas não liberaram a foto. Os itens continuam na imagem.' : '';
+        photoStatus.textContent = '';
+        imageStatus.textContent = missingPhotos ? 'Algumas fotos não estão disponíveis.' : '';
       } catch {
-        if (!controller.signal.aborted) photoStatus.textContent = 'Não foi possível montar a imagem. A mensagem de texto continua disponível.';
+        if (!controller.signal.aborted) photoStatus.textContent = 'Não foi possível montar a imagem.';
       } finally {
         if (!controller.signal.aborted) photoButton.disabled = false;
       }
@@ -506,7 +587,7 @@ document.addEventListener('DOMContentLoaded', () => {
       $('wishShareTotal').textContent = total;
       const clean = (value) => String(value).replace(/[\r\n]+/g, ' ').replace(/[*_~`]/g, '').trim();
       const lines = chosen.map((item) => [
-        (item.bought ? '✅ ' : '🎁 ') + '*' + clean(item.title) + '* — 💰 ' + priceLabel(item, includeConversion),
+        (item.bought ? '✅ ' : '🎁 ') + '*' + clean(titleWithQuantity(item)) + '* — 💰 ' + priceLabel(item, includeConversion),
         item.store && '🏷️ ' + clean(item.store),
         links.has(item.id) && '🔗 ' + links.get(item.id),
       ].filter(Boolean).join('\n'));
@@ -533,7 +614,7 @@ document.addEventListener('DOMContentLoaded', () => {
       };
       const label = document.createElement('label');
       const image = thumbnail(item.imageUrl, true);
-      label.append(check, ...(image ? [image] : []), item.title + (item.bought ? ' · comprado' : ''));
+      label.append(check, ...(image ? [image] : []), titleWithQuantity(item) + (item.bought ? ' · comprado' : ''));
       const price = document.createElement('span');
       prices.set(item.id, price);
       row.append(label, price);
@@ -567,15 +648,16 @@ document.addEventListener('DOMContentLoaded', () => {
     refresh();
     shareDialog.showModal();
   }
-  $('wishShareNative').hidden = typeof navigator.share !== 'function';
+  $('wishShareNative').hidden = !supportsNativeShare;
   $('wishShareNative').onclick = async () => {
+    $('wishShareStatus').textContent = '';
     try {
       await navigator.share({ text: $('wishSharePreview').value });
     } catch (error) {
-      if (error.name !== 'AbortError') $('wishShareStatus').textContent = 'Não foi possível abrir o compartilhamento. Use WhatsApp ou copie a mensagem.';
+      if (error.name !== 'AbortError') await copyShareMessage();
     }
   };
-  $('wishShareCopy').onclick = async () => {
+  async function copyShareMessage() {
     const preview = $('wishSharePreview');
     try {
       await navigator.clipboard.writeText(preview.value);
@@ -583,9 +665,10 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch {
       preview.focus();
       preview.select();
-      $('wishShareStatus').textContent = 'Mensagem selecionada. Use a opção Copiar do aparelho.';
+      $('wishShareStatus').textContent = 'Mensagem selecionada para copiar.';
     }
-  };
+  }
+  $('wishShareCopy').onclick = copyShareMessage;
   const quoteMoney = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 4 });
   const localQuoteDay = new Intl.DateTimeFormat('sv-SE');
   const displayQuoteDay = (date) => date.split('-').reverse().join('/');
@@ -624,6 +707,296 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   let managingPerson = null;
   const selectedWishes = new Set();
+  const purchaseSelection = new Set();
+  const selectAllPurchase = $('wishSelectAllPurchase');
+  const selectStore = $('wishSelectStore');
+  const hideBought = $('wishHideBought');
+  function visibleWishes(items) {
+    const store = selectStore.value;
+    return items.filter((item) => (!hideBought.checked || !item.bought) &&
+      (!store || personKey(normalizeName(item.store || '')) === store));
+  }
+  const purchaseGroups = [];
+  const purchaseDialog = $('wishPurchaseDialog');
+  const purchaseForm = $('wishPurchaseForm');
+  const purchaseDate = $('wishPurchaseDate');
+  const purchaseItems = $('wishPurchaseItems');
+  const purchaseToday = () => new Date().toLocaleDateString('sv-SE');
+  let purchaseDraft = [];
+  const shownPurchaseAmounts = new WeakMap();
+  const reducedPurchaseMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  let purchaseCountFrame;
+
+  function selectionEstimateAmounts(pending, selected) {
+    const currencies = new Set(pending.map((item) => item.currency).filter((currency) => currency && currency !== 'BRL'));
+    if (!currencies.size) currencies.add('CAD');
+    const initial = new Map([...currencies].map((currency) => [currency, 0]));
+    const { totals } = sumOriginalAmounts(selected, initial, true);
+    const { cents, missing } = estimate(selected);
+    totals.set('BRL', cents);
+    return { totals, missing };
+  }
+
+  function paintPurchaseAmounts(counters, animate) {
+    cancelAnimationFrame(purchaseCountFrame);
+    const active = counters.flatMap(({ element, totals, paint }) => {
+      const previous = shownPurchaseAmounts.get(element);
+      if (animate && previous && [...totals].some(([currency, cents]) => cents !== (previous.get(currency) ?? 0))) {
+        return [{ element, totals, paint, previous }];
+      }
+      paint(totals);
+      shownPurchaseAmounts.set(element, totals);
+      return [];
+    });
+    if (!active.length) return;
+    const started = performance.now();
+    function tick(now) {
+      const progress = Math.min(1, Math.max(0, (now - started) / 650));
+      const eased = 1 - (1 - progress) ** 2;
+      for (const { element, totals, paint, previous } of active) {
+        const shown = new Map();
+        for (const [currency, cents] of totals) {
+          const from = previous.get(currency) ?? 0;
+          shown.set(currency, Math.round(from + (cents - from) * eased));
+        }
+        paint(shown);
+        shownPurchaseAmounts.set(element, shown);
+      }
+      if (progress < 1) purchaseCountFrame = requestAnimationFrame(tick);
+    }
+    purchaseCountFrame = requestAnimationFrame(tick);
+  }
+
+  function updatePurchaseEstimates(pending, selected, animate) {
+    const total = $('wishTotal');
+    const original = $('wishOriginalTotal');
+    const status = $('wishTotalStatus');
+    const { totals, missing } = selectionEstimateAmounts(pending, selected);
+    const labels = (amounts, missing) => {
+      const foreign = new Map(amounts);
+      foreign.delete('BRL');
+      return [originalAmountLabels(foreign), estimateLabel({ cents: amounts.get('BRL'), missing })];
+    };
+    const announcement = 'Seleção · estimativa: ' + labels(totals, missing).join(' · ');
+    if (status.textContent !== announcement) status.textContent = announcement;
+    total.parentElement.classList.toggle('is-selection', selected.length > 0);
+    const counters = [{
+      element: total,
+      totals,
+      paint(amounts) {
+        const [foreign, reais] = labels(amounts, missing);
+        original.textContent = foreign;
+        total.textContent = reais;
+      },
+    }];
+    for (const group of purchaseGroups) {
+      const groupSelected = group.pending.filter((item) => purchaseSelection.has(item.id));
+      const count = countUnits(groupSelected);
+      const label = count ? (count === 1 ? '1 selecionado' : count + ' selecionados') : countUnits(group.pending) + ' a comprar';
+      const amounts = selectionEstimateAmounts(group.pending, groupSelected);
+      counters.push({
+        element: group.total,
+        totals: amounts.totals,
+        paint(shown) {
+          group.total.textContent = [label, ...labels(shown, amounts.missing)].join(' · ');
+        },
+      });
+      group.total.classList.toggle('has-selection', count > 0);
+    }
+    paintPurchaseAmounts(counters, animate && !reducedPurchaseMotion.matches);
+  }
+  function updatePurchaseBar(items, animate = false) {
+    const pending = items.filter((item) => !item.bought);
+    const available = pending.map((item) => item.id);
+    const selected = pending.filter((item) => purchaseSelection.has(item.id));
+    purchaseSelection.clear();
+    selected.forEach((item) => purchaseSelection.add(item.id));
+    const count = countUnits(selected);
+    $('wishPurchaseBar').hidden = count === 0;
+    $('wishPurchaseCount').textContent = count === 1 ? '1 item na compra' : count + ' itens na compra';
+    $('wishSelectAllPurchaseLabel').hidden = !available.length;
+    selectAllPurchase.onchange = () => togglePurchaseSelection(available, selectAllPurchase.checked);
+    const checks = purchaseGroups.filter((group) => group.check).map((group) => [group.check, group.ids]);
+    for (const [check, ids] of [[selectAllPurchase, available], ...checks]) {
+      const checked = ids.filter((id) => purchaseSelection.has(id)).length;
+      check.checked = checked > 0 && checked === ids.length;
+      check.indeterminate = checked > 0 && checked < ids.length;
+    }
+    for (const check of $('wishList').querySelectorAll('[data-purchase-wish]')) {
+      check.checked = purchaseSelection.has(check.dataset.purchaseWish);
+    }
+    updatePurchaseEstimates(pending, selected, animate);
+  }
+  function togglePurchaseSelection(ids, checked) {
+    for (const id of ids) {
+      if (checked) purchaseSelection.add(id);
+      else purchaseSelection.delete(id);
+    }
+    $('wishPurchaseFeedback').textContent = '';
+    updatePurchaseBar(visibleWishes(rows()), true);
+  }
+  $('wishClearPurchase').onclick = () => {
+    purchaseSelection.clear();
+    updatePurchaseBar(visibleWishes(rows()), true);
+  };
+  $('wishReviewPurchase').onclick = () => {
+    const items = visibleWishes(rows());
+    updatePurchaseBar(items);
+    if (!purchaseSelection.size) return;
+    const registered = roster();
+    const groups = new Map();
+    const names = people(items, registered);
+    for (const item of items) {
+      if (!purchaseSelection.has(item.id)) continue;
+      const person = names.get(personKey(personOf(item, registered)));
+      if (!groups.has(person)) groups.set(person, []);
+      groups.get(person).push(item);
+    }
+    purchaseDraft = [...groups].sort(([a], [b]) => Number(b === defaultPerson) - Number(a === defaultPerson));
+    purchaseForm.reset();
+    purchaseDate.max = purchaseToday();
+    purchaseDate.value = purchaseDate.max;
+    $('wishPurchaseError').textContent = '';
+    purchaseItems.replaceChildren(...purchaseDraft.map(([person, wishes]) => {
+      const group = document.createElement('section');
+      group.className = 'wish-purchase-group';
+      const heading = document.createElement('h3');
+      const subtotal = document.createElement('output');
+      heading.append(person, subtotal);
+      group.append(heading);
+      for (const item of wishes) {
+        const label = document.createElement('label');
+        const title = document.createElement('span');
+        const amount = document.createElement('input');
+        amount.dataset.purchaseAmount = '';
+        amount.inputMode = 'decimal';
+        amount.required = true;
+        amount.setAttribute('aria-label', 'Valor pago em reais por ' + item.title);
+        const price = originalSubtotal(item);
+        const currency = item.currency || 'BRL';
+        const estimatedBRL = price == null ? null : WishFx.convert(price, currency);
+        if (estimatedBRL != null) amount.value = estimatedBRL.toFixed(2).replace('.', ',');
+        title.textContent = titleWithQuantity(item);
+        if (price != null && currency !== 'BRL') {
+          const original = document.createElement('small');
+          original.className = 'hint';
+          original.textContent = originalPriceLabel(price, currency);
+          title.append(original);
+        }
+        amount.placeholder = 'Informe em R$';
+        label.append(title, amount);
+        group.append(label);
+      }
+      if (personKey(person) !== personKey(defaultPerson)) {
+        const label = document.createElement('label');
+        const contribution = document.createElement('input');
+        contribution.dataset.purchaseContribution = '';
+        contribution.inputMode = 'decimal';
+        contribution.placeholder = 'R$ 0,00';
+        contribution.setAttribute('aria-label', 'Contribuição de ' + person);
+        label.append('Contribuição (opcional)', contribution);
+        group.append(label);
+      }
+      return group;
+    }));
+    updatePurchaseTotals();
+    purchaseDialog.showModal();
+  };
+  function purchaseAmounts(strict = false) {
+    const read = (input, optional = false) => {
+      if (optional && !input?.value.trim()) return 0;
+      try {
+        const cents = Finance.cents(input.value);
+        if (cents < 0) throw new Error();
+        return cents;
+      } catch {
+        if (strict) throw new Error('Confira o campo “' + input.getAttribute('aria-label') + '”.');
+        return null;
+      }
+    };
+    return purchaseDraft.map(([person, wishes], index) => {
+      const group = purchaseItems.children[index];
+      const amounts = [...group.querySelectorAll('[data-purchase-amount]')].map((input) => read(input));
+      return {
+        person,
+        wishes,
+        amounts,
+        subtotal: amounts.includes(null) ? null : amounts.reduce((sum, value) => sum + value, 0),
+        contribution: read(group.querySelector('[data-purchase-contribution]'), true),
+      };
+    });
+  }
+  function updatePurchaseTotals() {
+    const groups = purchaseAmounts();
+    const total = groups.reduce((sum, group) => sum + group.subtotal, 0);
+    const contributions = groups.reduce((sum, group) => sum + group.contribution, 0);
+    const complete = groups.every((group) => group.subtotal !== null);
+    groups.forEach((group, index) => {
+      purchaseItems.children[index].querySelector('output').textContent = group.subtotal === null ? '—' : Finance.format(group.subtotal);
+    });
+    $('wishPurchaseTotal').textContent = complete ? Finance.format(total) : '—';
+    $('wishPurchaseNetRow').hidden = !contributions;
+    $('wishPurchaseNet').textContent = complete && contributions <= total ? Finance.format(total - contributions) : '—';
+  }
+  purchaseForm.addEventListener('input', () => {
+    $('wishPurchaseError').textContent = '';
+    updatePurchaseTotals();
+  });
+  purchaseForm.onsubmit = (event) => {
+    event.preventDefault();
+    try {
+      const date = purchaseDate.value;
+      if (!Finance.validDate(date) || date > purchaseToday()) throw new Error('Informe a data em que a compra foi realizada.');
+      const groups = purchaseAmounts(true);
+      const total = groups.reduce((sum, group) => sum + group.subtotal, 0);
+      const contributions = groups.reduce((sum, group) => sum + group.contribution, 0);
+      if (!Number.isSafeInteger(total) || total <= 0) throw new Error('Informe um total de compra válido e maior que zero.');
+      if (contributions > total) throw new Error('As contribuições excedem o total da compra.');
+      const snapshot = WalletStore.snapshot();
+      const list = JSON.parse(snapshot.simulator.wishlist || '[]');
+      const current = new Map(list.map((item) => [item.id, item]));
+      const registered = roster();
+      const ids = new Set();
+      for (const { person, wishes } of groups) {
+        for (const item of wishes) {
+          const latest = current.get(item.id);
+          if (!latest || latest.bought || latest.title !== item.title || latest.store !== item.store || latest.originalPrice !== item.originalPrice || latest.price !== item.price || latest.currency !== item.currency || quantityOf(latest) !== quantityOf(item) || personKey(personOf(latest, registered)) !== personKey(person)) {
+            throw new Error('Um item mudou durante a revisão. Feche e abra a compra novamente.');
+          }
+          ids.add(item.id);
+        }
+      }
+      const oneLine = (text) => text.replace(/\s+/g, ' ').trim();
+      function formatNote(includeStores) {
+        const lines = groups.map(({ person, wishes, amounts, subtotal, contribution }) =>
+          oneLine(person) + ' · ' + Finance.format(subtotal) + (contribution ? ' · contribuição ' + Finance.format(contribution) : '') + '\n' +
+          wishes.map((item, index) => {
+            const store = includeStores ? oneLine(item.store || '') : '';
+            return '  • ' + oneLine(titleWithQuantity(item)) + (store ? ' · Loja: ' + store : '') + ' · ' + Finance.format(amounts[index]);
+          }).join('\n'),
+        );
+        if (contributions) lines.push('Contribuições: ' + Finance.format(contributions) + '\nPago pela Dominadora: ' + Finance.format(total - contributions));
+        return lines.join('\n');
+      }
+      const noteWithStores = formatNote(true);
+      const note = noteWithStores.length <= 4000 ? noteWithStores : formatNote(false);
+      const id = crypto.randomUUID();
+      const finance = Finance.update(snapshot.finance, { type: 'add', entry: {
+        id, date, description: 'Compra da Dominadora', category: 'Lista de Compras',
+        amount: total, currency: 'BRL', status: 'paid', source: 'wishlist', note,
+      } });
+      snapshot.simulator.wishlist = JSON.stringify(list.map((item) =>
+        ids.has(item.id) ? { ...item, bought: true, purchaseNoteId: id, updatedAt: Date.now() } : item,
+      ));
+      WalletStore.commitBoth(finance, snapshot.simulator);
+      purchaseSelection.clear();
+      purchaseDialog.close();
+      $('wishPurchaseFeedback').textContent = 'Compra registrada na Lista de Compras · ' + Finance.format(total);
+      window.dispatchEvent(new Event('wishlist:purchase'));
+    } catch (error) {
+      $('wishPurchaseError').textContent = error.message;
+    }
+  };
   function wishGroupButton(label, accessibleLabel) {
     const button = document.createElement('button');
     button.type = 'button';
@@ -699,17 +1072,28 @@ document.addEventListener('DOMContentLoaded', () => {
     const list = rows(),
       host = $('wishList');
     host.replaceChildren();
+    purchaseGroups.length = 0;
+    const activePurchases = new Set(WalletStore.finance().entries.filter((entry) => ['paid', 'pending'].includes(entry.status)).map((entry) => entry.id));
     const current = editing && list.find((item) => item.id === editing);
     if (current && editBaseline?.person === $('wishPerson').value) {
       editBaseline.person = personOf(current);
       updatePeople(list, editBaseline.person);
     } else updatePeople(list);
     if (peopleDialog.open) renderFriends(list);
-    const { cents, missing } = estimate(list.filter((item) => !item.bought));
-    $('wishTotal').textContent = '≈ ' + formatBR(cents / 100);
-    $('wishTotal').title = missing ? missing + ' item(ns) a comprar sem preço ou cotação, fora do total.' : 'Somente itens ainda não comprados.';
-    const boughtCount = list.filter(x => x.bought).length;
-    $('wishSummary').textContent = (list.length ? (list.length - boughtCount) + ' a comprar · ' + boughtCount + ' comprado(s)' : 'Sua lista está vazia.') + (missing ? ' · ' + missing + ' sem cotação' : '');
+    const stores = groupByStore(list);
+    const selectedStore = selectStore.value;
+    selectStore.replaceChildren(new Option('Todas as lojas', ''), ...[...stores]
+      .filter(([key]) => key)
+      .map(([key, store]) => new Option(store.name, key)));
+    selectStore.value = stores.has(selectedStore) ? selectedStore : '';
+    selectStore.hidden = selectStore.options.length === 1;
+    const visible = visibleWishes(list);
+    const unbought = visible.filter((item) => !item.bought);
+    const { missing } = estimate(unbought);
+    const boughtCount = countUnits(visible.filter((item) => item.bought));
+    $('wishSummary').textContent = (visible.length
+      ? countUnits(unbought) + ' a comprar · ' + boughtCount + ' comprado(s)'
+      : list.length ? 'Nenhum item com esses filtros.' : 'Sua lista está vazia.') + (missing ? ' · ' + missing + ' sem cotação' : '');
     renderQuotes(list);
     const groups = new Map();
     const registered = roster();
@@ -717,7 +1101,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const friendCount = friendsOnly(names).length;
     $('wishFriendCount').textContent = String(friendCount);
     $('wishManagePeople').setAttribute('aria-label', 'Gerenciar amigas: ' + friendCount + (friendCount === 1 ? ' amiga' : ' amigas'));
-    for (const item of list) {
+    for (const item of visible) {
       const person = names.get(personKey(personOf(item, registered)));
       if (!groups.has(person)) groups.set(person, []);
       groups.get(person).push(item);
@@ -737,7 +1121,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const pending = items.filter((item) => !item.bought);
       const groupTotal = document.createElement('span');
       groupTotal.className = 'wish-group-total';
-      groupTotal.textContent = pending.length + ' a comprar · ' + estimateLabel(estimate(pending));
+      const purchaseGroup = { pending, total: groupTotal };
+      purchaseGroups.push(purchaseGroup);
       const managing = managingPerson === person;
       const share = wishGroupButton('Compartilhar', 'Compartilhar desejos de ' + person);
       share.onclick = () => shareGroup(person, items);
@@ -753,11 +1138,34 @@ document.addEventListener('DOMContentLoaded', () => {
       };
       const actions = document.createElement('div');
       actions.className = 'wish-group-actions';
+      if (!managing && pending.length) {
+        const label = document.createElement('label');
+        label.className = 'wish-purchase-all';
+        const selectGroup = document.createElement('input');
+        selectGroup.type = 'checkbox';
+        selectGroup.setAttribute('aria-label', 'Selecionar todos de ' + person + ' para compra');
+        const ids = pending.map((item) => item.id);
+        selectGroup.onchange = () => togglePurchaseSelection(ids, selectGroup.checked);
+        purchaseGroup.check = selectGroup;
+        purchaseGroup.ids = ids;
+        label.append(selectGroup, 'Selecionar todos');
+        actions.append(label);
+      }
       actions.append(share, manage);
       header.append(heading, groupTotal, actions);
       section.append(header);
       const bulk = managing ? wishBulkActions(person, items) : null;
       if (bulk) section.append(bulk.toolbar);
+      const storeSections = new Map();
+      for (const { name, items: products } of groupByStore(items).values()) {
+        const block = document.createElement('div');
+        block.className = 'wish-store-group';
+        const title = document.createElement('h4');
+        title.textContent = name || 'Sem loja informada';
+        block.append(title);
+        section.append(block);
+        for (const item of products) storeSections.set(item.id, block);
+      }
       for (const item of items) {
         const row = document.createElement('div');
         row.className = 'wish-row';
@@ -766,12 +1174,22 @@ document.addEventListener('DOMContentLoaded', () => {
         if (bulk) bulk.bind(item, check);
         else {
           check.checked = item.bought;
+          if (!item.bought) check.dataset.purchaseWish = item.id;
           check.setAttribute('aria-label', 'Comprado: ' + item.title);
-          check.onchange = () => save(rows().map((x) => (x.id === item.id ? { ...x, bought: check.checked, updatedAt: Date.now() } : x)));
+          check.disabled = item.bought && activePurchases.has(item.purchaseNoteId);
+          if (check.disabled) check.title = 'Para corrigir a compra, abra a nota em Notas e Gastos Reais.';
+          check.onchange = () => {
+            $('wishPurchaseFeedback').textContent = '';
+            if (item.bought) {
+              save(rows().map((x) => (x.id === item.id ? { ...x, bought: false, purchaseNoteId: undefined, updatedAt: Date.now() } : x)));
+              return;
+            }
+            togglePurchaseSelection([item.id], check.checked);
+          };
         }
         const anchor = document.createElement('a');
         anchor.className = 'wish-product-link';
-        anchor.textContent = item.title;
+        anchor.textContent = titleWithQuantity(item);
         anchor.target = '_blank';
         anchor.rel = 'noopener noreferrer';
         try {
@@ -782,14 +1200,12 @@ document.addEventListener('DOMContentLoaded', () => {
         product.className = 'wish-product';
         if (image) {
           const title = document.createElement('span');
-          title.textContent = item.title;
+          title.textContent = titleWithQuantity(item);
           anchor.classList.add('wish-product-link');
           anchor.replaceChildren(image, title);
           product.classList.add('has-thumbnail');
         }
-        const store = document.createElement('small');
-        store.textContent = item.store;
-        product.append(anchor, store);
+        product.append(anchor);
         if (item.bought) anchor.classList.add('is-bought');
         const price = document.createElement('span');
         price.className = 'wish-row-price';
@@ -809,6 +1225,7 @@ document.addEventListener('DOMContentLoaded', () => {
           $('wishTitle').value = item.title;
           $('wishStore').value = item.store;
           $('wishPrice').value = item.originalPrice ?? item.price ?? '';
+          $('wishQuantity').value = quantityOf(item);
           selectCurrency(item.currency || 'BRL');
           updatePeople(rows(), personOf(item));
           editBaseline = formValues(false);
@@ -829,10 +1246,11 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         };
         row.append(check, product, price, edit, remove);
-        section.append(row);
+        storeSections.get(item.id).append(row);
       }
       host.append(section);
     }
+    updatePurchaseBar(visible);
   }
   function formValues(validateLink = true) {
     const enteredName = ($('wishPerson').value || $('wishPersonName').value).trim().replace(/\s+/g, ' ');
@@ -844,25 +1262,97 @@ document.addEventListener('DOMContentLoaded', () => {
       store: $('wishStore').value.trim(),
       person,
       originalPrice: $('wishPrice').value === '' ? null : Number($('wishPrice').value),
+      quantity: $('wishQuantity').valueAsNumber,
       currency: $('wishCurrency').value,
       imageUrl: draftImage || undefined,
     };
   }
   $('wishCancel').onclick = reset;
+  function checkPhotoSpace(items) {
+    const photoBytes = items.reduce((sum, item) => sum + (item.imageUrl?.startsWith('data:') ? item.imageUrl.length : 0), 0);
+    const snapshot = WalletStore.snapshot();
+    snapshot.simulator.wishlist = JSON.stringify(items);
+    if (photoBytes > 256 * 1024 || new TextEncoder().encode(JSON.stringify(snapshot)).length > 700 * 1024) {
+      throw new Error('A carteira atingiu o espaço reservado para fotos. Desmarque itens para salvar um lote menor ou remova uma foto antiga.');
+    }
+  }
+  function batchFieldError(input, error) {
+    const hint = input.parentElement.querySelector('.wish-field-error');
+    hint.textContent = error;
+    if (error) {
+      input.setAttribute('aria-invalid', 'true');
+      input.setAttribute('aria-describedby', hint.id);
+    } else {
+      input.removeAttribute('aria-invalid');
+      input.removeAttribute('aria-describedby');
+    }
+  }
+  const validLinePrice = (price, quantity) => price === null ||
+    (Number.isFinite(price) && price >= 0 && Number.isSafeInteger(Math.round(price * 100) * quantity));
+  function savePhotoBatch() {
+    const list = rows();
+    const registered = roster();
+    const enteredName = checkedName($('wishPerson').value || $('wishPersonName').value);
+    const person = people(list, registered).get(personKey(enteredName)) || enteredName;
+    const personId = personKey(person) === personKey(defaultPerson) ? undefined : registerPerson(person, registered).id;
+    const additions = [];
+    const invalidFields = [];
+    for (const [i, row] of [...$('wishBatchRows').children].entries()) {
+      if (!row.querySelector('input[type=checkbox]').checked) continue;
+      const fieldInput = (field) => row.querySelector('[data-field=' + field + ']');
+      const get = (field) => fieldInput(field).value.trim();
+      const title = get('title'), store = get('store'), currency = get('currency');
+      const rawPrice = get('price');
+      const originalPrice = rawPrice === '' ? null : /^\d+(?:[.,]\d{1,2})?$/.test(rawPrice) ? Number(rawPrice.replace(',', '.')) : NaN;
+      const rawQuantity = get('quantity');
+      const quantity = Number(rawQuantity);
+      const quantityValid = /^\d+$/.test(rawQuantity) && validQuantity(quantity);
+      const errors = {
+        title: title ? '' : 'Informe o nome do produto.',
+        store: store ? '' : 'Informe a loja.',
+        price: validLinePrice(originalPrice, quantityValid ? quantity : 1) ? '' : 'Informe um preço unitário válido.',
+        quantity: quantityValid ? '' : 'Informe uma quantidade inteira a partir de 1.',
+      };
+      for (const [field, error] of Object.entries(errors)) {
+        const input = fieldInput(field);
+        batchFieldError(input, error);
+        if (error) invalidFields.push(input);
+      }
+      if (Object.values(errors).some(Boolean)) continue;
+      additions.push({ id: crypto.randomUUID(), url: '', title, store, person, personId, originalPrice, currency, quantity, imageUrl: photoBatch[i].imageUrl, price: originalPrice == null ? null : WishFx.convert(originalPrice, currency), bought: false, updatedAt: Date.now() });
+    }
+    if (invalidFields.length) {
+      invalidFields[0].focus();
+      throw new Error('Corrija os campos marcados ou desmarque os produtos que quer deixar de fora.');
+    }
+    if (!additions.length) throw new Error('Selecione pelo menos um produto.');
+    const next = [...list, ...additions];
+    checkPhotoSpace(next);
+    save(next, personId ? registered : undefined);
+    reset();
+    $('wishPhotoMessage').textContent = additions.length + ' produtos adicionados.';
+  }
   $('wishForm').onsubmit = (event) => {
     event.preventDefault();
+    $('wishSaveError').textContent = '';
     try {
       if (!WalletStore.isWritable()) throw new Error('Aguarde a conexão com a carteira para salvar o desejo.');
       if (photoBusy) throw new Error('Aguarde a foto ficar pronta antes de salvar.');
+      if (photoBatch) {
+        savePhotoBatch();
+        return;
+      }
       const draft = formValues();
       if (!draft.url && !draft.imageUrl?.startsWith('data:')) throw new Error('Informe o link ou escolha uma foto do produto.');
-      const { title, store, person, originalPrice, currency } = draft;
-      if (!title || !store || !person || person.length > 80 || (originalPrice !== null && (!Number.isFinite(originalPrice) || originalPrice < 0))) throw new Error('Confira produto, loja, pessoa e valor.');
+      const { title, store, person, originalPrice, currency, quantity } = draft;
+      if (!title || !store || !person || person.length > 80) throw new Error('Confira produto, loja e pessoa.');
+      if (!validQuantity(quantity)) throw new Error('Informe uma quantidade inteira a partir de 1.');
+      if (!validLinePrice(originalPrice, quantity)) throw new Error('Confira o preço unitário e a quantidade.');
       const list = rows(),
         previous = list.find((x) => x.id === editing);
       if (editing && !previous) throw new Error('Este desejo foi removido no outro aparelho.');
       const changes = {};
-      const fields = [['url', 'imageUrl'], ['title'], ['store'], ['person'], ['originalPrice', 'currency']];
+      const fields = [['url', 'imageUrl'], ['title'], ['store'], ['person'], ['originalPrice', 'currency'], ['quantity']];
       for (const group of fields) {
         if (editBaseline && group.every((key) => draft[key] === editBaseline[key])) continue;
         const changedRemotely = group[0] === 'person'
@@ -884,25 +1374,18 @@ document.addEventListener('DOMContentLoaded', () => {
       if ('originalPrice' in changes) changes.price = originalPrice == null ? null : WishFx.convert(originalPrice, currency);
       const next = { bought: false, ...previous, ...changes, id: editing || crypto.randomUUID(), updatedAt: Date.now() };
       const nextRows = editing ? list.map((x) => (x.id === editing ? next : x)) : [...list, next];
-      if (changes.imageUrl?.startsWith('data:') && changes.imageUrl !== previous?.imageUrl) {
-        const photoBytes = nextRows.reduce((sum, item) => sum + (item.imageUrl?.startsWith('data:') ? item.imageUrl.length : 0), 0);
-        const snapshot = WalletStore.snapshot();
-        snapshot.simulator.wishlist = JSON.stringify(nextRows);
-        if (photoBytes > 256 * 1024 || new TextEncoder().encode(JSON.stringify(snapshot)).length > 700 * 1024) {
-          throw new Error('A carteira atingiu o espaço reservado para fotos. Remova uma foto antiga ou salve este item por link.');
-        }
-      }
+      if (changes.imageUrl?.startsWith('data:') && changes.imageUrl !== previous?.imageUrl) checkPhotoSpace(nextRows);
       save(nextRows, registered);
       reset();
       $('wishEditor').open = false;
     } catch (error) {
-      message(error.message);
+      $('wishSaveError').textContent = error.message;
     }
   };
-  function drawWishPhoto(bitmap, max, crop = { x: 0, y: 0, w: 1, h: 1 }, enlarge = false) {
+  function drawWishPhoto(bitmap, max, crop = { x: 0, y: 0, w: 1, h: 1 }, maxScale = 1) {
     const { width, height } = bitmap;
     const w = width * crop.w, h = height * crop.h;
-    const scale = Math.min(enlarge ? 2 : 1, max / Math.max(w, h));
+    const scale = Math.min(maxScale, max / Math.max(w, h));
     const canvas = document.createElement('canvas');
     canvas.width = Math.max(1, Math.round(w * scale));
     canvas.height = Math.max(1, Math.round(h * scale));
@@ -930,57 +1413,50 @@ document.addEventListener('DOMContentLoaded', () => {
   $('wishRemovePhoto').onclick = () => {
     photoRevision++;
     photoBusy = false;
+    $('wishSave').disabled = false;
+    $('wishUpload').disabled = false;
     $('wishUpload').value = '';
     $('wishPhotoMessage').textContent = '';
     showDraftImage(null);
   };
-  $('wishUpload').onchange = async () => {
-    const file = $('wishUpload').files[0];
-    if (!file) return;
-    const token = ++photoRevision;
-    const status = $('wishPhotoMessage');
-    revision++;
-    request?.abort();
-    clearTimeout(autoRead);
-    message('');
-    photoBusy = true;
-    status.textContent = 'Preparando foto…';
-    let detailPhoto;
+  async function readWishPhoto(file, url, recognize, onImage = () => {}) {
+    if (!/^image\/(?:jpeg|png|webp|bmp)$/.test(file.type) || file.size > 12 * 1024 * 1024) throw new Error('Escolha uma foto JPG, PNG, WebP ou BMP de até 12 MB.');
+    const bitmap = await createImageBitmap(file);
+    let detailPhoto, badgePhoto, badgesArea;
+    let imageUrl;
     try {
-      if (!/^image\/(?:jpeg|png|webp|bmp)$/.test(file.type) || file.size > 12 * 1024 * 1024) throw new Error('Escolha uma foto JPG, PNG, WebP ou BMP de até 12 MB.');
-      const bitmap = await createImageBitmap(file);
-      try {
-        if (token !== photoRevision) return;
-        const sample = drawWishPhoto(bitmap, 160);
-        const regions = WishProduct.screenshotRegions(sample.getContext('2d').getImageData(0, 0, sample.width, sample.height));
-        showDraftImage(compressWishPhoto(bitmap, regions?.photo));
-        if (regions) {
-          const detail = drawWishPhoto(bitmap, 1550, regions.text, true);
-          detailPhoto = await new Promise((resolve) => detail.toBlob(resolve, 'image/png'));
-        }
-      } finally {
-        bitmap.close();
+      const sample = drawWishPhoto(bitmap, bitmap.height > bitmap.width ? 320 : 160);
+      const regions = WishProduct.screenshotRegions(sample.getContext('2d').getImageData(0, 0, sample.width, sample.height));
+      imageUrl = compressWishPhoto(bitmap, regions?.photo);
+      onImage(imageUrl);
+      const cropFile = async (region, scale) => {
+        const canvas = drawWishPhoto(bitmap, 1550, region, scale);
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+        return blob && new File([blob], file.name, { type: blob.type });
+      };
+      if (regions?.text) detailPhoto = await cropFile(regions.text, 2);
+      if (regions?.badge) {
+        badgePhoto = await cropFile(regions.badge, 5);
+        badgesArea = await cropFile({ x: 0.79, y: 0.10, w: 0.21, h: 0.19 }, 3);
       }
-    } catch (error) {
-      if (token === photoRevision) {
-        status.textContent = error.message || 'Não foi possível abrir a foto.';
-        $('wishUpload').value = '';
-      }
-      return;
     } finally {
-      if (token === photoRevision) photoBusy = false;
+      bitmap.close();
     }
-    if (token !== photoRevision) return;
-    status.textContent = 'Lendo o texto da foto…';
+    const suggestion = { imageUrl };
     try {
-      const { text } = await recognizeReceipt(detailPhoto || file, () => {});
-      if (token !== photoRevision) return;
-      const suggestion = WishProduct.readPhotoText(text, $('wishUrl').value);
+      const { text } = await recognize(detailPhoto || file, () => {});
+      Object.assign(suggestion, WishProduct.readPhotoText(text, url));
       suggestion.store ||= knownWishStore(suggestion.title);
+      if (!suggestion.store && badgePhoto) {
+        const badge = await recognize(badgePhoto, () => {}, { tessedit_pageseg_mode: '7' });
+        const yesStyle = /\b(?:y[eo]sstyle|esstyle)\b/i;
+        if (yesStyle.test(badge.text) || (badgesArea && yesStyle.test((await recognize(badgesArea, () => {}, { tessedit_pageseg_mode: '11' })).text))) {
+          suggestion.store = 'YesStyle';
+        }
+      }
       if (detailPhoto && (!suggestion.title || !suggestion.store || suggestion.price == null)) {
-        const full = await recognizeReceipt(file, () => {});
-        if (token !== photoRevision) return;
-        const fallback = WishProduct.readPhotoText(full.text, $('wishUrl').value);
+        const full = await recognize(file, () => {});
+        const fallback = WishProduct.readPhotoText(full.text, url);
         suggestion.title ||= fallback.title;
         suggestion.store ||= fallback.store || knownWishStore(suggestion.title);
         if (suggestion.price == null) {
@@ -988,8 +1464,99 @@ document.addEventListener('DOMContentLoaded', () => {
           suggestion.currency = fallback.currency;
         }
       }
-      if (!$('wishTitle').value.trim()) $('wishTitle').value = suggestion.title;
-      if (!$('wishStore').value.trim()) $('wishStore').value = suggestion.store;
+    } catch {
+      suggestion.warning = 'Confira e complete os campos que ficaram vazios.';
+    }
+    return suggestion;
+  }
+  function setPhotoBatch(batch) {
+    photoBatch = batch;
+    const active = batch !== null;
+    $('wishBatch').hidden = !active;
+    $('wishSingleFields').hidden = active;
+    $('wishUrl').closest('.wish-link-row').hidden = active;
+    $('wishImagePreview').hidden = active;
+    $('wishConversion').hidden = active;
+    for (const id of ['wishTitle', 'wishStore', 'wishPrice', 'wishCurrency', 'wishQuantity', 'wishUrl']) $(id).disabled = active;
+    if (active) {
+      $('wishRemovePhoto').hidden = true;
+      $('wishCancel').hidden = false;
+      $('wishCancel').textContent = 'Descartar lote';
+      $('wishSave').textContent = 'Adicionar selecionados';
+    }
+    $('wishBatchRows').replaceChildren();
+  }
+  function appendPhotoRow(file, suggestion, i) {
+    const esc = escapeHTML;
+    const row = document.createElement('div');
+    row.className = 'preview-row';
+    const currency = suggestion.currency || 'BRL';
+    const currencies = new Set([...$('wishCurrency').options].map((option) => option.value).concat(currency));
+    const field = (label, key, attributes) => `<label>${label}<input data-field="${key}" ${attributes}><small class="wish-field-error" id="wishBatchError-${i}-${key}"></small></label>`;
+    row.innerHTML = `<label class="row-title"><input type="checkbox" ${suggestion.imageUrl ? 'checked' : 'disabled'}> <span>${i + 1}. ${esc(file.name)}</span></label>${
+      suggestion.imageUrl ? `<div class="form-grid">
+        ${field('Produto', 'title', `maxlength="300" value="${esc(suggestion.title || '')}"`)}
+        ${field('Loja', 'store', `maxlength="150" value="${esc(suggestion.store || '')}"`)}
+        ${field('Preço unitário', 'price', `inputmode="decimal" value="${suggestion.price ?? ''}"`)}
+        <label>Moeda<select data-field="currency">${[...currencies].map((value) => `<option ${value === currency ? 'selected' : ''}>${esc(value)}</option>`).join('')}</select></label>
+        ${field('Quantidade', 'quantity', 'inputmode="numeric" value="1"')}
+      </div>` : ''
+    }${suggestion.warning ? `<p class="hint">${esc(suggestion.warning)}</p>` : ''}`;
+    const image = thumbnail(suggestion.imageUrl);
+    if (image) row.querySelector('.row-title').after(image);
+    $('wishBatchRows').append(row);
+  }
+  $('wishBatchRows').addEventListener('input', ({ target }) => {
+    if (target.matches('input[aria-invalid]')) batchFieldError(target, '');
+    if (target.matches('input[type="checkbox"]') && !target.checked) {
+      for (const input of target.closest('.preview-row').querySelectorAll('input[aria-invalid]')) batchFieldError(input, '');
+    }
+    if (!$('wishBatchRows').querySelector('input[aria-invalid]')) $('wishSaveError').textContent = '';
+  });
+  $('wishUpload').onchange = async () => {
+    const files = [...$('wishUpload').files];
+    if (!files.length) return;
+    $('wishUpload').value = '';
+    if (editing && files.length > 1) {
+      $('wishPhotoMessage').textContent = 'Na edição, escolha uma foto. Para cadastrar várias, abra Adicionar desejo.';
+      return;
+    }
+    if (photoBatch) reset();
+    const token = ++photoRevision;
+    const status = $('wishPhotoMessage');
+    revision++;
+    request?.abort();
+    clearTimeout(autoRead);
+    message('');
+    photoBusy = true;
+    $('wishSave').disabled = true;
+    $('wishUpload').disabled = true;
+    status.textContent = 'Preparando fotos…';
+    try {
+      if (files.length > 1) {
+        const batch = [];
+        setPhotoBatch(batch);
+        await withReceiptReader(async (recognize) => {
+          for (const [i, file] of files.entries()) {
+            if (token !== photoRevision) return;
+            status.textContent = `Lendo foto ${i + 1} de ${files.length}…`;
+            const suggestion = await readWishPhoto(file, '', recognize).catch((error) => ({ warning: error.message || 'Não foi possível abrir a foto.' }));
+            if (token !== photoRevision) return;
+            batch.push(suggestion);
+            appendPhotoRow(file, suggestion, i);
+          }
+        });
+        if (token === photoRevision) status.textContent = 'Confira os produtos antes de adicionar.';
+        return;
+      }
+      const suggestion = await withReceiptReader((recognize) => readWishPhoto(files[0], $('wishUrl').value, recognize, (imageUrl) => {
+        if (token !== photoRevision) return;
+        showDraftImage(imageUrl);
+        status.textContent = 'Lendo o texto da foto…';
+      }));
+      if (token !== photoRevision) return;
+      if (!$('wishTitle').value.trim()) $('wishTitle').value = suggestion.title || '';
+      if (!$('wishStore').value.trim()) $('wishStore').value = suggestion.store || '';
       if ($('wishPrice').value === '' && suggestion.price != null) {
         $('wishPrice').value = suggestion.price;
         selectCurrency(suggestion.currency);
@@ -1001,8 +1568,14 @@ document.addEventListener('DOMContentLoaded', () => {
         : !suggestion.store && suggestion.title && suggestion.price != null
           ? 'Nome e preço encontrados. Informe a loja ou cole o link do produto.'
           : 'Foto pronta. Confira e complete os campos que ficaram vazios.';
-    } catch {
-      if (token === photoRevision) status.textContent = 'Foto pronta. Não consegui ler o texto; preencha os campos manualmente.';
+    } catch (error) {
+      if (token === photoRevision) status.textContent = error.message || 'Não foi possível abrir a foto.';
+    } finally {
+      if (token === photoRevision) {
+        photoBusy = false;
+        $('wishSave').disabled = false;
+        $('wishUpload').disabled = false;
+      }
     }
   };
   $('wishRead').onclick = async () => {
@@ -1062,6 +1635,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $('wishCurrency').value = currency;
   }
   $('wishPrice').addEventListener('input', conversion);
+  $('wishQuantity').addEventListener('input', conversion);
   $('wishCurrency').addEventListener('change', conversion);
   window.addEventListener('wishlist:rates', () => {
     conversion();
@@ -1069,6 +1643,17 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   window.addEventListener('wallet:remote', conversion);
   window.addEventListener('wallet:remote', render);
+  window.addEventListener('finance:changed', render);
+  selectStore.addEventListener('change', render);
+  hideBought.addEventListener('change', render);
+  window.addEventListener('wishlist:purchase-undone', () => {
+    selectStore.value = '';
+    purchaseSelection.clear();
+    render();
+    const feedback = $('wishPurchaseFeedback');
+    feedback.textContent = 'Compra desfeita. Os itens voltaram para a lista de desejos.';
+    feedback.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+  });
   const incoming = new URL(location.href);
   const shareKeys = ['wishShareUrl', 'wishShareText', 'wishShareTitle'];
   function openIncomingShare() {

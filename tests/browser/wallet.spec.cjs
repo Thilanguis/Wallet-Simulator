@@ -19,7 +19,6 @@ async function open(page, seed = {}) {
 const finance = async (page) => {
   await page.locator('[data-panel="financePanel"]').click();
   await page.locator('#financeManager > summary').click();
-  await page.locator('#financeIndicators > summary').click();
 };
 test('new default economy persists across reload without user settings changes', async ({ page }) => {
   await open(page);
@@ -49,16 +48,12 @@ test('desktop/mobile init, navigation and no horizontal overflow', async ({ page
   await page.screenshot({ path: '.local/mobile.png', fullPage: true });
   expect(errors).toEqual([]);
 });
-test('manual CRUD, budget, statuses, filters and persistence', async ({ page }) => {
+test('manual CRUD, statuses, filters and persistence', async ({ page }) => {
   await autoConfirm(page);
   await open(page);
   await finance(page);
   await manual(page);
   await expect(page.locator('#financeHistory .finance-entry')).toHaveCount(1);
-  await page.getByText('Orçamento (opcional)', { exact: true }).click();
-  await page.locator('#financeBudget').fill('10,00');
-  await page.locator('#saveBudget').click();
-  await expect(page.locator('#homeRemaining')).toContainText('-');
   await page.locator('#financeHistory [data-action=edit]').click();
   await page.locator('#entryAmount').fill('15,55');
   await page.locator('#entryStatus').selectOption('paid');
@@ -68,9 +63,11 @@ test('manual CRUD, budget, statuses, filters and persistence', async ({ page }) 
 
   await finance(page);
   await expect(page.locator('#financeHistory')).toContainText('15,55');
+  await page.locator('#financeFilters > summary').click();
   await page.locator('#financeStatus').selectOption('refunded');
   await expect(page.locator('#financeHistory .finance-entry')).toHaveCount(0);
   await page.locator('#clearFinanceFilters').click();
+  await page.keyboard.press('Escape');
   await page.locator('#financeHistory [data-action=edit]').click();
   await page.locator('#entryStatus').selectOption('paid');
   await page.locator('#saveEntry').click();

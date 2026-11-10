@@ -45,7 +45,9 @@ test('select all respects filters, supports partial selection, cancellation and 
     await page.locator('#entryAmount').fill(amount);
     await page.locator('#saveEntry').click();
   }
+  await page.locator('#financeFilters > summary').click();
   await page.locator('#financeStore').fill('Aurora');
+  await page.keyboard.press('Escape');
   await expect(page.locator('#financeHistory .finance-entry')).toHaveCount(2);
   await page.locator('#selectAllFinance').check();
   await expect(page.locator('#financeSelectionCount')).toHaveText('2 selecionados');
@@ -61,7 +63,9 @@ test('select all respects filters, supports partial selection, cancellation and 
   await page.locator('[data-dialog-confirm]').click();
   await expect(page.locator('#financeHistory .finance-entry')).toHaveCount(0);
   await expect(page.locator('#deleteSelectedFinance')).toBeDisabled();
+  await page.locator('#financeFilters > summary').click();
   await page.locator('#clearFinanceFilters').click();
+  await page.keyboard.press('Escape');
   await expect(page.locator('#financeHistory .finance-entry')).toHaveCount(1);
   await expect(page.locator('#financeHistory')).toContainText('Compra C');
   expect(await page.evaluate(() => FinanceUI.getState().audit.length)).toBe(2);
@@ -138,7 +142,8 @@ test('real OCR runs from root vendor assets, creates only a suggestion and persi
   page.on('request', (request) => requests.push(request.url()));
   await open(page);
   await page.locator('[data-panel=financePanel]').click();
-  await page.getByText('Ler imagem ou PDF com OCR local', { exact: true }).click();
+  await page.locator('#financeImport > summary').click();
+  await page.locator('#receiptToggle').click();
   const png = await page.evaluate(() => {
     const c = document.createElement('canvas');
     c.width = 1000;
