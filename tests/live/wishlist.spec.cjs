@@ -24,7 +24,7 @@ for (const width of [393, 1440])
     await page.locator('#wishSave').click();
     await expect(page.locator('.wish-row')).toHaveCount(1);
     await expect(page.locator('#wishTotal')).toContainText('42,50');
-    expect(await page.locator('#wishTotal').evaluate(el => el.getBoundingClientRect().top < document.getElementById('wishForm').getBoundingClientRect().top)).toBe(true);
+    expect(await page.locator('#wishTotal').evaluate(el => el.getBoundingClientRect().top < document.querySelector('.wish-row').getBoundingClientRect().top)).toBe(true);
     await page.locator('.wish-row input').check();
     await expect(page.locator('#wishSummary')).toHaveText('0 a comprar · 1 comprado(s)');
     await expect(page.locator('#wishTotal')).toContainText('0,00');

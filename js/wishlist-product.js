@@ -4,6 +4,7 @@
   if (typeof module === 'object') module.exports = api;
   else root.WishProduct = api;
 })(globalThis, function () {
+  const photoLimit = 20 * 1024;
   function store(host, site = '') {
     const known = { pandora: 'Pandora', amazon: 'Amazon', shein: 'Shein', yesstyle: 'YesStyle', coach: 'Coach' };
     for (const [domain, name] of Object.entries(known)) if (host.split('.').includes(domain)) return name;
@@ -19,6 +20,114 @@
       if (['https:', 'http:'].includes(url.protocol) && !url.username && !url.password) return url.href;
     } catch {}
     return null;
+  }
+  function savedImageUrl(value) {
+    if (typeof value === 'string' && value.length <= photoLimit && /^data:image\/jpeg;base64,\/[A-Za-z0-9+/]+=*$/.test(value)) return value;
+    return imageUrl(value);
+  }
+  function readPhotoText(text, productUrl = '') {
+    const lines = String(text).split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const domain = lines.map((line) => line.match(/\b([\w.-]+\.(?:com\.br|co\.uk|com|net|ca))\b/i)?.[1]).find(Boolean);
+    let host = domain || '';
+    try { host = new URL(productUrl).hostname || host; } catch {}
+    const brand = lines.join(' ').match(/\b(Pandora|Amazon|Shein|YesStyle|Coach|Shopee|AliExpress|Mercado Livre|Browns Shoes|MICHI|Sephora|Zara|Temu|Nike|Adidas)\b/i)?.[0] || '';
+    const explicitStore = lines.map((line) => line.match(/^(?:loja|store|vendido por|sold by)\s*:\s*(.+)$/i)?.[1]).find(Boolean);
+    const storeName = explicitStore || (host ? store(host.toLowerCase(), brand) : brand);
+    const region = /^ca\.|\.ca$/i.test(host) || /\b(?:Canada|Canadá|Québec|Ontario)\b/i.test(text) ? 'CAD'
+      : /^us\./i.test(host) || /\b(?:United States|USA)\b/i.test(text) ? 'USD'
+      : /\.br$/i.test(host) ? 'BRL' : null;
+    const money = /(?:(CAD|USD|BRL|EUR|GBP|AUD|CA\$|C\$|US\$|R\$|A\$|€|£|\$)\s*\$?\s*([\d.,]+)|([\d.,]+)\s*(CAD|USD|BRL|EUR|GBP|AUD|€|£))/gi;
+    const codes = { 'CA$': 'CAD', 'C$': 'CAD', 'US$': 'USD', 'R$': 'BRL', 'A$': 'AUD', '€': 'EUR', '£': 'GBP', '$': region };
+    const candidates = [];
+    for (const [index, line] of lines.entries()) {
+      if (/\b(?:frete|shipping|delivery|parcelas?|instalments?|installments?|save|economize|regular|original|was|points?|pontos?|cashback|rewards?)\b/i.test(line) || /^de\s*:/i.test(line)) continue;
+      const preferred = /\b(?:agora|now|preço|price|sale|por)\b/i.test(line);
+      for (const match of line.matchAll(money)) {
+        const code = (match[1] || match[4]).toUpperCase();
+        const currency = Object.hasOwn(codes, code) ? codes[code] : code;
+        const digits = (match[2] || match[3]).replace(/[.,]+$/, '');
+        const decimal = digits.match(/[.,]\d{2}$/);
+        const normalized = decimal ? digits.slice(0, -3).replace(/[.,]/g, '') + '.' + digits.slice(-2) : digits.replace(/[.,]/g, '');
+        if (!/^(?:\d+(?:\.\d{2})?|\.\d{2})$/.test(normalized)) continue;
+        const price = Number(normalized);
+        if (currency && Number.isFinite(price)) candidates.push({ price, currency, index, preferred });
+      }
+    }
+    const top = candidates.some((item) => item.preferred) ? candidates.filter((item) => item.preferred) : candidates;
+    const first = top[0];
+    const best = first && top.every((item) => item.price === first.price && item.currency === first.currency) ? first : null;
+    const titleLine = (line) => /[\p{L}]{3}/u.test(line) && ![storeName, brand].some((name) => name && name.toLowerCase() === line.toLowerCase())
+      && !/^(?:loja|store|vendido por|sold by)\s*:/i.test(line)
+      && !/^(?:sterling si\s*l?\s*ver|prata(?: esterlina| 925)?|stainless steel|aço inoxidável|(?:\d+\s*k\s+)?(?:yellow |rose |white )?gold|gold plated|platinum plated)$/i.test(line)
+      && !/(?:https?:\/\/|\bwww\.|\b(?:CAD|USD|BRL|EUR|GBP|AUD)\b|[$€£]|\b(?:shipping|delivery|frete|subtotal|checkout|carrinho|add to|shop now|adicionar|sale price|view product details|style your own|reviews?|pick up|select a store|get it delivered|business hours|points?|pontos?|cashback)\b)/i.test(line)
+      && !/^(?:novo|new|sale|oferta|ofertas|preço|price|menu|home|search|busca|produto|product|cadastro|login|sign in)$/i.test(line);
+    const title = (lines.slice(0, first?.index ?? lines.length).filter(titleLine).at(-1) || lines.find(titleLine) || '').slice(0, 300);
+    return { title, store: storeName.slice(0, 150), price: best?.price ?? null, currency: best?.currency ?? null };
+  }
+  function screenshotRegions({ data, width, height }) {
+    if (width < height * 1.25) return null;
+    const offset = (x, y) => (y * width + x) * 4;
+    const upper = Math.floor(height * 0.8);
+    // Product pages often have a white gutter between the gallery and details.
+    let gapStart = -1;
+    const gaps = [];
+    for (let x = Math.floor(width * 0.22); x <= Math.floor(width * 0.62); x++) {
+      let white = 0;
+      for (let y = 0; y < upper; y++) {
+        const i = offset(x, y);
+        if (Math.min(data[i], data[i + 1], data[i + 2]) >= 248) white++;
+      }
+      if (white >= upper * 0.95) {
+        if (gapStart < 0) gapStart = x;
+      } else if (gapStart >= 0) {
+        if (x - gapStart >= width * 0.05 && gapStart <= width * 0.48) gaps.push([gapStart, x]);
+        gapStart = -1;
+      }
+    }
+    if (!gaps.length) return null;
+    const [left, right] = gaps.sort((a, b) => (b[1] - b[0]) - (a[1] - a[0]))[0];
+    // Ignore gallery bands that touch an edge, such as the next image below the product.
+    const marks = new Uint8Array(left * height);
+    for (let y = 0; y < height; y++) for (let x = 0; x < left; x++) {
+      const i = offset(x, y);
+      const min = Math.min(data[i], data[i + 1], data[i + 2]);
+      const max = Math.max(data[i], data[i + 1], data[i + 2]);
+      marks[y * left + x] = Number(min < 158 || max - min > 28);
+    }
+    const components = [];
+    for (let i = 0; i < marks.length; i++) {
+      if (!marks[i]) continue;
+      marks[i] = 0;
+      const queue = [i];
+      let x0 = left, y0 = height, x1 = 0, y1 = 0;
+      for (let head = 0; head < queue.length; head++) {
+        const cell = queue[head], x = cell % left, y = Math.floor(cell / left);
+        x0 = Math.min(x0, x); y0 = Math.min(y0, y);
+        x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+        for (const [nx, ny] of [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]]) {
+          if (nx < 0 || nx >= left || ny < 0 || ny >= height) continue;
+          const next = ny * left + nx;
+          if (marks[next]) { marks[next] = 0; queue.push(next); }
+        }
+      }
+      if (x0 <= 0 || x1 >= left - 1 || y0 <= 0 || y1 >= height - 1 || queue.length < 4) continue;
+      components.push({ x0, y0, x1, y1, size: queue.length });
+    }
+    const best = components.sort((a, b) => b.size - a.size)[0];
+    if (!best || best.size < left * height * 0.01) return null;
+    const span = Math.max(best.x1 - best.x0, best.y1 - best.y0);
+    const nearby = Math.ceil(span * 0.25);
+    const object = { ...best };
+    for (const part of components) {
+      if (part.x1 < best.x0 - nearby || part.x0 > best.x1 + nearby || part.y1 < best.y0 - nearby || part.y0 > best.y1 + nearby) continue;
+      object.x0 = Math.min(object.x0, part.x0); object.y0 = Math.min(object.y0, part.y0);
+      object.x1 = Math.max(object.x1, part.x1); object.y1 = Math.max(object.y1, part.y1);
+    }
+    const pad = Math.ceil(span * 0.16);
+    const x = Math.max(0, object.x0 - pad), y = Math.max(0, object.y0 - pad);
+    const bounds = { x: x / width, y: y / height, w: (Math.min(left, object.x1 + pad + 1) - x) / width, h: (Math.min(height, object.y1 + pad + 1) - y) / height };
+    const textX = Math.max(0, (right - 2) / width);
+    return { photo: bounds, text: { x: textX, y: 0, w: 1 - textX, h: 0.55 } };
   }
   function read(doc, host, pageUrl) {
     const meta = (selector) => doc.querySelector(selector)?.content;
@@ -53,5 +162,5 @@
       imageUrl: images.map((value) => imageUrl(value, pageUrl)).find(Boolean) || null,
     };
   }
-  return { store, read, imageUrl };
+  return { store, read, imageUrl, savedImageUrl, readPhotoText, screenshotRegions, photoLimit };
 });

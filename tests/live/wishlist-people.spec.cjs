@@ -200,6 +200,55 @@ test('automatically attaches a public Pandora photo when direct reading is block
   await expect(dialog.getByRole('button', { name: 'Montar imagem' })).toBeHidden();
 });
 
+test('reads a product screenshot locally and reuses the saved photo without a link', async ({ page }) => {
+  await page.route('https://api.frankfurter.dev/**', (route) => route.abort());
+  await page.goto('/');
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  const encoded = await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1000;
+    canvas.height = 660;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#f3f3f3';
+    ctx.fillRect(0, 0, 330, canvas.height);
+    ctx.fillStyle = '#ab243e';
+    ctx.fillRect(105, 175, 110, 150);
+    ctx.fillRect(145, 145, 35, 20);
+    ctx.fillStyle = '#71384a';
+    ctx.fillRect(0, 585, 330, 75);
+    ctx.fillStyle = '#111';
+    ctx.font = '30px sans-serif';
+    ['Pandora', 'Gingerbread Drink Charm', 'Sterling silver', 'C$ 95.00'].forEach((line, index) => ctx.fillText(line, 455, 55 + index * 45));
+    ctx.fillRect(455, 255, 500, 55);
+    ctx.fillText('+95 POINTS = C$ 2.38', 455, 460);
+    return canvas.toDataURL('image/png').split(',')[1];
+  });
+  await page.locator('[data-panel=wishlistPanel]').click();
+  await page.locator('#wishEditor > summary').click();
+  await page.locator('#wishUpload').setInputFiles({ name: 'produto.png', mimeType: 'image/png', buffer: Buffer.from(encoded, 'base64') });
+  await expect(page.locator('#wishPhotoMessage')).toContainText('Confira nome, loja, preço e moeda', { timeout: 30000 });
+  await expect(page.locator('#wishTitle')).toHaveValue('Gingerbread Drink Charm');
+  await expect(page.locator('#wishStore')).toHaveValue('Pandora');
+  await expect(page.locator('#wishPrice')).toHaveValue('95');
+  await expect(page.locator('#wishCurrency')).toHaveValue('CAD');
+  await expect.poll(() => page.locator('#wishImagePreview img').evaluate((img) => img.naturalHeight > img.naturalWidth)).toBe(true);
+  await expect(page.locator('.wish-row')).toHaveCount(0);
+  await page.locator('#wishSave').click();
+  await expect(page.locator('.wish-row img')).toHaveAttribute('src', /^data:image\/jpeg;base64,/);
+  await expect(page.locator('.wish-row a')).not.toHaveAttribute('href');
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  await page.reload();
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  await page.locator('[data-panel=wishlistPanel]').click();
+  await page.getByRole('button', { name: 'Compartilhar desejos de Dominadora' }).click();
+  const dialog = page.locator('#wishShareDialog');
+  await expect(dialog.locator('.wish-share-row img')).toHaveAttribute('src', /^data:image\/jpeg;base64,/);
+  await dialog.getByRole('button', { name: 'Montar imagem' }).click();
+  await expect(dialog.getByRole('link', { name: 'Salvar imagem' })).toHaveAttribute('download', 'lista-de-itens.jpg');
+});
+
 for (const blocked of [false, true]) {
   test(`opens a PWA share as a draft with store reading ${blocked ? 'blocked' : 'available'}`, async ({ page, request }) => {
     const { share_target: target } = await (await request.get('/manifest.json')).json();

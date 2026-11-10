@@ -2953,6 +2953,9 @@ body:not(.firebase-required) #firebaseAuthPanel {
 #wishlistPanel .wish-row .wish-tool { min-height: 24px; height: 24px; margin: 0; }
 #wishlistPanel .wish-row input { min-height: 0; }
 #wishForm .wish-link-row { margin-bottom: 12px; }
+.wish-upload-row { display: flex; flex-wrap: wrap; align-items: end; gap: 8px 12px; margin: 8px 0; }
+.wish-upload-row label { flex: 1 1 210px; min-width: 0; max-width: 360px; }
+#wishForm #wishUpload { width: 100%; height: auto; max-width: 100%; }
 #wishForm .hint:empty, #entryOrigin:empty { display: none; }
 #entryForm details { margin-top: 12px; padding: 9px 12px; }
 #entryForm details summary { font-size: 12px; }

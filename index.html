@@ -526,8 +526,13 @@
         <div class="list-title-row"><h2>Lista de Desejos</h2><div class="list-top-total"><span>Falta comprar · estimativa</span><output id="wishTotal" aria-live="polite">R$ 0,00</output></div></div>
         <details id="wishEditor" class="list-editor"><summary>＋ Adicionar desejo</summary>
         <form id="wishForm">
-          <div class="wish-link-row"><label>Produto ou link<input id="wishUrl" type="url" required placeholder="Cole o link do produto" /></label><button id="wishRead" type="button">Atualizar prévia</button></div>
+          <div class="wish-link-row"><label>Link do produto<input id="wishUrl" type="url" placeholder="Cole o link, se tiver" /></label><button id="wishRead" type="button">Atualizar prévia</button></div>
           <p id="wishMessage" class="hint" role="status"></p>
+          <div class="wish-upload-row">
+            <label>Foto ou print do produto<input id="wishUpload" type="file" accept="image/jpeg,image/png,image/webp,image/bmp" /></label>
+            <button id="wishRemovePhoto" type="button" class="wish-share-button" hidden>Remover foto</button>
+          </div>
+          <p id="wishPhotoMessage" class="hint" role="status"></p>
           <div id="wishImagePreview"></div>
           <div class="wish-person-fields">
             <label>Para quem?<select id="wishPerson"></select></label>
