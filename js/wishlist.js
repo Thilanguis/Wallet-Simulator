@@ -1509,7 +1509,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   async function readWishPhoto(file, url, recognize, onImage = () => {}) {
     const bitmap = await decodeWishPhoto(file);
-    let detailPhoto, badgePhoto, badgesArea;
+    let detailPhoto, pricePhoto, headerPhoto, badgePhoto, badgesArea, awardPhoto;
     let imageUrl;
     try {
       const isPortrait = (bitmap.naturalHeight ?? bitmap.height) > (bitmap.naturalWidth ?? bitmap.width);
@@ -1525,39 +1525,61 @@ document.addEventListener('DOMContentLoaded', () => {
       const textRegion = regions?.text || (isPortrait ? { x: 0, y: 0.43, w: 0.84, h: 0.48 } : null);
       if (textRegion) detailPhoto = await cropFile(textRegion, 2);
       if (isPortrait) {
+        pricePhoto = await cropFile({
+          x: textRegion.x,
+          y: textRegion.y + textRegion.h * 0.42,
+          w: Math.min(textRegion.w, 0.72),
+          h: textRegion.h * 0.58,
+        }, 3, 16);
+        headerPhoto = await cropFile({ x: 0.12, y: 0.035, w: 0.76, h: 0.085 }, 3, 16);
         const badgeSample = drawWishPhoto(bitmap, 1280);
         const badge = WishProduct.mobileStoreBadge(badgeSample.getContext('2d').getImageData(0, 0, badgeSample.width, badgeSample.height));
         if (badge) badgePhoto = await cropFile(badge, 5, 16);
         badgesArea = await cropFile({ x: 0.80, y: 0.105, w: 0.20, h: 0.10 }, 4, 16);
+        awardPhoto = await cropFile({ x: 0.825, y: 0.15, w: 0.15, h: 0.04 }, 5, 16);
       }
     } finally {
       bitmap.close?.();
     }
     const suggestion = { imageUrl };
-    try {
-      const { text } = await recognize(detailPhoto || file, () => {});
-      Object.assign(suggestion, WishProduct.readPhotoText(text, url));
-      suggestion.store ||= knownWishStore(suggestion.title);
-      if (!suggestion.store && badgesArea) {
-        const yesStyle = /\b(?:[yv][eo]sstyl[eo]|esstyle)\b/i;
-        const badge = badgePhoto && await recognize(badgePhoto, () => {}, { tessedit_pageseg_mode: '7' });
-        if ((badge && yesStyle.test(badge.text)) || yesStyle.test((await recognize(badgesArea, () => {}, { tessedit_pageseg_mode: '11' })).text)) {
-          suggestion.store = 'YesStyle';
-        }
+    const readText = async (image, mode) => {
+      const options = mode ? { tessedit_pageseg_mode: mode } : undefined;
+      const result = await recognize(image, () => {}, options).catch(() => null);
+      return result?.text || '';
+    };
+    const mergeProduct = (text, retry = false) => {
+      const fields = WishProduct.readPhotoText(text, url, { skipDiscountLines: retry });
+      suggestion.title ||= fields.title;
+      suggestion.store ||= fields.store;
+      if (suggestion.price == null && fields.price != null) {
+        suggestion.price = fields.price;
+        suggestion.currency = fields.currency;
       }
-      if (detailPhoto && (!suggestion.title || !suggestion.store || suggestion.price == null)) {
-        const full = await recognize(file, () => {});
-        const fallback = WishProduct.readPhotoText(full.text, url);
-        suggestion.title ||= fallback.title;
-        suggestion.store ||= fallback.store || knownWishStore(suggestion.title);
-        if (suggestion.price == null) {
-          suggestion.price = fallback.price;
-          suggestion.currency = fallback.currency;
-        }
-      }
-    } catch {
-      suggestion.warning = 'Confira e complete os campos que ficaram vazios.';
+    };
+    const primaryText = await readText(detailPhoto || file);
+    mergeProduct(primaryText);
+    if (!primaryText && detailPhoto) mergeProduct(await readText(detailPhoto), true);
+    if (suggestion.price == null && pricePhoto) {
+      const { price, currency } = WishProduct.readPhotoText(await readText(pricePhoto, '11'), url, { skipDiscountLines: true });
+      if (price != null) Object.assign(suggestion, { price, currency });
     }
+    if (detailPhoto && (!suggestion.title || suggestion.price == null || !suggestion.store)) {
+      mergeProduct(await readText(file), true);
+    }
+    if (!suggestion.title || suggestion.price == null) {
+      mergeProduct(await readText(detailPhoto || file, '11'), true);
+    }
+    if (!suggestion.store && headerPhoto) {
+      suggestion.store = WishProduct.readPhotoText(await readText(headerPhoto, '11'), url).store;
+    }
+    if (!suggestion.store && badgesArea) {
+      const yesStyle = /\b(?:[yv][eo]sstyl[eo]|esstyle)\b/i;
+      const badge = badgePhoto && await readText(badgePhoto, '7');
+      if (yesStyle.test(badge || '') || yesStyle.test(await readText(badgesArea, '11')) || (awardPhoto && yesStyle.test(await readText(awardPhoto, '6')))) suggestion.store = 'YesStyle';
+    }
+    suggestion.store ||= knownWishStore(suggestion.title);
+    const missing = [!suggestion.title && "nome", suggestion.price == null && "preço", !suggestion.store && "loja"].filter(Boolean);
+    if (missing.length) suggestion.warning = 'Confira e preencha ' + missing.join(', ') + '.';
     return suggestion;
   }
   function setPhotoBatch(batch) {

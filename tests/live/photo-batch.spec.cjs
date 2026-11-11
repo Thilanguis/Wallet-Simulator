@@ -253,6 +253,32 @@ test('shows a spinner and batch progress only while photos are being read', asyn
   await expect(page.locator('#wishSave')).toBeEnabled();
 });
 
+test('retries a missing price with a dedicated crop and ignores an old discount price', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  await page.locator('[data-panel=wishlistPanel]').click();
+  await page.locator('#wishEditor > summary').click();
+  const data = await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 400;
+    canvas.height = 900;
+    canvas.getContext('2d').fillRect(0, 0, 400, 900);
+    window.withReceiptReader = (read) => {
+      let pass = 0;
+      return read(async (_file, _report, options) => {
+        if (++pass === 1) return { text: 'YesStyle\nMedicube - Pink Collagen Cream' };
+        if (options?.tessedit_pageseg_mode === '11') return { text: 'C A S$ 33. 46\nCA$ 47.60 29% OFF' };
+        throw new Error('Expected dedicated price pass');
+      });
+    };
+    return canvas.toDataURL().split(',')[1];
+  });
+  await page.locator('#wishUpload').setInputFiles({ name: 'print.png', mimeType: 'image/png', buffer: Buffer.from(data, 'base64') });
+  await expect(page.locator('#wishTitle')).toHaveValue('Medicube - Pink Collagen Cream');
+  await expect(page.locator('#wishPrice')).toHaveValue('33.46');
+  await expect(page.locator('#wishCurrency')).toHaveValue('CAD');
+});
+
 test('reviews multiple receipts independently and saves them only on confirmation', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');

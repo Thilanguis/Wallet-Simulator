@@ -25,10 +25,10 @@
     if (typeof value === 'string' && value.length <= photoLimit && /^data:image\/jpeg;base64,\/[A-Za-z0-9+/]+=*$/.test(value)) return value;
     return imageUrl(value);
   }
-  function readPhotoText(text, productUrl = '') {
+  function readPhotoText(text, productUrl = '', { skipDiscountLines = false } = {}) {
     const lines = String(text).split(/\r?\n/).map((line) => line.trim()
       // In screenshots, Tesseract sometimes reads the dollar sign as S.
-      .replace(/^CA(?:S\$?|\s+\$)\s*(?=\d+[.,]\d{2}(?!\d))/i, 'CA$ ')).filter(Boolean);
+      .replace(/^C\s*A\s*(?:S\s*\$?|\$)\s*(\d+[.,])\s*(\d{2})(?!\d)/i, (_, amount, cents) => 'CA$ ' + amount + cents)).filter(Boolean);
     const domain = lines.map((line) => line.match(/\b([\w.-]+\.(?:com\.br|co\.uk|com|net|ca))\b/i)?.[1]).find(Boolean);
     let host = domain || '';
     try { host = new URL(productUrl).hostname || host; } catch {}
@@ -44,6 +44,7 @@
     for (const [index, line] of lines.entries()) {
       if (/\b(?:frete|shipping|delivery|parcelas?|instalments?|installments?|save|economize|regular|original|was|points?|pontos?|cashback|rewards?)\b/i.test(line) || /^de\s*:/i.test(line)) continue;
       const priority = /\d+\s*%\s*(?:off|de desconto)\b/i.test(line) ? 0 : /\b(?:agora|now|preço|price|sale|por)\b/i.test(line) ? 2 : 1;
+      if (skipDiscountLines && priority === 0) continue;
       for (const match of line.matchAll(money)) {
         const code = (match[1] || match[4]).toUpperCase();
         const currency = Object.hasOwn(codes, code) ? codes[code] : code;
