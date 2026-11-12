@@ -3030,6 +3030,8 @@ body:not(.firebase-required) #firebaseAuthPanel {
 #wishlistPanel .wish-row .wish-tool { min-height: 24px; height: 24px; margin: 0; }
 #wishlistPanel .wish-row input { min-height: 0; }
 #wishForm .wish-link-row { margin-bottom: 12px; }
+#wishlistPanel .wish-tax-option { display: flex; align-items: center; gap: 9px; grid-column: 1 / -1; font: 12px/1.5 system-ui; color: #edd3dd; }
+#wishlistPanel .wish-tax-option input { width: 17px; height: 17px; min-height: 0; margin: 0; accent-color: #d78eaa; flex: none; }
 .wish-upload-row { display: flex; flex-wrap: wrap; align-items: end; gap: 8px 12px; margin: 8px 0; }
 .wish-upload-row label { flex: 1 1 210px; min-width: 0; max-width: 360px; }
 #wishForm #wishUpload { width: 100%; height: auto; max-width: 100%; }
@@ -3532,3 +3534,12 @@ body:not(.firebase-required) #firebaseAuthPanel {
 @media (max-width: 500px) {
   #wishlistPanel .wish-row-price { justify-self: start; }
 }
+
+/* Keep the sharing name readable independently of price length. */
+.wish-share-row { grid-template-columns: minmax(0, 1fr); gap: 5px; }
+.wish-share-row label { min-width: 0; display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; }
+.wish-share-row label:not(:has(img)) { grid-template-columns: auto minmax(0, 1fr); }
+.wish-share-row label > input, .wish-share-row label > img { flex-shrink: 0; }
+.wish-share-name { min-width: 0; overflow-wrap: anywhere; color: #f2e3e8; font-weight: 600; }
+.wish-share-row > span { color: #dfc47d; font-variant-numeric: tabular-nums; padding-inline-start: 22px; }
+.wish-share-row .wish-thumbnail { width: 32px; height: 32px; object-fit: cover; }

@@ -77,9 +77,9 @@
   }
   function mergeWish(base, local, remote) {
     // Keep prices with their currency and photos with their product URL.
-    const fields = ({ updatedAt, price, originalPrice, currency, url, imageUrl, ...details }) => ({
+    const fields = ({ updatedAt, price, originalPrice, currency, taxQuebec, url, imageUrl, ...details }) => ({
       details,
-      pricing: { price, originalPrice, currency },
+      pricing: { price, originalPrice, currency, taxQuebec },
       productLink: { url, imageUrl },
     });
     const b = fields(base), l = fields(local), r = fields(remote);

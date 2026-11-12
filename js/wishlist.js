@@ -19,14 +19,32 @@ document.addEventListener('DOMContentLoaded', () => {
     const unitPrice = item.originalPrice ?? item.price;
     return unitPrice == null ? null : Math.round(unitPrice * 100) * quantityOf(item) / 100;
   }
+  // One-step calculation follows Revenu Québec: 5% GST + 9.975% QST,
+  // both on the pre-tax price; round the line total to cents.
+  const QUEBEC_TAX_RATE = 0.14975;
+  function quebecTax(item) {
+    const before = originalSubtotal(item);
+    return before == null || item.taxQuebec !== true ? 0 : Math.round(Math.round(before * 100) * QUEBEC_TAX_RATE) / 100;
+  }
+  function taxableSubtotal(item) {
+    const before = originalSubtotal(item);
+    return before == null ? null : Math.round((before + quebecTax(item)) * 100) / 100;
+  }
   function conversion() {
     const currency = $('wishCurrency').value;
     const quantity = $('wishQuantity').valueAsNumber;
     const unitPrice = $('wishPrice').valueAsNumber;
-    const value = validQuantity(quantity) && Number.isFinite(unitPrice) ? originalSubtotal({ originalPrice: unitPrice, quantity }) : null;
+    const item = { originalPrice: unitPrice, quantity, taxQuebec: $('wishTaxQuebec').checked };
+    const base = validQuantity(quantity) && Number.isFinite(unitPrice) ? originalSubtotal(item) : null;
+    const value = base == null ? null : taxableSubtotal(item);
     const estimate = value == null ? null : WishFx.convert(value, currency);
     const date = WishFx.current()?.dates[currency];
-    $('wishConversion').textContent = value == null ? '' : estimate == null ? 'Cotação indisponível' : (quantity > 1 ? 'Total para ' + quantity + ' unidades · ' : '') + '≈ ' + formatBR(estimate) + (currency === 'BRL' ? '' : ' · cotação ' + (date || 'salva') + ' · sem taxas/frete');
+    const taxes = base != null && item.taxQuebec ? ' · GST/QST ' + originalPriceLabel(quebecTax(item), currency) : '';
+    $('wishConversion').textContent = base == null ? '' :
+      (quantity > 1 ? quantity + ' unidades · ' : '') + originalPriceLabel(base, currency) + taxes +
+      ' · total ' + originalPriceLabel(value, currency) +
+      (estimate == null ? ' · cotação indisponível' : ' ≈ ' + formatBR(estimate)) +
+      (currency === 'BRL' ? ' · sem frete' : ' · cotação ' + (date || 'salva') + ' · sem frete');
   }
   const rows = () => JSON.parse(AppStorage.getItem('wishlist') || '[]');
   const defaultPerson = 'Dominadora';
@@ -165,7 +183,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function estimate(items) {
     let cents = 0, missing = 0;
     for (const item of items) {
-      const original = originalSubtotal(item);
+      const original = taxableSubtotal(item);
       const value = original == null ? null : WishFx.convert(original, item.currency || 'BRL');
       if (value == null) missing += quantityOf(item);
       else cents += Math.round(value * 100);
@@ -180,10 +198,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const original = originalSubtotal(item);
     const currency = item.currency || 'BRL';
     if (original == null) return 'Preço não informado';
-    const label = originalPriceLabel(original, currency);
-    if (!convert || currency === 'BRL') return label;
-    const converted = WishFx.convert(original, currency);
-    return label + (converted == null ? ' · sem cotação' : ' ≈ ' + formatBR(converted));
+    const withTax = taxableSubtotal(item);
+    const label = item.taxQuebec === true
+      ? originalPriceLabel(withTax, currency)
+      : originalPriceLabel(original, currency);
+    const taxHint = item.taxQuebec === true ? ' · c/ taxas' : '';
+    if (!convert || currency === 'BRL') return label + taxHint;
+    const converted = WishFx.convert(withTax, currency);
+    return label + (converted == null ? ' · sem cotação' : ' ≈ ' + formatBR(converted)) + taxHint;
   }
   function estimateLabel({ cents, missing }) {
     return '≈ ' + formatBR(cents / 100) + (missing ? ' · ' + missing + ' sem estimativa' : '');
@@ -462,7 +484,7 @@ document.addEventListener('DOMContentLoaded', () => {
     for (const item of items) {
       const currency = item.currency || 'BRL';
       if (foreignOnly && currency === 'BRL') continue;
-      const original = originalSubtotal(item);
+      const original = taxableSubtotal(item);
       if (original == null) {
         missing += quantityOf(item);
         continue;
@@ -606,8 +628,8 @@ document.addEventListener('DOMContentLoaded', () => {
         $('wishImageExport').scrollIntoView({ block: 'nearest' });
         photoStatus.textContent = '';
         imageStatus.textContent = missingPhotos ? 'Algumas fotos não estão disponíveis.' : '';
-      } catch {
-        if (!controller.signal.aborted) photoStatus.textContent = 'Não foi possível montar a imagem.';
+      } catch (error) {
+        if (!controller.signal.aborted) photoStatus.textContent = 'Não foi possível montar a imagem: ' + (error?.message || 'erro de processamento no navegador') + '.';
       } finally {
         if (!controller.signal.aborted) photoButton.disabled = false;
       }
@@ -649,7 +671,10 @@ document.addEventListener('DOMContentLoaded', () => {
       };
       const label = document.createElement('label');
       const image = thumbnail(item.imageUrl, true);
-      label.append(check, ...(image ? [image] : []), titleWithQuantity(item) + (item.bought ? ' · comprado' : ''));
+      const name = document.createElement('span');
+      name.className = 'wish-share-name';
+      name.textContent = titleWithQuantity(item) + (item.bought ? ' · comprado' : '');
+      label.append(check, ...(image ? [image] : []), name);
       const price = document.createElement('span');
       prices.set(item.id, price);
       row.append(label, price);
@@ -907,7 +932,7 @@ document.addEventListener('DOMContentLoaded', () => {
         amount.inputMode = 'decimal';
         amount.required = true;
         amount.setAttribute('aria-label', 'Valor pago em reais por ' + item.title);
-        const price = originalSubtotal(item);
+        const price = taxableSubtotal(item);
         const currency = item.currency || 'BRL';
         const estimatedBRL = price == null ? null : WishFx.convert(price, currency);
         if (estimatedBRL != null) amount.value = estimatedBRL.toFixed(2).replace('.', ',');
@@ -995,7 +1020,7 @@ document.addEventListener('DOMContentLoaded', () => {
       for (const { person, wishes } of groups) {
         for (const item of wishes) {
           const latest = current.get(item.id);
-          if (!latest || latest.bought || latest.title !== item.title || latest.store !== item.store || latest.originalPrice !== item.originalPrice || latest.price !== item.price || latest.currency !== item.currency || quantityOf(latest) !== quantityOf(item) || personKey(personOf(latest, registered)) !== personKey(person)) {
+          if (!latest || latest.bought || latest.title !== item.title || latest.store !== item.store || latest.originalPrice !== item.originalPrice || latest.price !== item.price || latest.currency !== item.currency || !!latest.taxQuebec !== !!item.taxQuebec || quantityOf(latest) !== quantityOf(item) || personKey(personOf(latest, registered)) !== personKey(person)) {
             throw new Error('Um item mudou durante a revisão. Feche e abra a compra novamente.');
           }
           ids.add(item.id);
@@ -1245,6 +1270,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (item.bought) anchor.classList.add('is-bought');
         const price = document.createElement('span');
         price.className = 'wish-row-price';
+        if (item.taxQuebec) price.title = 'Preço sem impostos: ' + originalPriceLabel(originalSubtotal(item), item.currency || 'BRL') + ' · GST/QST: ' + originalPriceLabel(quebecTax(item), item.currency || 'BRL');
         price.textContent = priceLabel(item);
         const edit = document.createElement('button');
         edit.type = 'button';
@@ -1262,6 +1288,7 @@ document.addEventListener('DOMContentLoaded', () => {
           $('wishStore').value = item.store;
           $('wishPrice').value = item.originalPrice ?? item.price ?? '';
           $('wishQuantity').value = quantityOf(item);
+          $('wishTaxQuebec').checked = item.taxQuebec === true;
           selectCurrency(item.currency || 'BRL');
           updatePeople(rows(), personOf(item));
           editBaseline = formValues(false);
@@ -1300,18 +1327,11 @@ document.addEventListener('DOMContentLoaded', () => {
       originalPrice: $('wishPrice').value === '' ? null : Number($('wishPrice').value),
       quantity: $('wishQuantity').valueAsNumber,
       currency: $('wishCurrency').value,
+      taxQuebec: $('wishTaxQuebec').checked,
       imageUrl: draftImage || undefined,
     };
   }
   $('wishCancel').onclick = reset;
-  function checkPhotoSpace(items) {
-    const photoBytes = items.reduce((sum, item) => sum + (item.imageUrl?.startsWith('data:') ? item.imageUrl.length : 0), 0);
-    const snapshot = WalletStore.snapshot();
-    snapshot.simulator.wishlist = JSON.stringify(items);
-    if (photoBytes > 256 * 1024 || new TextEncoder().encode(JSON.stringify(snapshot)).length > 700 * 1024) {
-      throw new Error('A carteira atingiu o espaço reservado para fotos. Desmarque itens para salvar um lote menor ou remova uma foto antiga.');
-    }
-  }
   function batchFieldError(input, error) {
     const hint = input.parentElement.querySelector('.wish-field-error');
     hint.textContent = error;
@@ -1341,6 +1361,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const rawPrice = get('price');
       const originalPrice = rawPrice === '' ? null : /^\d+(?:[.,]\d{1,2})?$/.test(rawPrice) ? Number(rawPrice.replace(',', '.')) : NaN;
       const rawQuantity = get('quantity');
+      const taxQuebec = fieldInput('taxQuebec').checked;
       const quantity = Number(rawQuantity);
       const quantityValid = /^\d+$/.test(rawQuantity) && validQuantity(quantity);
       const errors = {
@@ -1355,7 +1376,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (error) invalidFields.push(input);
       }
       if (Object.values(errors).some(Boolean)) continue;
-      additions.push({ id: crypto.randomUUID(), url: '', title, store, person, personId, originalPrice, currency, quantity, imageUrl: photoBatch[i].imageUrl, price: originalPrice == null ? null : WishFx.convert(originalPrice, currency), bought: false, updatedAt: Date.now() });
+      additions.push({ id: crypto.randomUUID(), url: '', title, store, person, personId, originalPrice, currency, quantity, taxQuebec, imageUrl: photoBatch[i].imageUrl, price: originalPrice == null ? null : WishFx.convert(originalPrice, currency), bought: false, updatedAt: Date.now() });
     }
     if (invalidFields.length) {
       invalidFields[0].focus();
@@ -1363,7 +1384,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (!additions.length) throw new Error('Selecione pelo menos um produto.');
     const next = [...list, ...additions];
-    checkPhotoSpace(next);
     save(next, personId ? registered : undefined);
     reset();
     $('wishEditor').open = false;
@@ -1389,7 +1409,7 @@ document.addEventListener('DOMContentLoaded', () => {
         previous = list.find((x) => x.id === editing);
       if (editing && !previous) throw new Error('Este desejo foi removido no outro aparelho.');
       const changes = {};
-      const fields = [['url', 'imageUrl'], ['title'], ['store'], ['person'], ['originalPrice', 'currency'], ['quantity']];
+      const fields = [['url', 'imageUrl'], ['title'], ['store'], ['person'], ['originalPrice', 'currency', 'taxQuebec'], ['quantity']];
       for (const group of fields) {
         if (editBaseline && group.every((key) => draft[key] === editBaseline[key])) continue;
         const changedRemotely = group[0] === 'person'
@@ -1411,12 +1431,13 @@ document.addEventListener('DOMContentLoaded', () => {
       if ('originalPrice' in changes) changes.price = originalPrice == null ? null : WishFx.convert(originalPrice, currency);
       const next = { bought: false, ...previous, ...changes, id: editing || crypto.randomUUID(), updatedAt: Date.now() };
       const nextRows = editing ? list.map((x) => (x.id === editing ? next : x)) : [...list, next];
-      if (changes.imageUrl?.startsWith('data:') && changes.imageUrl !== previous?.imageUrl) checkPhotoSpace(nextRows);
       save(nextRows, registered);
       reset();
       $('wishEditor').open = false;
     } catch (error) {
-      $('wishSaveError').textContent = error.message;
+      $('wishSaveError').textContent = error?.name === 'QuotaExceededError'
+        ? 'O navegador atingiu o limite real de armazenamento. Tente adicionar este produto por link, sem foto embutida.'
+        : error.message;
     }
   };
   function drawWishPhoto(bitmap, max, crop = { x: 0, y: 0, w: 1, h: 1 }, maxScale = 1, padding = 0) {
@@ -1436,11 +1457,13 @@ document.addEventListener('DOMContentLoaded', () => {
     return canvas;
   }
   function compressWishPhoto(bitmap, crop) {
-    for (const max of [320, 240, 180, 128]) {
-      const data = drawWishPhoto(bitmap, max, crop).toDataURL('image/jpeg', 0.68);
+    // Small embedded thumbnail. Never reject a whole wishlist for an arbitrary
+    // cumulative photo budget; the Firebase document limit still applies.
+    for (const [max, quality] of [[320, 0.68], [240, 0.60], [180, 0.55], [128, 0.50], [96, 0.45], [72, 0.40]]) {
+      const data = drawWishPhoto(bitmap, max, crop).toDataURL('image/jpeg', quality);
       if (WishProduct.savedImageUrl(data)) return data;
     }
-    throw new Error('Não foi possível reduzir esta foto.');
+    throw new Error('Não foi possível compactar esta foto. Tente um recorte menor ou adicione o produto pelo link.');
   }
   function knownWishStore(title) {
     const key = personKey(normalizeName(title));
@@ -1613,6 +1636,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ${field('Preço unitário', 'price', `inputmode="decimal" value="${suggestion.price ?? ''}"`)}
         <label>Moeda<select data-field="currency">${[...currencies].map((value) => `<option ${value === currency ? 'selected' : ''}>${esc(value)}</option>`).join('')}</select></label>
         ${field('Quantidade', 'quantity', 'inputmode="numeric" value="1"')}
+        <label class="wish-tax-option"><input type="checkbox" data-field="taxQuebec"> Taxas do Québec (GST 5% + QST 9,975%)</label>
       </div>` : ''
     }${suggestion.warning ? `<p class="hint">${esc(suggestion.warning)}</p>` : ''}`;
     const image = thumbnail(suggestion.imageUrl);
@@ -1829,6 +1853,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   $('wishPrice').addEventListener('input', conversion);
   $('wishQuantity').addEventListener('input', conversion);
+  $('wishTaxQuebec').addEventListener('change', conversion);
   $('wishCurrency').addEventListener('change', conversion);
   window.addEventListener('wishlist:rates', () => {
     conversion();
