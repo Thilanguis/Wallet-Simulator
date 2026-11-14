@@ -160,7 +160,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const title = description ? `<strong class="note-entry-title">${esc(description)}</strong> ` : '';
     const observation = note && !breakdown ? `<span class="note-entry-observation">${esc(note)}</span>` : '';
     const headingClass = breakdown ? 'note-entry-heading note-entry-featured' : 'note-entry-heading';
-    return `<span class="${headingClass}">${title}<strong class="note-entry-amount">${esc(amount)}</strong>${date}</span>${observation}${breakdown?.html || ''}`;
+    return `<span class="${headingClass}">${title}<strong class="note-entry-amount">${row.entries.map(entry => FinanceCad.label(entry)).join('')}${esc(amount)}</strong>${date}</span>${observation}${breakdown?.html || ''}`;
   }
   function notebookHTML(listEntries, editable = false, filtering = false) {
     if (filtering && !listEntries.length) return '';
@@ -362,6 +362,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function render() {
     renderPeople();
+    $('financeCadTotal').innerHTML = FinanceCad.totalLabel(state.entries);
     const activeFilters = filters();
     const filtering = Object.values(activeFilters).some(Boolean);
     const entries = matchingEntries(activeFilters);

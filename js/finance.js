@@ -50,6 +50,10 @@
     if (!String(entry.description || '').trim() || String(entry.description).length > 1000 || String(entry.store || '').length > 200) throw new Error('Descrição/loja inválida.');
     if (entry.note !== undefined && (typeof entry.note !== 'string' || entry.note.length > 4000)) throw new Error('Observações inválidas (máximo de 4 mil caracteres).');
     if (entry.originalMoney && (!Array.isArray(entry.originalMoney) || entry.originalMoney.some((m) => !['BRL', 'USD'].includes(m.currency) || !Number.isSafeInteger(m.amount) || m.amount <= 0))) throw new Error('Valores originais inválidos.');
+    if (entry.cadReference !== undefined) {
+      const r = entry.cadReference;
+      if (!r || !Number.isSafeInteger(r.amount) || r.amount < 0 || !Number.isSafeInteger(r.basisAmount) || r.basisAmount <= 0 || !['original','estimated'].includes(r.kind) || (r.kind === 'estimated' && (!Number.isFinite(r.rate) || r.rate <= 0 || !validDate(r.rateDate) || !validDate(r.referenceDate)))) throw new Error('Referência em CAD inválida.');
+    }
     if (entry.personAllocations !== undefined) {
       if (!Array.isArray(entry.personAllocations) || entry.personAllocations.some(p => !p || typeof p.person !== 'string' || !p.person.trim() || p.person.length > 80 || !Number.isSafeInteger(p.amount) || p.amount <= 0) || entry.personAllocations.reduce((n,p) => n + p.amount, 0) > entry.amount) throw new Error('A divisão por pessoa deve caber no total do lançamento.');
     }
