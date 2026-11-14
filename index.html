@@ -338,7 +338,7 @@
         <div class="section">
           <div class="list-title-row"><h2>🎮 Resumo de Jogos e Finanças 💰</h2><div id="financeTopTotal" class="list-top-total"><span>Total Geral Atualizado 🔥</span><span id="financeCadTotal"></span><output id="homeTotal" data-grand-total aria-live="polite">R$ 0,00</output><button id="financePeopleToggle" type="button" aria-label="Ver divisão por pessoa" aria-expanded="false" aria-controls="financePeopleTotals">▾</button><div id="financePeopleTotals" hidden aria-label="Divisão do total por pessoa"></div></div></div>
           <div id="financeMessage" role="status" aria-live="polite"></div>
-          <div class="list-tools"><label class="finance-cad-toggle"><input id="financeShowCad" type="checkbox"> Mostrar em CAD</label><button id="financePrepareCad" type="button" class="subtle-btn">Preparar câmbio histórico</button>
+          <div class="list-tools"><label class="finance-cad-toggle"><input id="financeShowCad" type="checkbox"> Mostrar em CAD</label><button id="financePrepareCad" hidden type="button" class="subtle-btn">Conferir câmbio</button>
             <input id="financeSearch" type="search" aria-label="Pesquisar notas e gastos" placeholder="Pesquisar notas e gastos" />
             <details id="financeFilters" class="list-editor">
               <summary>Filtros</summary>
@@ -415,7 +415,7 @@
               </label>
             </details>
             <details id="entryPeople" class="entry-people"><summary>Dividir este gasto por pessoa</summary><p class="hint">Atribua os valores às amigas. O restante fica com a Luana.</p><datalist id="entryPeopleNames"></datalist><div id="entryPeopleRows"></div><div class="people-editor-actions"><button id="entryPeopleAdd" type="button" class="subtle-btn">+ Pessoa</button><button id="entryPeopleAuto" type="button" class="subtle-btn">Identificar pelos nomes</button></div><output id="entryPeopleRemainder" aria-live="polite"></output></details>
-            <p id="entryOrigin" class="hint"></p>
+            <label class="entry-cad-field">Valor original em CAD (opcional)<input id="entryCadOriginal" inputmode="decimal" placeholder="Deixe vazio para estimar pela data" /></label><p id="entryOrigin" class="hint"></p>
             <button type="submit" id="saveEntry">Registrar lançamento</button>
             <button type="button" id="cancelEdit" class="subtle-btn" hidden>Cancelar edição</button>
           </form>

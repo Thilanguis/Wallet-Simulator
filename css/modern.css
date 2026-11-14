@@ -3566,3 +3566,11 @@ body:not(.firebase-required) #firebaseAuthPanel {
 .cad-review-list { max-height:50dvh; overflow:auto; }
 .cad-review-list p { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px 12px; border-bottom:1px solid #66533450; padding-bottom:8px; font:13px/1.5 system-ui; }
 .cad-review-list small { grid-column:1/-1; color:#b7ad9a; }
+
+#financePanel .finance-cad-toggle { padding:7px 10px; border:1px solid #6b5034; border-radius:9px; color:#dfc47d; background:#28231c; cursor:pointer; font:600 12px/1.4 system-ui; }
+#financePanel .finance-cad-toggle:has(input:checked){border-color:#d4b365;background:#3a2e1d;}
+.finance-cad-toggle input{accent-color:#d4b365;}
+#financePanel #financePrepareCad { min-height:0; padding:7px 10px; margin:0; font:600 11px/1.4 system-ui; color:#dfc47d; background:#28231c; border:1px solid #6b5034; border-radius:9px; box-shadow:none; }
+#financePrepareCad[hidden],#financeCadTotal:empty{display:none;}
+#financeTopTotal #financeCadTotal{color:#c7b995;font:600 14px/1.4 system-ui;}
+.entry-cad-field{display:block;margin-block:12px;}

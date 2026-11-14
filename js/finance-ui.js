@@ -155,7 +155,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   function notebookEntryHTML(row, shopping, breakdown) {
     const date = notebookDates(row.entries);
-    if (row.noteOnly) return esc(row.note) + date;
+    if (row.noteOnly) return row.entries.map(entry => FinanceCad.label(entry)).join('') + esc(row.note) + date;
     const { description, amount, note } = FinanceList.parts(breakdown?.store ? { ...row, label: breakdown.store } : row, shopping);
     const title = description ? `<strong class="note-entry-title">${esc(description)}</strong> ` : '';
     const observation = note && !breakdown ? `<span class="note-entry-observation">${esc(note)}</span>` : '';
@@ -416,6 +416,7 @@ document.addEventListener('DOMContentLoaded', () => {
     ])
       $('entry' + field).value = (key === 'status' && entry[key] === 'pending' ? 'paid' : entry[key]) || '';
     $('entryAmount').value = entry.amount ? decimal(entry.amount) : '';
+    $('entryCadOriginal').value = entry.cadReference?.kind === 'original' ? decimal(entry.cadReference.amount) : '';
     fillPersonAllocations(entry);
     editing = edit ? entry.id : null;
     $('entryTitle').textContent = edit ? 'Editar lançamento' : 'Conferir sugestão do comprovante';
@@ -440,6 +441,12 @@ document.addEventListener('DOMContentLoaded', () => {
         note: $('entryNote').value.trim(),
         ...(allocationDirty ? { personAllocations: readPersonAllocations() } : {}),
       });
+      const previous = editing ? state.entries.find(e => e.id === editing) : null;
+      const cadText = $('entryCadOriginal').value.trim();
+      if(candidate.currency==='BRL'){
+        if(cadText)candidate.cadReference={amount:F.cents(cadText),kind:'original',source:previous?.source==='wishlist'?'wishlist':'manual',basisAmount:candidate.amount,methodVersion:2,recordedAt:new Date().toISOString()};
+        else candidate.cadReference=(await FinanceCad.referenceFor({...previous,...candidate,cadReference:undefined},state.entries).catch(()=>null)) || undefined;
+      }
       if (editing) {
         const existing = state.entries.find((e) => e.id === editing);
         if (existing.redemptionId) throw new Error('Este lançamento está vinculado a um registro anterior e não pode ser alterado por aqui.');

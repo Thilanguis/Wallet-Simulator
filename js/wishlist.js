@@ -1044,6 +1044,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const finance = Finance.update(snapshot.finance, { type: 'add', entry: {
         id, date, description: 'Compra da Dominadora', category: 'Lista de Compras',
         amount: total, currency: 'BRL', status: 'paid', source: 'wishlist', note,
+        ...(FinanceCad.fromWishes(groups.flatMap(group => group.wishes), total) ? {cadReference:{...FinanceCad.fromWishes(groups.flatMap(group => group.wishes), total),recordedAt:new Date().toISOString()}} : {}),
       } });
       snapshot.simulator.wishlist = JSON.stringify(list.map((item) =>
         ids.has(item.id) ? { ...item, bought: true, purchaseNoteId: id, updatedAt: Date.now() } : item,
