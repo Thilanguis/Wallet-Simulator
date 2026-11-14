@@ -99,6 +99,14 @@ document.addEventListener('DOMContentLoaded', () => {
     return ` <span class="note-dates">${labels.join(' · ')}</span>`;
   }
   function purchaseBreakdown(entry) {
+    if (entry.source !== 'wishlist' && Array.isArray(entry.personAllocations) && entry.personAllocations.length) {
+      const merged = new Map();
+      for (const part of FinancePeople.allocation(entry, peopleRoster())) merged.set(part.person, (merged.get(part.person) || 0) + part.amount);
+      const people = [...merged].sort(([a], [b]) => a === 'Luana' ? -1 : b === 'Luana' ? 1 : a.localeCompare(b));
+      const html = people.map(([name, amount]) => '<div class="note-purchase-person"><div class="note-purchase-person-heading"><strong>' + esc(name) + '</strong><strong class="note-purchase-value">' + F.format(amount, entry.currency) + '</strong></div></div>').join('');
+      const note = entry.source !== 'wishlist' && entry.note ? '<span class="note-entry-observation">' + esc(entry.note) + '</span>' : '';
+      return { store: '', html: '<div class="note-purchase-breakdown">' + html + '</div>' + note };
+    }
     if (entry.source !== 'wishlist' || !entry.note) return null;
     const groups = [];
     const lines = entry.note.trim().split(/\r?\n/);

@@ -37,6 +37,15 @@ for (const width of [1440, 768, 393])
     await expect(page.locator('.note-edit-dialog')).toHaveCount(0);
     await expect(person('Luana')).toContainText('810,00');
     await expect(person('Bruna')).toContainText('140,00');
+    const oldPurchase = page.locator('[data-note-ids="shop"]');
+    await expect(oldPurchase.locator('.note-purchase-person-heading')).toHaveCount(2);
+    await expect(oldPurchase.locator('.note-purchase-person-heading').first()).toContainText('Luana');
+    await expect(oldPurchase.locator('.note-purchase-person-heading').first()).toContainText('500,00');
+    await expect(oldPurchase.locator('.note-purchase-person-heading').last()).toContainText('Bruna');
+    await expect(oldPurchase.locator('.note-purchase-person-heading').last()).toContainText('100,00');
+    await page.evaluate(() => window.dispatchEvent(new Event('wallet:remote')));
+    await expect(oldPurchase.locator('.note-purchase-person-heading')).toHaveCount(2);
+    await expect(person('Bruna')).toContainText('140,00');
     await expect(page.locator('#homeTotal')).toContainText('1.050,00');
     expect(await page.evaluate(() => WalletStore.finance().entries.find((e) => e.id === 'shop').amount)).toBe(60000);
     await page.locator('[data-note-edit=shop]').click();
