@@ -315,7 +315,45 @@ document.addEventListener('DOMContentLoaded', () => {
     selectMonth(months.some(({ month }) => month === selectedTimelineMonth) ? selectedTimelineMonth : months[0].month);
   }
   timeline.addEventListener('toggle', () => { if (timeline.open) renderTimeline(); });
+
+  const peopleRoster = () => [...JSON.parse(AppStorage.getItem('wishlistPeople') || '[]'), ...state.entries.flatMap(e => (e.personAllocations || []).map(p => p.person))];
+  let allocationDirty = false;
+  function readPersonAllocations() {
+    return [...$('entryPeopleRows').children].map(row => ({person: FinancePeople.canonical(row.querySelector('[data-person]').value), amount: F.cents(row.querySelector('[data-amount]').value || '0', $('entryCurrency').value)})).filter(p => p.person || p.amount);
+  }
+  function updatePeopleRemainder() {
+    try {const amount=F.cents($('entryAmount').value || '0', $('entryCurrency').value);const used=readPersonAllocations().reduce((n,p)=>n+p.amount,0);$('entryPeopleRemainder').textContent='Luana · '+F.format(amount-used,$('entryCurrency').value);$('entryPeopleRemainder').classList.toggle('error',used>amount);} catch {$('entryPeopleRemainder').textContent='Confira os valores da divisão.';}
+  }
+  function addPersonRow(person='',amount=0) {
+    const row=document.createElement('div');row.className='people-allocation-row';
+    row.innerHTML='<input data-person list="entryPeopleNames" maxlength="80" aria-label="Pessoa da divisão" placeholder="Nome"><input data-amount inputmode="decimal" aria-label="Valor da pessoa" placeholder="0,00"><button type="button" class="wish-tool" aria-label="Remover pessoa da divisão">×</button>';
+    row.querySelector('[data-person]').value=person;row.querySelector('[data-amount]').value=amount?decimal(amount):'';
+    row.oninput=()=>{allocationDirty=true;updatePeopleRemainder();};row.querySelector('button').onclick=()=>{row.remove();allocationDirty=true;updatePeopleRemainder();};$('entryPeopleRows').append(row);
+  }
+  function fillPersonAllocations(entry) {
+    $('entryPeopleRows').replaceChildren();allocationDirty=false;
+    $('entryPeopleNames').innerHTML=FinancePeople.names(peopleRoster()).filter(n=>n!=='Luana').map(n=>'<option value="'+esc(n)+'"></option>').join('');
+    if(entry)for(const p of FinancePeople.allocation(entry,peopleRoster()))if(p.person!=='Luana')addPersonRow(p.person,p.amount);
+    $('entryPeople').open=false;updatePeopleRemainder();
+  }
+  $('entryPeopleAdd').onclick=()=>{addPersonRow();allocationDirty=true;};
+  $('entryPeopleAuto').onclick=()=>{try {const entry={category:$('entryCategory').value,description:$('entryDescription').value,store:$('entryStore').value,note:$('entryNote').value,amount:F.cents($('entryAmount').value || '0',$('entryCurrency').value)};fillPersonAllocations(entry);allocationDirty=true;$('entryPeople').open=true;}catch(error){AppDialog.alert(error.message);}};
+  $('entryAmount').addEventListener('input',updatePeopleRemainder);
+  $('entryCurrency').addEventListener('change',updatePeopleRemainder);
+  $('financePeopleToggle').onclick = () => {
+    const open = $('financePeopleTotals').hidden;
+    $('financePeopleTotals').hidden = !open;
+    $('financePeopleToggle').setAttribute('aria-expanded', String(open));
+    $('financePeopleToggle').setAttribute('aria-label', open ? 'Fechar divisão por pessoa' : 'Ver divisão por pessoa');
+    $('financePeopleToggle').textContent = open ? '▴' : '▾';
+  };
+  function renderPeople() {
+    const totals=FinancePeople.totals(state.entries,peopleRoster());
+    $('financePeopleTotals').innerHTML=totals.map(p=>'<div class="finance-person-total"><span>'+esc(p.person)+'</span><strong>'+F.format(p.amount)+'</strong></div>').join('');
+  }
+
   function render() {
+    renderPeople();
     const activeFilters = filters();
     const filtering = Object.values(activeFilters).some(Boolean);
     const entries = matchingEntries(activeFilters);
@@ -349,6 +387,7 @@ document.addEventListener('DOMContentLoaded', () => {
     editing = null;
     receiptSuggestion = null;
     $('entryForm').reset();
+    fillPersonAllocations(null);
     $('entryFeedback').hidden = true;
     $('entryDate').value = today();
     $('entryOrigin').textContent = '';
@@ -368,6 +407,7 @@ document.addEventListener('DOMContentLoaded', () => {
     ])
       $('entry' + field).value = (key === 'status' && entry[key] === 'pending' ? 'paid' : entry[key]) || '';
     $('entryAmount').value = entry.amount ? decimal(entry.amount) : '';
+    fillPersonAllocations(entry);
     editing = edit ? entry.id : null;
     $('entryTitle').textContent = edit ? 'Editar lançamento' : 'Conferir sugestão do comprovante';
     $('saveEntry').textContent = edit ? 'Confirmar correção' : 'Confirmar e registrar compra';
@@ -389,6 +429,7 @@ document.addEventListener('DOMContentLoaded', () => {
         currency: $('entryCurrency').value,
         status: $('entryStatus').value,
         note: $('entryNote').value.trim(),
+        ...(allocationDirty ? { personAllocations: readPersonAllocations() } : {}),
       });
       if (editing) {
         const existing = state.entries.find((e) => e.id === editing);
@@ -432,7 +473,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   const entryHome = $('entryForm').parentElement;
   let editPopup = null,
-    draftBeforeEdit = null;
+    draftBeforeEdit = null,
+    peopleDraftBeforeEdit = null;
   function closeInlineEditor() {
     if (!editPopup) return;
     const popup = editPopup;
@@ -443,9 +485,23 @@ document.addEventListener('DOMContentLoaded', () => {
     resetForm();
     if (draftBeforeEdit) for (const [id, value] of draftBeforeEdit) $(id).value = value;
     draftBeforeEdit = null;
+    if (peopleDraftBeforeEdit) {
+      $('entryPeopleRows').replaceChildren();
+      for (const values of peopleDraftBeforeEdit.rows) {
+        addPersonRow();
+        const row = $('entryPeopleRows').lastElementChild;
+        row.querySelector('[data-person]').value = values.person;
+        row.querySelector('[data-amount]').value = values.amount;
+      }
+      allocationDirty = peopleDraftBeforeEdit.dirty;
+      $('entryPeople').open = peopleDraftBeforeEdit.open;
+      updatePeopleRemainder();
+      peopleDraftBeforeEdit = null;
+    }
   }
   function openInlineEditor(entry, opener) {
-    draftBeforeEdit = Array.from($('entryForm').querySelectorAll('input,select,textarea')).map((el) => [el.id, el.value]);
+    peopleDraftBeforeEdit = { dirty: allocationDirty, open: $('entryPeople').open, rows: [...$('entryPeopleRows').children].map(row => ({person: row.querySelector('[data-person]').value, amount: row.querySelector('[data-amount]').value})) };
+    draftBeforeEdit = Array.from($('entryForm').querySelectorAll('input,select,textarea')).filter(el => el.id).map((el) => [el.id, el.value]);
     editPopup = document.createElement('dialog');
     editPopup.className = 'note-edit-dialog';
     editPopup.setAttribute('aria-labelledby', 'entryTitle');

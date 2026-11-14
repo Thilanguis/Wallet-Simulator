@@ -1,0 +1,49 @@
+const { test, expect } = require('../firebase-fixture.cjs');
+for (const width of [1440, 768, 393])
+  test('people totals and manual split ' + width, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/');
+    await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+    await page.evaluate(() => {
+      let s = Finance.empty();
+      const add = (id, category, description, amount, extra = {}) => {
+        s = Finance.update(s, { type: 'add', entry: { id, category, description, store: '', amount, currency: 'BRL', status: 'paid', date: '2026-11-14', ...extra } });
+      };
+      add('shop', Finance.categories[7], 'Lista Shein (100)', 60000);
+      add('food', Finance.categories[2], 'Comida', 20000);
+      add('place', Finance.categories[1], 'Buscar na Casa da Nathalia', 15000);
+      add('linked', Finance.categories[7], 'Compra da Dominadora', 10000, { source: 'wishlist', note: 'Dominadora · R$ 60,00\n• Anel · Loja: Pandora · R$ 60,00\nBruna · R$ 40,00\n• Produto · Loja: Shein · R$ 40,00' });
+      FinanceUI.save(s);
+      window.beforePeople = JSON.stringify(WalletStore.finance().entries);
+    });
+    await page.locator('[data-panel=financePanel]').click();
+    await page.locator('#financePeopleToggle').click();
+    const person = (name) => page.locator('.finance-person-total').filter({ has: page.locator('span', { hasText: new RegExp('^' + name + '$') }) });
+    await expect(person('Luana')).toContainText('910,00');
+    await expect(person('Mel')).toContainText('100,00');
+    await expect(person('Bruna')).toContainText('40,00');
+    await expect(page.locator('#homeTotal')).toContainText('1.050,00');
+    expect(await page.evaluate(() => JSON.stringify(WalletStore.finance().entries) === window.beforePeople)).toBe(true);
+    await page.locator('[data-note-edit=shop]').click();
+    await page.locator('#entryPeople > summary').click();
+    await page.locator('#entryPeopleAdd').click();
+    await page.getByLabel('Pessoa da divisão', { exact: true }).fill('Bruna');
+    await page.getByLabel('Valor da pessoa', { exact: true }).fill('100');
+    await expect(page.locator('#entryPeopleRemainder')).toContainText('500,00');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: '.local/people-editor-' + width + '.png' });
+    await page.locator('#saveEntry').click();
+    await page.locator('[data-dialog-confirm]').click();
+    await expect(page.locator('.note-edit-dialog')).toHaveCount(0);
+    await expect(person('Luana')).toContainText('810,00');
+    await expect(person('Bruna')).toContainText('140,00');
+    await expect(page.locator('#homeTotal')).toContainText('1.050,00');
+    expect(await page.evaluate(() => WalletStore.finance().entries.find((e) => e.id === 'shop').amount)).toBe(60000);
+    await page.locator('[data-note-edit=shop]').click();
+    await page.locator('#entryPeople > summary').click();
+    await expect(page.getByLabel('Valor da pessoa', { exact: true })).toHaveValue('100,00');
+    await page.keyboard.press('Escape');
+    await page.locator('#financeTopTotal').scrollIntoViewIfNeeded();
+    await page.waitForTimeout(350);
+    await page.screenshot({ path: '.local/people-summary-' + width + '.png' });
+  });

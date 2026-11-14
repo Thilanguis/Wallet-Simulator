@@ -336,7 +336,7 @@
       </main>
       <section id="financePanel" class="app-panel" hidden>
         <div class="section">
-          <div class="list-title-row"><h2>🎮 Resumo de Jogos e Finanças 💰</h2><div id="financeTopTotal" class="list-top-total"><span>Total Geral Atualizado 🔥</span><output id="homeTotal" data-grand-total aria-live="polite">R$ 0,00</output></div></div>
+          <div class="list-title-row"><h2>🎮 Resumo de Jogos e Finanças 💰</h2><div id="financeTopTotal" class="list-top-total"><span>Total Geral Atualizado 🔥</span><output id="homeTotal" data-grand-total aria-live="polite">R$ 0,00</output><button id="financePeopleToggle" type="button" aria-label="Ver divisão por pessoa" aria-expanded="false" aria-controls="financePeopleTotals">▾</button><div id="financePeopleTotals" hidden aria-label="Divisão do total por pessoa"></div></div></div>
           <div id="financeMessage" role="status" aria-live="polite"></div>
           <div class="list-tools">
             <input id="financeSearch" type="search" aria-label="Pesquisar notas e gastos" placeholder="Pesquisar notas e gastos" />
@@ -414,6 +414,7 @@
                 <textarea id="entryNote" maxlength="4000" placeholder="Detalhes do jogo, da compra ou do combinado."></textarea>
               </label>
             </details>
+            <details id="entryPeople" class="entry-people"><summary>Dividir este gasto por pessoa</summary><p class="hint">Atribua os valores às amigas. O restante fica com a Luana.</p><datalist id="entryPeopleNames"></datalist><div id="entryPeopleRows"></div><div class="people-editor-actions"><button id="entryPeopleAdd" type="button" class="subtle-btn">+ Pessoa</button><button id="entryPeopleAuto" type="button" class="subtle-btn">Identificar pelos nomes</button></div><output id="entryPeopleRemainder" aria-live="polite"></output></details>
             <p id="entryOrigin" class="hint"></p>
             <button type="submit" id="saveEntry">Registrar lançamento</button>
             <button type="button" id="cancelEdit" class="subtle-btn" hidden>Cancelar edição</button>
@@ -769,6 +770,7 @@
     <script defer src="js/receipt.js"></script>
     <script defer src="js/ocr.js"></script>
     <script defer src="js/finance-list.js"></script>
+    <script defer src="js/finance-people.js"></script>
     <script defer src="js/finance-ui.js"></script>
     <script defer src="js/redemptions.js"></script>
     <script defer src="js/backup.js"></script>

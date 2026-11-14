@@ -3543,3 +3543,19 @@ body:not(.firebase-required) #firebaseAuthPanel {
 .wish-share-name { min-width: 0; overflow-wrap: anywhere; color: #f2e3e8; font-weight: 600; }
 .wish-share-row > span { color: #dfc47d; font-variant-numeric: tabular-nums; padding-inline-start: 22px; }
 .wish-share-row .wish-thumbnail { width: 32px; height: 32px; object-fit: cover; }
+
+/* Attribution is a breakdown of the existing total, not another expense. */
+#financePeopleTotals { flex: 1 0 100%; min-width: 0; max-height: min(40dvh, 320px); overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fit,minmax(210px,1fr)); gap: 0 24px; padding-bottom: 12px; }
+.finance-person-total { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid #66533450; font: 14px/1.5 system-ui; }
+.finance-person-total strong { color: #e4c985; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.entry-people { margin-block: 12px; }
+.people-allocation-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(90px,140px) 24px; gap:8px; margin-block:8px; align-items:center; }
+.people-allocation-row input { min-width:0; margin:0; }
+.people-editor-actions { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; }
+#entryPeopleRemainder { display:block; color:#dfc47d; font:600 13px/1.5 system-ui; }
+#entryPeopleRemainder.error { color:#f29c95; }
+@media(max-width:500px){#financePeopleTotals{grid-template-columns:1fr}.people-allocation-row{grid-template-columns:minmax(0,1fr) 95px 24px;}}
+
+#financePeopleTotals[hidden] { display: none; }
+#financeTopTotal #financePeopleToggle { margin: 0 0 0 auto; padding: 4px 7px; min-height: 0; color: #e4c985; background: transparent; border: 0; box-shadow: none; font: 20px/1 system-ui; cursor: pointer; }
+#financePeopleToggle:focus-visible { outline: 2px solid #e4c985; outline-offset: 3px; }
