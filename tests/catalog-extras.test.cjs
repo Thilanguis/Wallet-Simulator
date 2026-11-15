@@ -40,3 +40,38 @@ test('invalid additions are rejected without changing active catalog', () => {
   assert.throws(() => C.prepare(d, s), /adicional/);
   assert.equal(JSON.stringify(E.config), before);
 });
+
+
+test('quantity multiplier survives renamed catalogs and reloads, with explicit opt-out', () => {
+  const before = Object.fromEntries(['services', 'gains', 'games', 'gameRewards', 'eligible', 'extras'].map((key) => [key, E.config[key]]));
+  try {
+    const settings = E.defaults('custom'), doc = C.document(settings);
+    const gain = doc.gains.find((g) => g.id === 'Tapa de pé na cara');
+    assert.equal(gain.quantityMultiplier, true);
+    gain.id = 'Atividade renomeada';
+    gain.amount = 1;
+    const next = C.prepare(doc, settings);
+    C.apply(next.catalog);
+    assert.equal(E.gain(next.settings, gain.id, 5), 5);
+    assert.equal(E.gain(next.settings, gain.id, 1000), next.settings.quantityMax);
+    assert.equal(E.gain(next.settings, 'Chupar peito', 5), next.settings.gains['Chupar peito']);
+    const reloaded = C.prepare(JSON.parse(JSON.stringify(C.document(next.settings))), next.settings);
+    C.apply(reloaded.catalog);
+    assert.equal(E.gain(reloaded.settings, gain.id, 3), 3);
+    const disabled = C.document(reloaded.settings);
+    disabled.gains.find((g) => g.id === gain.id).quantityMultiplier = false;
+    const off = C.prepare(disabled, reloaded.settings);
+    C.apply(off.catalog);
+    assert.equal(E.gain(off.settings, gain.id, 5), 1);
+    assert.equal(C.document(off.settings).gains.find((g) => g.id === gain.id).quantityMultiplier, false);
+  } finally { C.apply(before); }
+});
+
+test('old catalogs retain the existing multiplier and reject invalid flags', () => {
+  const settings = E.defaults('custom'), doc = C.document(settings);
+  const gain = doc.gains.find((g) => g.id === 'Tapa de pé na cara');
+  delete gain.quantityMultiplier;
+  assert.equal(C.prepare(doc, settings).catalog.gains.find((g) => g.id === gain.id).quantityMultiplier, true);
+  gain.quantityMultiplier = 'true';
+  assert.throws(() => C.prepare(doc, settings), /quantityMultiplier/);
+});

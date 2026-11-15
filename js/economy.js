@@ -82,7 +82,7 @@
   function gain(settings, id, quantity = 1, extras = []) {
     let amount = settings.gains[id] ?? settings.games[id] ?? 0;
     for (const extra of extras) amount += settings.extras[extra] || 0;
-    if (id === 'Tapa de pé na cara') amount *= Math.min(settings.quantityMax, Math.max(1, Math.floor(Number(quantity) || 1)));
+    if (config.gains.find((item) => item.id === id)?.quantityMultiplier === true) amount *= Math.min(settings.quantityMax, Math.max(1, Math.floor(Number(quantity) || 1)));
     return round(amount);
   }
   function adjusted(value, kind, active, settings = config) {

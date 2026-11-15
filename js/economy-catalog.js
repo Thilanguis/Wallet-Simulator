@@ -21,6 +21,7 @@
       gains: E.config.gains.map((item) => ({
         id: item.id,
         amount: settings.gains[item.id],
+        ...(item.quantityMultiplier !== undefined ? { quantityMultiplier: item.quantityMultiplier } : {}),
         ...(item.timerEligible ? { timerEligible: true } : {}),
         extras: (item.extras || []).map((id) => ({ id, label: E.config.extras[id]?.label || id, amount: settings.extras[id] })),
       })),
@@ -50,6 +51,10 @@
         const old = E.config[group].find((previous) => previous.id === item.id);
         const result = { ...old, id: item.id, timerEligible: item.timerEligible === true };
         if (group === 'gains') {
+          if (item.quantityMultiplier !== undefined) {
+            if (typeof item.quantityMultiplier !== 'boolean') throw new Error(item.id + ': quantityMultiplier deve ser true ou false.');
+            result.quantityMultiplier = item.quantityMultiplier;
+          }
           const extras = item.extras ?? (old?.extras || []).map((id) => ({ id, label: E.config.extras[id]?.label || id, amount: extraValues[id] }));
           if (!Array.isArray(extras) || extras.length > 30) throw new Error(item.id + ': extras deve ser um array com até 30 adicionais.');
           const seen = new Set();

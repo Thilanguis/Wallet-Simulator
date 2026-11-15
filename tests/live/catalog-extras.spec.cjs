@@ -11,6 +11,10 @@ for (const width of [1280, 390]) {
       doc = JSON.parse(await code.inputValue());
     expect(doc.gains.find((g) => g.id === 'Pés na cara').extras.map((e) => e.id)).toEqual(['chkChule', 'chkFrancesinha']);
     expect(doc.gains.find((g) => g.id === 'Cuspir na cara').extras[0].id).toBe('chkCatarro');
+    const quantityGain = doc.gains.find((g) => g.id === 'Tapa de pé na cara');
+    expect(quantityGain.quantityMultiplier).toBe(true);
+    quantityGain.id = 'Ganho por quantidade renomeado';
+    quantityGain.amount = 1;
     doc.gains.push({
       id: 'Atividade de exemplo',
       amount: 10,
@@ -25,7 +29,14 @@ for (const width of [1280, 390]) {
     await expect(page.locator('#economyCodeMessage')).toContainText('Catálogo salvo');
     await page.reload();
     await page.locator('[data-jump=ganho]').click();
+    await page.locator('#selectGanho').selectOption('Ganho por quantidade renomeado');
+    await expect(page.locator('#quantidadeMultiplicador')).toBeVisible();
+    await page.locator('#quantidadeMultiplicador').fill('5');
+    await page.locator('#quantidadeMultiplicador').dispatchEvent('input');
+    await page.locator('#quantidadeMultiplicador').dispatchEvent('change');
+    await expect(page.locator('#valorGanho')).toHaveValue('5');
     await page.locator('#selectGanho').selectOption('Atividade de exemplo');
+    await expect(page.locator('#quantidadeMultiplicador')).toBeHidden();
     await expect(page.locator('#gainExtras input')).toHaveCount(2);
     await page.locator('#gainExtras input').first().check();
     await page.locator('#gainExtras input').nth(1).check();

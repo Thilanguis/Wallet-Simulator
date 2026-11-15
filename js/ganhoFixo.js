@@ -32,7 +32,7 @@ function calcularValorGanho() {
   const settings = getEconomy();
   const fixed = settings.gains[selected] !== undefined;
   const quantity = document.getElementById('quantidadeMultiplicador');
-  const multiplicative = selected === 'Tapa de pé na cara';
+  const multiplicative = Economy.config.gains.find((item) => item.id === selected)?.quantityMultiplier === true;
   renderGainExtras(selected, settings);
   quantity.style.display = multiplicative ? 'block' : 'none';
   document.getElementById('labelQuantidadeMultiplicador').style.display = multiplicative ? 'block' : 'none';

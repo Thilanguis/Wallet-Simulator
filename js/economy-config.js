@@ -159,6 +159,7 @@
       },
       {
         id: 'Tapa de pé na cara',
+        quantityMultiplier: true,
         classic: 2,
         balanced: 2,
       },
