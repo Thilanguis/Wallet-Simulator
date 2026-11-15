@@ -635,7 +635,10 @@
         </dialog>
       </section>
       <section id="backupPanel" class="app-panel section" hidden>
-        <h2>Configurações e backup</h2>
+        <header class="settings-heading">
+          <h2>Configurações</h2>
+          <p class="hint">Ajuste a economia e cuide dos dados da sua carteira.</p>
+        </header>
         <details id="cloudSettings" class="cloud-settings">
           <summary>Carteira compartilhada</summary>
           <p class="hint">A carteira é carregada automaticamente do Firebase após entrar com Google. Os dois aparelhos acessam os mesmos dados.</p>
@@ -646,8 +649,8 @@
           </div>
           <button type="button" id="exportCloudRecovery" hidden>Baixar cópia local antes da sincronização</button>
         </details>
-        <section id="economySettingsPanel" class="section">
-          <h2>Economia do simulador</h2>
+        <section id="economySettingsPanel" class="settings-card" aria-labelledby="economySettingsTitle">
+          <h3 id="economySettingsTitle">Economia do simulador</h3>
           <p id="timerLimits" class="hint" data-timer-summary></p>
           <details id="customEconomy">
             <summary>Editar preços, ganhos e limites</summary>
@@ -700,23 +703,44 @@
             </details>
             <label for="customEconomyJson">Código do catálogo (JSON)</label>
             <textarea id="customEconomyJson" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off"></textarea>
-            <p class="hint">Na loja, ajuste <code>price</code> em <code>services</code>. Em <code>games</code>, use <code>"scoreBased": true, "pointValue": 0.25</code> para preencher R$ 0,25 por ponto de diferença. Você pode editar esse valor na partida. <code>amount</code> continua sendo o ganho direto.</p>
+            <p class="hint">
+              Na loja, ajuste
+              <code>price</code>
+              em
+              <code>services</code>
+              . Em
+              <code>games</code>
+              , use
+              <code>"scoreBased": true, "pointValue": 0.25</code>
+              para preencher R$ 0,25 por ponto de diferença. Você pode editar esse valor na partida.
+              <code>amount</code>
+              continua sendo o ganho direto.
+            </p>
             <p id="economyCodeMessage" role="status" class="hint"></p>
             <button id="saveCustomEconomy" type="button">Salvar alterações</button>
           </details>
         </section>
 
-        <p>Baixe um backup para guardar seus dados ou levá-los a outro dispositivo.</p>
-        <p class="hint">O backup inclui seu saldo, histórico, catálogo e gastos reais. Guarde-o em local privado.</p>
-        <button type="button" id="exportBackup">Baixar backup JSON completo</button>
-        <label>
-          Restaurar backup JSON
-          <input type="file" id="backupFile" accept="application/json,.json" />
-        </label>
-        <button type="button" id="previewBackup">Conferir backup</button>
-        <div id="backupPreview" class="notice" hidden></div>
-        <button type="button" id="confirmBackup" hidden>Confirmar restauração da carteira</button>
-        <p id="backupMessage" role="status"></p>
+        <section class="settings-card backup-settings" aria-labelledby="backupSettingsTitle">
+          <h3 id="backupSettingsTitle">Backup e restauração</h3>
+          <p class="hint">Uma cópia inclui saldo, histórico, catálogo e gastos reais. Guarde em local privado.</p>
+          <div class="backup-settings-grid">
+            <div class="backup-settings-action">
+              <h4>Salvar uma cópia</h4>
+              <p class="hint">Baixe todos os dados da carteira em um arquivo JSON.</p>
+              <button type="button" id="exportBackup">Baixar backup completo</button>
+            </div>
+            <div class="backup-settings-action">
+              <h4>Restaurar uma cópia</h4>
+              <label for="backupFile" class="hint">Selecione um backup JSON para conferir antes de restaurar.</label>
+              <input type="file" id="backupFile" accept="application/json,.json" />
+              <button type="button" id="previewBackup" class="subtle-btn">Conferir arquivo</button>
+            </div>
+          </div>
+          <div id="backupPreview" class="notice" hidden></div>
+          <button type="button" id="confirmBackup" hidden>Confirmar restauração da carteira</button>
+          <p id="backupMessage" role="status"></p>
+        </section>
         <details id="walletMaintenance" class="wallet-maintenance">
           <summary>Gerenciar saldo e histórico</summary>
           <p class="hint">Zerar o saldo não apaga o histórico. Arquivar o histórico mantém o saldo e guarda os registros no backup.</p>

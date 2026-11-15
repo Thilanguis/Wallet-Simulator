@@ -3608,3 +3608,232 @@ body:not(.firebase-required) #firebaseAuthPanel {
 .purchase-edit-item input{min-width:0;max-width:100%;min-height:34px;padding:7px;margin:4px 0 0;}
 .purchase-items-editor{width:min(640px,94vw);max-height:88dvh;overflow:auto;}
 @media(max-width:500px){.purchase-product-price{font-size:12px;} .note-purchase-breakdown{max-width:100%;}.note-purchase-breakdown li{gap:6px;}.note-purchase-breakdown li>span:first-child{min-width:0;overflow-wrap:anywhere;}}
+
+/* Settings: consistent hierarchy and responsive backup actions. */
+#backupPanel {
+  padding: clamp(18px, 3vw, 26px);
+  background: #191818;
+  color: #e4ddd3;
+}
+#backupPanel .settings-heading {
+  margin-bottom: 22px;
+}
+#backupPanel .settings-heading h2 {
+  margin: 0 0 8px;
+  color: #eadcc0;
+}
+#backupPanel .settings-heading p {
+  margin: 0;
+}
+#backupPanel .settings-card {
+  min-width: 0;
+  margin: 18px 0;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #201e1c;
+  box-shadow: none;
+}
+#backupPanel h3 {
+  margin: 0 0 12px;
+  color: #dfc58c;
+  font-size: 19px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+#backupPanel h4 {
+  margin: 0 0 8px;
+  color: #e4ddd3;
+  font: 600 14px/1.5 system-ui;
+}
+#backupPanel .hint {
+  color: #bcb4a9;
+  font-size: 13px;
+}
+#backupPanel details {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: transparent;
+}
+#backupPanel details > summary {
+  padding: 14px 16px;
+  color: #dcc594;
+  font: 600 14px/1.5 system-ui;
+  cursor: pointer;
+}
+#backupPanel details[open] > summary {
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+#backupPanel details:not([open]) {
+  padding: 0;
+}
+#backupPanel details[open] {
+  padding: 0 16px 16px;
+}
+#backupPanel details[open] > summary {
+  margin-left: -16px;
+  margin-right: -16px;
+}
+#backupPanel #cloudSettings {
+  margin: 0 0 18px;
+}
+#backupPanel #cloudSettingsStatus {
+  font: 13px/1.6 system-ui;
+}
+#backupPanel #timerLimits {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 0 18px;
+}
+#backupPanel .timer-rule {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #29251f;
+  font: 12px/1.5 system-ui;
+}
+#backupPanel .timer-rule strong {
+  color: #e2ce9f;
+  font-weight: 600;
+}
+#backupPanel .backup-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+  margin-top: 20px;
+}
+#backupPanel .backup-settings-action {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+#backupPanel .backup-settings-action + .backup-settings-action {
+  border-left: 1px solid var(--line);
+  padding-left: 22px;
+}
+#backupPanel .backup-settings-action p,
+#backupPanel .backup-settings-action label {
+  margin: 0;
+}
+#backupPanel button {
+  width: auto;
+  max-width: 100%;
+  min-height: 40px;
+  margin: 0;
+  padding: 10px 16px;
+  border: 1px solid #775d3a;
+  border-radius: 8px;
+  background: #32291e;
+  color: #eed9a7;
+  box-shadow: none;
+  font: 600 13px/1.4 system-ui;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: normal;
+}
+#backupPanel button:hover {
+  background: #443523;
+  border-color: #b18f52;
+  transform: none;
+}
+#backupPanel #exportBackup,
+#backupPanel #saveCustomEconomy {
+  background: #74242c;
+  border-color: #a15053;
+  color: #fff0db;
+}
+#backupPanel #exportBackup:hover,
+#backupPanel #saveCustomEconomy:hover {
+  background: #8b2b35;
+}
+#backupPanel #backupFile {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  margin: 0;
+  padding: 7px;
+  border: 1px solid #5b4c3b;
+  border-radius: 8px;
+  background: #181716;
+  color: #bbb3a7;
+  font: 12px/1.5 system-ui;
+}
+#backupPanel #backupFile::file-selector-button {
+  margin-right: 10px;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 5px;
+  background: #3a3227;
+  color: #e4cf9d;
+  font: 600 12px system-ui;
+  cursor: pointer;
+}
+#backupPanel #customEconomyJson {
+  font: 13px/1.6 monospace;
+  color: #e4ddd3;
+  border-color: #5b4c3b;
+  background: #141312;
+}
+#backupPanel label[for='customEconomyJson'] {
+  display: block;
+  margin: 16px 0 8px;
+  color: #d8c39a;
+  font: 600 13px system-ui;
+}
+#backupPanel #backupMessage:empty,
+#backupPanel #economyCodeMessage:empty {
+  display: none;
+}
+#backupPanel #backupMessage {
+  margin: 16px 0 0;
+  font: 13px/1.6 system-ui;
+}
+#backupPanel #walletMaintenance {
+  margin-top: 18px;
+}
+#backupPanel #walletMaintenance .btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 16px 0 0;
+}
+#backupPanel #walletMaintenance button {
+  flex: 0 1 auto;
+  background: transparent;
+  border-color: #675047;
+  color: #d5ada1;
+}
+@media (max-width: 640px) {
+  #backupPanel .settings-card {
+    padding: 16px;
+  }
+  #backupPanel #timerLimits {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  #backupPanel .timer-rule {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 8px;
+  }
+  #backupPanel .backup-settings-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  #backupPanel .backup-settings-action + .backup-settings-action {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    padding: 20px 0 0;
+  }
+  #backupPanel .backup-settings-action button {
+    width: 100%;
+  }
+}
