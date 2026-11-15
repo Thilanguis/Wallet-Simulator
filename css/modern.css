@@ -3574,3 +3574,37 @@ body:not(.firebase-required) #firebaseAuthPanel {
 #financePrepareCad[hidden],#financeCadTotal:empty{display:none;}
 #financeTopTotal #financeCadTotal{color:#c7b995;font:600 14px/1.4 system-ui;}
 .entry-cad-field{display:block;margin-block:12px;}
+
+/* Total controls share the existing bar, never the title toolbar. */
+.finance-total-controls { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-inline-start:auto; }
+#financeTopTotal .finance-cad-toggle { padding:5px 8px; min-height:0; border-radius:7px; font:600 11px/1.4 system-ui; }
+#financeTopTotal #financePrepareCad { padding:5px 8px; border-radius:7px; font:600 11px/1.4 system-ui; }
+#financeTopTotal #financePeopleToggle { margin-inline-start:0; flex-shrink:0; }
+#financeTopTotal { min-width:0; gap:6px 10px; }
+#financeTopTotal > output { white-space:nowrap; }
+#financeTopTotal #financeCadTotal { max-width:100%; }
+.note-entry-amount { display:inline; overflow-wrap:anywhere; }
+.note-content { min-width:0; overflow-wrap:anywhere; }
+@media(max-width:600px){
+ #financeTopTotal > span:first-child {flex-basis:100%;font-size:12px;}
+ #financeTopTotal > output {font-size:clamp(21px,6vw,25px);}
+ #financeTopTotal #financeCadTotal:not(:empty){flex-basis:100%;order:0;}
+ #financeTopTotal .finance-total-controls {gap:4px;}
+ #financeTopTotal .finance-cad-toggle,#financeTopTotal #financePrepareCad{padding:4px 6px;font-size:10px;}
+ .note-entry-amount .note-cad{white-space:normal;display:inline-block;}
+}
+
+#financeTopTotal .finance-cad-toggle, #financeTopTotal #financePrepareCad { box-sizing:border-box; height:28px; min-height:28px; padding:4px 8px; margin:0; line-height:18px; align-items:center; border-radius:7px; }
+#financeTopTotal .finance-cad-toggle input { appearance:auto; width:13px; height:13px; min-height:0; margin:0; padding:0; box-shadow:none; }
+#financeTopTotal .finance-cad-toggle { display:inline-flex; gap:5px; }
+#entryCadHint { display:block; color:#b7ad9a; font:11px/1.5 system-ui; }
+
+#financeTopTotal .finance-cad-toggle { align-self:center; vertical-align:middle; }
+#financeTopTotal .finance-cad-toggle input { flex:0 0 13px; transform:none; position:static; top:auto; align-self:center; }
+.purchase-product-price{display:inline-flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:5px;font-variant-numeric:tabular-nums;}
+.purchase-edit-item{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 12px;padding:12px 0;border-bottom:1px solid #66533450;}
+.purchase-edit-item label{margin:0;font-size:12px;min-width:0;}
+.purchase-edit-item label:first-child{grid-column:1/-1;}
+.purchase-edit-item input{min-width:0;max-width:100%;min-height:34px;padding:7px;margin:4px 0 0;}
+.purchase-items-editor{width:min(640px,94vw);max-height:88dvh;overflow:auto;}
+@media(max-width:500px){.purchase-product-price{font-size:12px;} .note-purchase-breakdown{max-width:100%;}.note-purchase-breakdown li{gap:6px;}.note-purchase-breakdown li>span:first-child{min-width:0;overflow-wrap:anywhere;}}

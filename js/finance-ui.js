@@ -87,18 +87,33 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   function entryHTML(e) {
-    return `<article class="finance-entry" data-entry="${esc(e.id)}"><header><label class="entry-select"><input type="checkbox" data-select-entry="${esc(e.id)}" aria-label="Selecionar ${esc(e.description)}" ${e.redemptionId ? 'disabled' : ''} /><strong>${esc(e.description)}</strong></label><strong>${F.format(e.amount, e.currency)}</strong></header><p>${esc(e.date || 'Data não informada')} · ${esc(e.category)}${e.store ? ' · ' + esc(e.store) : ''}</p>${e.note ? `<p class="hint finance-note">${esc(e.note)}</p>` : ''}<span class="status ${e.status}">${statusLabel(e)}</span>${e.redemptionId ? '<span class="status">Registro vinculado · protegido</span>' : ''}<div><button data-action="edit">Editar / corrigir</button><button data-action="status">Alterar situação</button><button data-action="refund">Estornar</button><button data-action="delete" class="danger">Excluir</button></div></article>`;
+    return `<article class="finance-entry" data-entry="${esc(e.id)}"><header><label class="entry-select"><input type="checkbox" data-select-entry="${esc(e.id)}" aria-label="Selecionar ${esc(e.description === 'Compra da Dominadora' ? 'Compra da Luana' : e.description)}" ${e.redemptionId ? 'disabled' : ''} /><strong>${esc(e.description === 'Compra da Dominadora' ? 'Compra da Luana' : e.description)}</strong></label><strong>${F.format(e.amount, e.currency)}</strong></header><p>${esc(e.date || 'Data não informada')} · ${esc(e.category)}${e.store ? ' · ' + esc(e.store) : ''}</p>${e.note ? `<p class="hint finance-note">${esc(e.note)}</p>` : ''}<span class="status ${e.status}">${statusLabel(e)}</span>${e.redemptionId ? '<span class="status">Registro vinculado · protegido</span>' : ''}<div><button data-action="edit">Editar / corrigir</button><button data-action="status">Alterar situação</button><button data-action="refund">Estornar</button><button data-action="delete" class="danger">Excluir</button></div></article>`;
   }
   function notebookDates(entries) {
-    const dates = entries.map((entry) => entry.date);
+    const dates = entries.map((entry) => entry.date || FinanceCad.dateFor(entry, state.entries)?.date || '');
     const shared = dates.every((date) => date === dates[0]);
     const labels = (shared ? dates.slice(0, 1) : dates).map((date, index) => {
-      const label = date ? `<time datetime="${esc(date)}">${esc(date.split('-').reverse().join('/'))}</time>` : 'Sem data';
+      const estimated = !(shared ? entries[0] : entries[index]).date || !!(shared ? entries[0] : entries[index]).dateEstimate;
+      const label = date ? `<time datetime="${esc(date)}" ${estimated ? 'title="Data estimada"' : ''}>${estimated ? '≈ ' : ''}${esc(date.split('-').reverse().join('/'))}</time>` : 'Sem data';
       return shared ? label : `${index + 1}. ${label}`;
     });
     return ` <span class="note-dates">${labels.join(' · ')}</span>`;
   }
   function purchaseBreakdown(entry) {
+    if (entry.purchaseItems || entry.source === 'wishlist') {
+      try {
+        const items = PurchaseItems.read(entry, JSON.parse(AppStorage.getItem('wishlist') || '[]'), F);
+        const groups = new Map();
+        for (const item of items) {const person=FinancePeople.canonical(item.person);if(!groups.has(person))groups.set(person,[]);groups.get(person).push(item);}
+        const cad = p => !FinanceCad.isEnabled() ? '' : '<small class="note-cad">'+(p.cadAmount==null?'CAD —':(p.cadEstimated?'≈ ':'')+('CAD '+(p.cadAmount/100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})))+'</small> ';
+        const html = [...groups].map(([person,parts]) => {
+          const stores = new Map();for(const item of parts){if(!stores.has(item.store))stores.set(item.store,[]);stores.get(item.store).push(item);}
+          return '<div class="note-purchase-person"><div class="note-purchase-person-heading"><strong>'+esc(person)+'</strong><strong>'+F.format(parts.reduce((n,p)=>n+p.amount,0))+'</strong></div>'+[...stores].map(([store,products])=>'<div class="note-purchase-store"><strong>'+esc(store)+'</strong><ul>'+products.map(p=>'<li><span>'+esc(p.title)+(p.quantity>1?' ×'+p.quantity:'')+'</span><span class="purchase-product-price">'+cad(p)+F.format(p.amount)+' <button type="button" class="note-icon" data-purchase-edit="'+esc(entry.id)+'" data-purchase-item="'+esc(p.id)+'" aria-label="Editar produto '+esc(p.title)+'">✎</button></span></li>').join('')+'</ul></div>').join('')+'</div>';
+        }).join('');
+        return {store:entry.store||'',html:'<div class="note-purchase-breakdown">'+html+'</div>'+(entry.purchaseOriginalNote?'<span class="note-entry-observation">'+esc(entry.purchaseOriginalNote)+'</span>':'')};
+      } catch { /* Keep the original text available if old detail cannot be reconciled. */ }
+    }
+
     if (entry.source !== 'wishlist' && Array.isArray(entry.personAllocations) && entry.personAllocations.length) {
       const merged = new Map();
       for (const part of FinancePeople.allocation(entry, peopleRoster())) merged.set(part.person, (merged.get(part.person) || 0) + part.amount);
@@ -127,7 +142,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!groups.length || groups.some((group) => !group.items.length)) return null;
     const storeKey = (name) => name.trim().normalize('NFC').toLocaleLowerCase('pt-BR');
     const storeKeys = new Set(groups.flatMap(({ items }) => items.map((item) => storeKey(item.store))));
-    const store = entry.description === 'Compra da Dominadora' && storeKeys.size === 1 ? groups[0].items[0].store.trim() : '';
+    const store = ['Compra da Dominadora','Compra da Luana'].includes(entry.description) && storeKeys.size === 1 ? groups[0].items[0].store.trim() : '';
     const showStores = !store && [...storeKeys].some(Boolean);
     const products = (items) => `<ul>${items.map((item) =>
       `<li><span>${esc(item.title)}</span><span class="note-purchase-value">${esc(item.amount)}</span></li>`,
@@ -203,6 +218,7 @@ document.addEventListener('DOMContentLoaded', () => {
                   (controls
                     ? '<span class="note-tools">' +
                       showWishes +
+                      (shopping && row.entries[0].source !== 'wishlist' && !row.entries[0].purchaseItems ? '<button type="button" class="note-icon" data-purchase-edit="' + esc(row.entries[0].id) + '" aria-label="Editar itens da compra">≡</button>' : '') +
                       row.entries.map((entry) => '<button type="button" class="note-icon" data-note-edit="' + esc(entry.id) + '" aria-label="Editar ' + esc(entry.description) + '" title="Editar">✎</button>').join('') +
                       '<button type="button" class="note-icon note-delete" data-note-delete aria-label="Excluir item" title="Excluir"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7m4-7v7"/></svg></button></span>'
                     : '') +
@@ -396,6 +412,9 @@ document.addEventListener('DOMContentLoaded', () => {
     editing = null;
     receiptSuggestion = null;
     $('entryForm').reset();
+    conversionRevision++; clearTimeout(conversionTimeout); conversionPending = Promise.resolve();
+    $('entryCadOriginal').dataset.estimated = 'true';
+    $('entryCadHint').textContent = '';
     fillPersonAllocations(null);
     $('entryFeedback').hidden = true;
     $('entryDate').value = today();
@@ -416,7 +435,8 @@ document.addEventListener('DOMContentLoaded', () => {
     ])
       $('entry' + field).value = (key === 'status' && entry[key] === 'pending' ? 'paid' : entry[key]) || '';
     $('entryAmount').value = entry.amount ? decimal(entry.amount) : '';
-    $('entryCadOriginal').value = entry.cadReference?.kind === 'original' ? decimal(entry.cadReference.amount) : '';
+    $('entryCadOriginal').value = entry.cadReference ? decimal(entry.cadReference.amount) : '';
+    $('entryCadOriginal').dataset.estimated = String(entry.cadReference?.kind !== 'original');
     fillPersonAllocations(entry);
     editing = edit ? entry.id : null;
     $('entryTitle').textContent = edit ? 'Editar lançamento' : 'Conferir sugestão do comprovante';
@@ -425,10 +445,37 @@ document.addEventListener('DOMContentLoaded', () => {
     $('entryOrigin').textContent = entry.originalMoney?.length ? 'Valores originais preservados: ' + entry.originalMoney.map((m) => F.format(m.amount, m.currency)).join(' = ') : '';
     if (!editPopup) { $('financeAdd').open = true; $('entryForm').scrollIntoView({ block: 'nearest' }); }
   }
+  let conversionRevision = 0, conversionTimeout, conversionPending = Promise.resolve();
+  function convertEntry(from) {
+    $('entryCadOriginal').dataset.estimated = String(from !== 'CAD');
+    const revision = ++conversionRevision;
+    clearTimeout(conversionTimeout);
+    conversionPending = new Promise(resolve => {
+      conversionTimeout = setTimeout(async () => {
+        try {
+          if ($('entryCurrency').value !== 'BRL') return;
+          const input = from === 'CAD' ? $('entryCadOriginal') : $('entryAmount');
+          const amount = F.cents(input.value || '0');
+          const result = await FinanceCad.convertPair(amount, from, $('entryDate').value);
+          if (revision !== conversionRevision) return;
+          $(from === 'CAD' ? 'entryAmount' : 'entryCadOriginal').value = decimal(result.amount);
+          $('entryCadOriginal').dataset.estimated = String(from !== 'CAD');
+          $('entryCadHint').textContent = '1 CAD ≈ ' + F.format(Math.round(result.rate*100)) + ' · ' + result.rateDate.split('-').reverse().join('/');
+          updatePeopleRemainder();
+        } catch(error) {if(revision===conversionRevision) $('entryCadHint').textContent = error.message;}
+        finally {resolve();}
+      }, 350);
+    });
+  }
+  $('entryAmount').closest('label').after($('entryCadOriginal').closest('label'));
+  $('entryAmount').addEventListener('input',()=>convertEntry('BRL'));
+  $('entryCadOriginal').addEventListener('input',()=>convertEntry('CAD'));
+  $('entryDate').addEventListener('change',()=>convertEntry($('entryCadOriginal').dataset.estimated==='false'?'CAD':'BRL'));
   $('entryForm').onsubmit = async (event) => {
     event.preventDefault();
     $('entryFeedback').hidden = true;
     const editedId = editing;
+    await conversionPending;
     try {
       const candidate = F.validate({
         category: $('entryCategory').value,
@@ -444,7 +491,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const previous = editing ? state.entries.find(e => e.id === editing) : null;
       const cadText = $('entryCadOriginal').value.trim();
       if(candidate.currency==='BRL'){
-        if(cadText)candidate.cadReference={amount:F.cents(cadText),kind:'original',source:previous?.source==='wishlist'?'wishlist':'manual',basisAmount:candidate.amount,methodVersion:2,recordedAt:new Date().toISOString()};
+        if(cadText && $('entryCadOriginal').dataset.estimated !== 'true')candidate.cadReference={amount:F.cents(cadText),kind:'original',source:previous?.source==='wishlist'?'wishlist':'manual',basisAmount:candidate.amount,methodVersion:2,recordedAt:new Date().toISOString()};
         else candidate.cadReference=(await FinanceCad.referenceFor({...previous,...candidate,cadReference:undefined},state.entries).catch(()=>null)) || undefined;
       }
       if (editing) {
@@ -547,6 +594,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const button = event.target.closest('button');
     if (!button) return;
     try {
+      if(button.hasAttribute('data-purchase-edit')){PurchaseEditor.open(state.entries.find(e=>e.id===button.dataset.purchaseEdit));return;}
+      if(button.hasAttribute('data-note-edit')){const entry=state.entries.find(e=>e.id===button.dataset.noteEdit);if(entry.source==='wishlist'||entry.purchaseItems){PurchaseEditor.open(entry);return;}}
       if (button.hasAttribute('data-note-wishlist')) {
         const id = button.dataset.noteWishlist;
         if (!(await AppDialog.confirm('Desfazer esta compra? Isso vai excluir o lançamento de Notas e Gastos Reais e devolver os itens vinculados à Lista de Desejos como não comprados.'))) return;

@@ -29,13 +29,14 @@
       for (const entry of items) {
         const split = / · jogo \d+$/.test(entry.description),
           label = entry.description.replace(/ · jogo \d+$/, '');
+        const displayLabel = label === 'Compra da Dominadora' ? 'Compra da Luana' : label;
         const key = split && entry.sourceText ? entry.sourceText + '|' + entry.status + '|' + entry.currency : null;
         const previous = rows.at(-1);
         if (key && previous?.key === key) {
           previous.entries.push(entry);
           continue;
         }
-        rows.push({ key, label: label === category ? '' : label, entries: [entry], note: entry.note || '', noteOnly: entry.description === category && !!entry.note });
+        rows.push({ key, label: displayLabel === category ? '' : displayLabel, entries: [entry], note: entry.note || '', noteOnly: entry.description === category && !!entry.note });
       }
       const totals = F.totals(items);
       return { category, title: titles[index], number: index + 1, rows, total: totals.total, foreign: totals.foreign.USD };

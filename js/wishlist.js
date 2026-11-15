@@ -195,6 +195,10 @@ document.addEventListener('DOMContentLoaded', () => {
     return currency + ' ' + original.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
   }
   function priceLabel(item, convert = true) {
+    if (item.bought && Number.isSafeInteger(item.purchasePaidBrl)) {
+      const cad = Number.isSafeInteger(item.purchasePaidCad) ? originalPriceLabel(item.purchasePaidCad / 100, 'CAD') : '';
+      return cad + (convert ? (cad ? ' · ' : '') + Finance.format(item.purchasePaidBrl) : cad ? '' : 'Valor pago registrado');
+    }
     const original = originalSubtotal(item);
     const currency = item.currency || 'BRL';
     if (original == null) return 'Preço não informado';
@@ -1041,13 +1045,15 @@ document.addEventListener('DOMContentLoaded', () => {
       const noteWithStores = formatNote(true);
       const note = noteWithStores.length <= 4000 ? noteWithStores : formatNote(false);
       const id = crypto.randomUUID();
+      const purchasedParts = PurchaseItems.snapshot(groups);
       const finance = Finance.update(snapshot.finance, { type: 'add', entry: {
-        id, date, description: 'Compra da Dominadora', category: 'Lista de Compras',
+        id, date, description: 'Compra da Luana', category: 'Lista de Compras',
         amount: total, currency: 'BRL', status: 'paid', source: 'wishlist', note,
+        purchaseItems: purchasedParts,
         ...(FinanceCad.fromWishes(groups.flatMap(group => group.wishes), total) ? {cadReference:{...FinanceCad.fromWishes(groups.flatMap(group => group.wishes), total),recordedAt:new Date().toISOString()}} : {}),
       } });
       snapshot.simulator.wishlist = JSON.stringify(list.map((item) =>
-        ids.has(item.id) ? { ...item, bought: true, purchaseNoteId: id, updatedAt: Date.now() } : item,
+        ids.has(item.id) ? { ...item, bought: true, purchaseNoteId: id, purchasePaidBrl: purchasedParts.find(p=>p.wishId===item.id)?.amount, purchasePaidCad: purchasedParts.find(p=>p.wishId===item.id)?.cadAmount, updatedAt: Date.now() } : item,
       ));
       WalletStore.commitBoth(finance, snapshot.simulator);
       purchaseSelection.clear();

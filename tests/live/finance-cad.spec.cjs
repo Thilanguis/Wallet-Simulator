@@ -23,19 +23,22 @@ for (const width of [1440, 393])
       FinanceUI.save(s);
     });
     await expect(page.locator('#financeShowCad')).not.toBeChecked();
+    expect(await page.locator('#financeShowCad').evaluate((el) => !!el.closest('#financeTopTotal'))).toBe(true);
+    await expect(page.locator('#groupedFinanceList')).not.toContainText('Sem data');
     await expect(page.locator('.note-cad')).toHaveCount(0);
     await page.locator('#financeShowCad').check();
     await expect(page.locator('#financePrepareCad')).toBeEnabled();
     await expect(page.locator('#financeCadTotal')).toContainText('250,00');
     await expect(page.locator('#groupedFinanceList .note-cad')).toHaveCount(3);
-    expect(await page.evaluate(() => WalletStore.finance().entries.every((e) => !e.cadReference))).toBe(true);
+    await expect.poll(() => page.evaluate(() => WalletStore.finance().entries.every((e) => !!e.cadReference))).toBe(true);
     await page.locator('#financePrepareCad').click();
     await expect(page.locator('.cad-review')).toContainText('2025-05-15');
     await expect(page.locator('.cad-review')).toContainText('data interpolada');
-    await page.locator('[data-apply]').click();
+    await expect(page.locator('[data-apply]')).toBeDisabled();
+    await page.locator('[data-close]').click();
     expect(await page.evaluate(() => WalletStore.finance().entries.map((e) => [e.amount, e.date, e.cadReference.amount, e.cadReference.referenceDate]))).toEqual([
       [60000, '2025-05-10', 15000, '2025-05-10'],
-      [20000, '', 5000, '2025-05-15'],
+      [20000, '2025-05-15', 5000, '2025-05-15'],
       [20000, '2025-05-20', 5000, '2025-05-20'],
     ]);
     await page.locator('#financeShowCad').uncheck();
@@ -76,4 +79,19 @@ test('no incomplete aggregate and manual CAD entry', async ({ page }) => {
   await page.locator('[data-dialog-confirm]').click();
   await expect(page.locator('#financeCadTotal')).toContainText('10.000,00');
   expect(await page.evaluate(() => WalletStore.finance().entries[0].amount)).toBe(4300000);
+});
+
+test('date interpolation leaves indivisible days in later intervals', async ({page}) => {
+  await start(page);
+  const result = await page.evaluate(() => {
+    const e=(id,date)=>({id,date,category:'Lista de Compras'});
+    const a=e('a','2025-05-01'),b=e('b',''),c=e('c','');
+    return {
+      even:FinanceCad.dateFor(b,[a,b,e('z','2025-05-09')]).date,
+      odd:FinanceCad.dateFor(b,[a,b,e('z','2025-05-10')]).date,
+      several:[b,c].map(item=>FinanceCad.dateFor(item,[a,b,c,e('z','2025-05-11')]).date),
+      preserved:FinanceCad.dateFor(a,[a,b,e('z','2025-05-10')]).date
+    };
+  });
+  expect(result).toEqual({even:'2025-05-05',odd:'2025-05-05',several:['2025-05-04','2025-05-07'],preserved:'2025-05-01'});
 });

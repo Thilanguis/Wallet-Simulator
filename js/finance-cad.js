@@ -59,7 +59,10 @@ window.FinanceCad = (() => {
     if (left >= 0 && right < group.length) {
       const start = Date.parse(group[left].date + 'T12:00:00Z'),
         end = Date.parse(group[right].date + 'T12:00:00Z');
-      const date = new Date(start + Math.round((((end - start) / 86400000) * (index - left)) / (right - left)) * 86400000).toISOString().slice(0, 10);
+      // Keep any indivisible day in the later part of the interval.
+      const days = (end - start) / 86400000;
+      const offset = Math.sign(days) * Math.floor((Math.abs(days) * (index - left)) / (right - left));
+      const date = new Date(start + offset * 86400000).toISOString().slice(0, 10);
       return { date, method: 'interpolated', inferredFrom: group[left].id + '|' + group[right].id };
     }
     const other = left >= 0 ? group[left] : right < group.length ? group[right] : null;
@@ -116,7 +119,7 @@ window.FinanceCad = (() => {
   }
   async function referenceFor(entry, entries) {
     const saved = entry.cadReference;
-    if (saved?.kind === 'original' && saved.basisAmount === entry.amount) return saved;
+    if (saved && saved.basisAmount === entry.amount && (saved.kind === 'original' || (saved.methodVersion === 2 && saved.entryDate === entry.date))) return saved;
     const native = original(entry);
     if (native) return native;
     const basis = dateFor(entry, entries);
@@ -156,6 +159,11 @@ window.FinanceCad = (() => {
         reason = 'Cotação indisponível';
       }
       const p = { id: entry.id, baseline: JSON.stringify(entry), description: entry.description, reference, reason };
+      if (!entry.date) {
+        const basis = dateFor(entry, entries);
+        if (basis) p.proposedDate = basis;
+      }
+      p.unchanged = !p.proposedDate && !!entry.cadReference && JSON.stringify(entry.cadReference) === JSON.stringify(reference);
       proposals.push(p);
       previews.set(entry.id, p);
       progress?.(proposals.length);
@@ -164,85 +172,70 @@ window.FinanceCad = (() => {
   }
   document.addEventListener('DOMContentLoaded', () => {
     const toggle = document.getElementById('financeShowCad'),
-      button = document.getElementById('financePrepareCad');
-    toggle.onchange = async () => {
+      button = document.createElement('span');
+    toggle.onchange = () => {
       enabled = toggle.checked;
-      button.hidden = !enabled;
       FinanceUI.render();
-      if (!enabled || loading) return;
+    };
+    let scheduled;
+    async function synchronize() {
+      if (loading || !WalletStore.isWritable()) return;
+      const entries = FinanceUI.getState().entries;
+      const needed = entries.filter(
+        (entry) =>
+          usable(entry) &&
+          (!entry.date || !entry.cadReference || entry.cadReference.basisAmount !== entry.amount || (entry.cadReference.kind === 'estimated' && (entry.cadReference.methodVersion !== 2 || entry.cadReference.entryDate !== entry.date))),
+      );
+      if (!needed.length) return;
       loading = true;
-      toggle.setAttribute('aria-busy', 'true');
       button.disabled = true;
+      button.textContent = 'Atualizando…';
       try {
-        await prepare(FinanceUI.getState().entries, () => {
-          if (enabled) FinanceUI.render();
-        });
+        const proposals = await prepare(entries);
+        let next = Finance.validateState(WalletStore.finance()),
+          changed = false;
+        const ids = new Set(needed.map((e) => e.id));
+        for (const p of proposals) {
+          if (!ids.has(p.id) || (!p.reference && !p.proposedDate)) continue;
+          const entry = next.entries.find((e) => e.id === p.id);
+          if (!entry || JSON.stringify(entry) !== p.baseline) continue;
+          const stamp = new Date().toISOString();
+          next = F.update(next, {
+            type: 'edit',
+            id: p.id,
+            patch: {
+              ...(p.reference ? { cadReference: { ...p.reference, ...(p.proposedDate && p.reference.kind === 'estimated' ? { entryDate: p.proposedDate.date } : {}), recordedAt: stamp } } : {}),
+              ...(p.proposedDate ? { date: p.proposedDate.date, dateEstimate: { ...p.proposedDate, recordedAt: stamp } } : {}),
+            },
+          });
+          changed = true;
+        }
+        if (changed) FinanceUI.save(next);
       } finally {
         loading = false;
-        toggle.removeAttribute('aria-busy');
         button.disabled = false;
+        button.textContent = 'Conferir';
         FinanceUI.render();
       }
+    }
+    const schedule = () => {
+      clearTimeout(scheduled);
+      scheduled = setTimeout(() => void synchronize().catch(() => {}), 250);
     };
-    button.onclick = async () => {
-      button.disabled = true;
-      button.textContent = 'Consultando…';
-      try {
-        const proposals = await prepare(FinanceUI.getState().entries, (n) => (button.textContent = 'Consultando · ' + n));
-        const ready = proposals.filter((p) => p.reference),
-          dialog = document.createElement('dialog');
-        dialog.className = 'note-edit-dialog cad-review';
-        dialog.innerHTML =
-          '<h2>Referências em CAD</h2><p class="hint">Valores estimados não alteram os gastos em reais nem as datas originais.</p><div class="cad-review-list">' +
-          proposals
-            .map(
-              (p) =>
-                '<p><span>' +
-                escapeHTML(p.description) +
-                '</span><strong>' +
-                (p.reference ? F.format(p.reference.amount, 'CAD') : '—') +
-                '</strong><small>' +
-                escapeHTML(
-                  p.reason ||
-                    (p.reference.kind === 'original'
-                      ? 'Original da Lista de Desejos'
-                      : p.reference.referenceDate +
-                        ' · ' +
-                        (p.reference.annualYear ? 'média anual ' + p.reference.annualYear : 'cotação ' + p.reference.rateDate) +
-                        (p.reference.method === 'interpolated' ? ' · data interpolada' : p.reference.inferredFrom ? ' · data aproximada' : '')),
-                ) +
-                '</small></p>',
-            )
-            .join('') +
-          '</div><button type="button" data-apply>Gravar ' +
-          ready.length +
-          ' referências</button><button type="button" data-close>Cancelar</button><p role="status"></p>';
-        document.body.append(dialog);
-        dialog.querySelector('[data-close]').onclick = () => dialog.close();
-        dialog.onclose = () => dialog.remove();
-        dialog.showModal();
-        dialog.querySelector('[data-apply]').disabled = !ready.length;
-        dialog.querySelector('[data-apply]').onclick = () => {
-          try {
-            let next = Finance.validateState(WalletStore.finance());
-            for (const p of ready) {
-              const entry = next.entries.find((e) => e.id === p.id);
-              if (!entry || JSON.stringify(entry) !== p.baseline) throw new Error('Um lançamento mudou. Cancele e confira a prévia novamente.');
-              next = F.update(next, { type: 'edit', id: p.id, patch: { cadReference: { ...p.reference, recordedAt: new Date().toISOString() } } });
-            }
-            FinanceUI.save(next);
-            dialog.close();
-          } catch (error) {
-            dialog.querySelector('[role=status]').textContent = error.message;
-          }
-        };
-      } catch (error) {
-        AppDialog.alert(error.message);
-      } finally {
-        button.disabled = false;
-        button.textContent = 'Conferir câmbio';
-      }
-    };
+    window.addEventListener('finance:changed', schedule);
+    window.addEventListener('wallet:remote', schedule);
+    document.querySelector('[data-panel="financePanel"]').addEventListener('click', schedule);
+
   });
-  return { label, totalLabel, prepare, dateFor, original, fromWishes, referenceFor };
+  async function convertPair(amount, currency, date) {
+    if (!F.validDate(date)) throw new Error('Informe uma data para converter.');
+    let row;
+    try {
+      row = await rate(date);
+    } catch {
+      row = await annual(date);
+    }
+    return { amount: Math.round(currency === 'CAD' ? amount * row.rate : amount / row.rate), rate: row.rate, rateDate: row.date };
+  }
+  return { label, totalLabel, prepare, dateFor, original, fromWishes, referenceFor, convertPair, isEnabled:()=>enabled };
 })();

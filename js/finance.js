@@ -50,6 +50,10 @@
     if (!String(entry.description || '').trim() || String(entry.description).length > 1000 || String(entry.store || '').length > 200) throw new Error('Descrição/loja inválida.');
     if (entry.note !== undefined && (typeof entry.note !== 'string' || entry.note.length > 4000)) throw new Error('Observações inválidas (máximo de 4 mil caracteres).');
     if (entry.originalMoney && (!Array.isArray(entry.originalMoney) || entry.originalMoney.some((m) => !['BRL', 'USD'].includes(m.currency) || !Number.isSafeInteger(m.amount) || m.amount <= 0))) throw new Error('Valores originais inválidos.');
+    if (entry.purchaseItems !== undefined) {
+      const parts=entry.purchaseItems;
+      if(!Array.isArray(parts)||!parts.length||parts.some(p=>!p||typeof p.id!=='string'||!p.id||typeof p.title!=='string'||!p.title.trim()||p.title.length>1000||typeof p.person!=='string'||!p.person.trim()||!Number.isSafeInteger(p.quantity)||p.quantity<1||!Number.isSafeInteger(p.amount)||p.amount<=0||(p.cadAmount!==null&&(!Number.isSafeInteger(p.cadAmount)||p.cadAmount<0)))||new Set(parts.map(p=>p.id)).size!==parts.length||parts.reduce((n,p)=>n+p.amount,0)!==entry.amount)throw new Error('Confira os produtos: a soma deve ser igual ao total da compra.');
+    }
     if (entry.cadReference !== undefined) {
       const r = entry.cadReference;
       if (!r || !Number.isSafeInteger(r.amount) || r.amount < 0 || !Number.isSafeInteger(r.basisAmount) || r.basisAmount <= 0 || !['original','estimated'].includes(r.kind) || (r.kind === 'estimated' && (!Number.isFinite(r.rate) || r.rate <= 0 || !validDate(r.rateDate) || !validDate(r.referenceDate)))) throw new Error('Referência em CAD inválida.');
