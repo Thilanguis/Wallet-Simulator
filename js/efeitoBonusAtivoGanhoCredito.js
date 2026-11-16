@@ -62,7 +62,7 @@
     // Se quiser, ativa também partículas no fundo global:
     // intervalGlobal = setInterval(spawnGlobalGlow, 420);
 
-    intervalBlocks = setInterval(spawnBlockGlow, 520);
+    if (!matchMedia('(prefers-reduced-motion: reduce)').matches) intervalBlocks = setInterval(spawnBlockGlow, 520);
   }
 
   function stopGlowEffect() {

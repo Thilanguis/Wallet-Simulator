@@ -89,7 +89,8 @@ window.PurchaseEditor = {
     dialog.onclose = () => dialog.remove();
     dialog.querySelector('[data-save]').onclick = async () => {
       const button = dialog.querySelector('[data-save]');
-      button.disabled = true;
+      const release = UIFeedback.busy(button, 'Salvando…');
+      if (!release) return;
       try {
         await Promise.all([...pending]);
         const now = WalletStore.snapshot(),
@@ -128,10 +129,11 @@ window.PurchaseEditor = {
         window.dispatchEvent(new Event('wallet:remote'));
         window.dispatchEvent(new Event('finance:changed'));
         dialog.close();
+        UIFeedback.success('Compra atualizada', parts.length + ' produto(s) · ' + F.format(amount));
       } catch (e) {
         message(e.message);
       } finally {
-        button.disabled = false;
+        release();
       }
     };
     document.body.append(dialog);

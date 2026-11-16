@@ -3924,3 +3924,50 @@ body:not(.firebase-required) #firebaseAuthPanel {
 #financeDuplicates { padding: 10px 12px; margin: 8px 0; }
 #financeDuplicates .hint { margin: 8px 0 0; }
 #financeDuplicates .finance-duplicate-group ul { margin: 4px 0; }
+
+/* Short, non-blocking feedback after a successful operation. */
+.fx-toast {
+  position: fixed; z-index: 120; right: 24px; bottom: 108px;
+  display: flex; align-items: flex-start; gap: 12px;
+  width: min(380px, calc(100vw - 32px)); padding: 16px;
+  border: 1px solid #a37b465c; border-radius: 14px;
+  background: linear-gradient(125deg, #33241e, #231b21);
+  color: #f2dfb9; box-shadow: 0 12px 36px #0005;
+}
+.fx-toast-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; font: 13px/1.5 system-ui; overflow-wrap: anywhere; }
+.fx-toast-copy strong { color: #edd09a; font-size: 14px; }
+.fx-toast-copy > span { color: #cdbfaf; }
+.fx-toast button {
+  flex-shrink: 0; display: grid; place-items: center; width: 28px; height: 28px; min-height: 28px;
+  margin: -4px -4px 0 0; padding: 0; border: 0; border-radius: 6px;
+  background: transparent; color: #d3c0a8; box-shadow: none; font: 22px/1 system-ui;
+}
+.fx-toast button:hover { background: #b38d3b20; }
+.fx-success-mark { display: grid; place-items: center; flex-shrink: 0; width: 30px; height: 30px; border: 1px solid #b99b5c66; border-radius: 50%; background: #b9943e14; }
+.fx-success-mark svg { width: 21px; height: 21px; fill: none; stroke: #efd190; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.fx-arrive { animation: fx-arrive 220ms ease-out; }
+.fx-arrive .fx-success-mark path { stroke-dasharray: 26; stroke-dashoffset: 0; animation: fx-check 350ms ease-out; }
+.fx-highlight { animation: fx-highlight 750ms ease-out; }
+.fx-credit-delta { position: fixed; z-index: 110; pointer-events: none; color: #f4d281; text-shadow: 0 2px 8px #000; font: 700 18px/1.5 system-ui; white-space: nowrap; animation: fx-credit 950ms ease-out forwards; }
+button.fx-busy { display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: progress; }
+.fx-button-spinner { display: inline-block; flex-shrink: 0; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: fx-spin 750ms linear infinite; }
+.fx-departure { position: fixed !important; z-index: 25; margin: 0 !important; pointer-events: none !important; contain: paint; overflow: hidden; border-radius: 8px; background: #292020; animation: fx-depart 320ms ease-out forwards; }
+.fx-timer-note { display: block; margin-top: 8px; color: #d5bd89; font: 12px/1.4 system-ui; }
+#contadorBloco { scroll-margin-top: 100px; }
+#wishList .fx-wish-bought .wish-product-link { text-decoration: none; background-image: linear-gradient(currentColor,currentColor); background-position: left center; background-repeat: no-repeat; animation: fx-strike 650ms ease-out forwards; }
+#privilegeSeal, #walletBalanceCard, #simuladorTitulo span, .bonus-inner-glow { transition: color 250ms ease, border-color 250ms ease, background-color 250ms ease, box-shadow 250ms ease; }
+@keyframes fx-arrive { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fx-check { from { stroke-dashoffset: 26; } to { stroke-dashoffset: 0; } }
+@keyframes fx-highlight { 0%, 25% { outline: 1px solid #d3ad6777; box-shadow: 0 0 14px #d3ad6726; } 100% { outline: 1px solid transparent; box-shadow: 0 0 0 transparent; } }
+@keyframes fx-credit { 0% { opacity: 0; transform: translateY(0); } 20% { opacity: 1; } 100% { opacity: 0; transform: translateY(-32px); } }
+@keyframes fx-spin { to { transform: rotate(360deg); } }
+@keyframes fx-depart { from { opacity: .8; transform: translateX(0); } to { opacity: 0; transform: translateX(12px); } }
+@keyframes fx-strike { from { background-size: 0 1px; } to { background-size: 100% 1px; } }
+@media(max-width: 600px) { .fx-toast { right: 16px; bottom: calc(110px + env(safe-area-inset-bottom)); padding: 13px; } }
+@media(prefers-reduced-motion: reduce) {
+  .fx-arrive, .fx-arrive .fx-success-mark path, .fx-highlight, .fx-button-spinner { animation: none !important; }
+  .fx-highlight { outline: 1px solid #b99b5c66; }
+  #privilegeSeal, #walletBalanceCard, #simuladorTitulo span, .bonus-inner-glow { transition: none !important; }
+}
+
+@media(prefers-reduced-motion: reduce) { .money-glow { display: none !important; animation: none !important; } }

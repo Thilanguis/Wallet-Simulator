@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   seal.onclick = () => {
     bonus.checked = !bonus.checked;
-    bonus.dispatchEvent(new Event('change', { bubbles: true }));
+    bonus.dispatchEvent(new CustomEvent('change', { bubbles: true, detail: { userAction: true } }));
   };
   bonus.addEventListener('change', () => queueMicrotask(privilege));
   window.addEventListener('economy:changed', privilege);

@@ -53,6 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('financeUndo').onclick = () => {
     try {
       const snapshot = WalletStore.snapshot();
+      const wishStateBeforeUndo = JSON.parse(snapshot.simulator.wishlist || '[]');
       const restored = FinanceTools.undo(snapshot.finance, lastChange, snapshot.simulator.wishlist);
       if (restored.wishlist !== undefined) {
         snapshot.simulator.wishlist = restored.wishlist;
@@ -61,7 +62,9 @@ document.addEventListener('DOMContentLoaded', () => {
       lastChange = null; $('financeUndoBar').hidden = true;
       state = restored.finance; render();
       window.dispatchEvent(new Event('finance:changed'));
-      window.dispatchEvent(new Event('wishlist:purchase-undone'));
+      const returnedIds = restored.wishlist === undefined ? [] : JSON.parse(restored.wishlist || '[]').filter(item => !item.bought && wishStateBeforeUndo.some(old => old.id === item.id && old.bought)).map(item => item.id);
+      window.dispatchEvent(new CustomEvent('wishlist:purchase-undone', {detail:{ids:returnedIds}}));
+      UIFeedback.success('Alteração desfeita', 'Os totais foram atualizados.');
       message('Última alteração desfeita. Totais atualizados.');
     } catch (error) { message(error.message, true); }
   };
@@ -163,10 +166,12 @@ document.addEventListener('DOMContentLoaded', () => {
         for (const item of items) {const person=FinancePeople.canonical(item.person);if(!groups.has(person))groups.set(person,[]);groups.get(person).push(item);}
         const cad = p => !FinanceCad.isEnabled() ? '' : '<button type="button" class="note-cad note-cad-detail" data-cad-entry="'+esc(entry.id)+'" data-cad-item="'+esc(p.id)+'" aria-label="Ver detalhes do valor em CAD">'+(p.cadAmount==null?'CAD —':(p.cadEstimated?'≈ ':'')+('CAD '+(p.cadAmount/100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})))+'</button> ';
         const html = [...groups].map(([person,parts]) => {
-          const stores = new Map();for(const item of parts){if(!stores.has(item.store))stores.set(item.store,[]);stores.get(item.store).push(item);}
-          return '<div class="note-purchase-person"><div class="note-purchase-person-heading"><strong>'+esc(person)+'</strong><strong>'+F.format(parts.reduce((n,p)=>n+p.amount,0))+'</strong></div>'+[...stores].map(([store,products])=>'<div class="note-purchase-store"><strong>'+esc(store)+'</strong><ul>'+products.map(p=>'<li><span>'+esc(p.title)+(p.quantity>1?' ×'+p.quantity:'')+'</span><span class="purchase-product-price">'+cad(p)+F.format(p.amount)+' <button type="button" class="note-icon" data-purchase-edit="'+esc(entry.id)+'" data-purchase-item="'+esc(p.id)+'" aria-label="Editar produto '+esc(p.title)+'">✎</button></span></li>').join('')+'</ul></div>').join('')+'</div>';
+          const stores = new Map(), storeNames = new Map();for(const item of parts){const key=F.norm(item.store||'');if(!storeNames.has(key))storeNames.set(key,item.store||'');const name=storeNames.get(key);if(!stores.has(name))stores.set(name,[]);stores.get(name).push(item);}
+          return '<div class="note-purchase-person"><div class="note-purchase-person-heading"><strong>'+esc(person)+'</strong><strong>'+F.format(parts.reduce((n,p)=>n+p.amount,0))+'</strong></div>'+[...stores].map(([store,products])=>'<div class="note-purchase-store"><strong>'+esc(store || 'Sem loja informada')+'</strong><ul>'+products.map(p=>'<li><span>'+esc(p.title)+(p.quantity>1?' ×'+p.quantity:'')+'</span><span class="purchase-product-price">'+cad(p)+F.format(p.amount)+' <button type="button" class="note-icon" data-purchase-edit="'+esc(entry.id)+'" data-purchase-item="'+esc(p.id)+'" aria-label="Editar produto '+esc(p.title)+'">✎</button></span></li>').join('')+'</ul></div>').join('')+'</div>';
         }).join('');
-        return {store:entry.store||'',html:'<div class="note-purchase-breakdown">'+html+'</div>'+(entry.purchaseOriginalNote?'<span class="note-entry-observation">'+esc(entry.purchaseOriginalNote)+'</span>':'')};
+        const contributionFooter = /Contribuições:\s*(R\$\s*[\d.]+,\d{2})\s*\nPago pela (?:Dominadora|Luana):\s*(R\$\s*[\d.]+,\d{2})/.exec(entry.note || '');
+        const payment = contributionFooter ? '<div class="note-purchase-payment"><span>Contribuições · '+esc(contributionFooter[1])+'</span><strong>Pago pela Luana · '+esc(contributionFooter[2])+'</strong></div>' : '';
+        return {store:entry.store||'',html:'<div class="note-purchase-breakdown">'+html+payment+'</div>'+(entry.purchaseOriginalNote?'<span class="note-entry-observation">'+esc(entry.purchaseOriginalNote)+'</span>':'')};
       } catch { /* Keep the original text available if old detail cannot be reconciled. */ }
     }
 
@@ -546,9 +551,11 @@ document.addEventListener('DOMContentLoaded', () => {
   $('entryForm').onsubmit = async (event) => {
     event.preventDefault();
     $('entryFeedback').hidden = true;
+    const release = UIFeedback.busy($('saveEntry'));
+    if (!release) return;
     const editedId = editing;
-    await conversionPending;
     try {
+      await conversionPending;
       const candidate = F.validate({
         category: $('entryCategory').value,
         store: $('entryStore').value,
@@ -579,6 +586,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       resetForm();
       message('Lançamento salvo. Totais atualizados.');
+      UIFeedback.success(editedId ? 'Lançamento atualizado' : 'Gasto registrado', (candidate.store || candidate.description) + ' · ' + F.format(candidate.amount, candidate.currency));
       if (editedId) requestAnimationFrame(() => requestAnimationFrame(() => highlightEditedNote(editedId)));
       $('entryFeedback').className = 'notice';
       $('entryFeedback').textContent = 'Lançamento salvo. Totais atualizados.';
@@ -590,7 +598,7 @@ document.addEventListener('DOMContentLoaded', () => {
       $('entryFeedback').focus({ preventScroll: true });
       $('entryFeedback').scrollIntoView({ block: 'nearest' });
       message(error.message, true);
-    }
+    } finally { release(); }
   };
   let noteHighlightTimer;
   function highlightEditedNote(id) {
@@ -696,7 +704,7 @@ document.addEventListener('DOMContentLoaded', () => {
         refreshFinance();
         window.dispatchEvent(new Event('finance:changed'));
         document.querySelector('[data-panel="wishlistPanel"]').click();
-        window.dispatchEvent(new Event('wishlist:purchase-undone'));
+        window.dispatchEvent(new CustomEvent('wishlist:purchase-undone', { detail: { ids: wishes.filter(item => item.purchaseNoteId === id).map(item => item.id) } }));
         return;
       }
       if (button.hasAttribute('data-note-edit'))

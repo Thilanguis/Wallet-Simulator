@@ -36,41 +36,21 @@ function renderTarefasPendentes() {
       label.append(checkbox);
       if (count > 1) label.append(document.createTextNode(` ${part + 1}/${count}`));
       steps.append(label);
-      checkbox.addEventListener('change', function () {
+      checkbox.addEventListener('change', function (event) {
+        if (!WalletStore.isWritable()) { this.checked = !!tarefa.completedParts?.[part]; return; }
         tarefa.completedParts = Array.from({ length: count }, (_, i) => !!tarefa.completedParts?.[i]);
         tarefa.completedParts[part] = this.checked;
-        AppStorage.setItem('tarefasPendentes', JSON.stringify(tarefasPendentes));
-        updateCompletion();
-        div.classList.remove('task-step-feedback');
-        void div.offsetWidth;
-        div.classList.add('task-step-feedback');
-        if (tarefa.completedParts.every(Boolean)) {
-          steps.querySelectorAll('input').forEach((input) => {
-            input.disabled = true;
-          });
-          // 1. INICIA A ANIMAÇÃO CSS (A classe 'tarefa-concluida' começa o desaparecimento)
-          div.classList.add('tarefa-concluida');
-
-          // 2. CRONÔMETRO: Espera 850ms (tempo da animação) para fazer a remoção de fato
-          setTimeout(() => {
-            if (!WalletStore.isWritable()) return;
-            // --- ESTA PARTE É EXECUTADA SÓ DEPOIS DA ANIMAÇÃO ---
-
-            // Remove a tarefa do array de dados (tarefasPendentes)
-            const index = tarefasPendentes.findIndex((t) => t.id === tarefa.id);
-            if (index < 0) return;
-            tarefasPendentes.splice(index, 1);
-
-            // Salva a lista atualizada no navegador
-            AppStorage.setItem('tarefasPendentes', JSON.stringify(tarefasPendentes));
-
-            // Remove o elemento DIV da tela
-            div.remove();
-
-            // Atualiza o display (para mostrar 'Nenhuma tarefa' se a lista estiver vazia)
-            renderTarefasPendentes();
-          }, 850); // O tempo do cronômetro
+        const complete = tarefa.completedParts.every(Boolean);
+        if (complete) {
+          const index = tarefasPendentes.findIndex(t => t.id === tarefa.id);
+          if (index < 0) return;
+          tarefasPendentes.splice(index, 1);
         }
+        AppStorage.setItem('tarefasPendentes', JSON.stringify(tarefasPendentes));
+        AppStorage.flush();
+        updateCompletion();
+        if (this.checked && !event.detail?.restored) UIFeedback.task(tarefa.tarefa, completed(), count, complete, div);
+        if (complete) renderTarefasPendentes();
       });
     }
 
@@ -95,7 +75,7 @@ function renderTarefasPendentes() {
     tarefasContainer.appendChild(div);
     if (WalletStore.isWritable() && completed() === count) {
       // Finish a completion whose animation was interrupted by a controller handoff.
-      setTimeout(() => steps.querySelector('input')?.dispatchEvent(new Event('change')), 0);
+      setTimeout(() => steps.querySelector('input')?.dispatchEvent(new CustomEvent('change', {detail:{restored:true}})), 0);
     }
   });
 }

@@ -588,6 +588,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (adicionarBtn) {
     adicionarBtn.addEventListener('click', async () => {
+      const release = UIFeedback.busy(adicionarBtn);
+      if (!release) return;
+      try {
       const tipo = (tipoTransacaoSelect && tipoTransacaoSelect.value) || 'gasto';
       let valor, tarefa, descricao;
 
@@ -643,6 +646,8 @@ document.addEventListener('DOMContentLoaded', () => {
           } catch {}
 
           if (selectTarefaSelect) selectTarefaSelect.value = '';
+          AppStorage.flush();
+          UIFeedback.wallet('purchase', catalogItem.label, valor, originalCost);
           return;
         }
 
@@ -681,6 +686,8 @@ document.addEventListener('DOMContentLoaded', () => {
           adicionarHistorico(`Redução cronometrada (−${horasReducao}h em ${Math.round(duracaoMs / 1000)}s)`, valor, 'gasto');
           atualizarTarefasLimitadasUI();
           atualizarBloqueiosNoSelectTarefa();
+          AppStorage.flush();
+          UIFeedback.wallet('purchase', catalogItem.label, valor, originalCost);
           return;
         }
 
@@ -735,6 +742,8 @@ document.addEventListener('DOMContentLoaded', () => {
             aplicarBonusDeTarefaDuranteTimer(valor, tarefa);
           } catch {}
         }
+        AppStorage.flush();
+        UIFeedback.wallet('purchase', catalogItem.label, valorFinal, valorOriginal);
       } else {
         // ===== GANHO =====
         const ganhoSelecionado = (selectGanhoSelect && selectGanhoSelect.value) || '';
@@ -780,13 +789,10 @@ document.addEventListener('DOMContentLoaded', () => {
           } catch {}
         }
 
-        if (typeof RainMoney !== 'undefined') {
-          try {
-            const rainBurst = new RainMoney('💵', 'low');
-            rainBurst.startBurningEffect(3000, '🔥', 2000);
-          } catch {}
-        }
+        AppStorage.flush();
+        UIFeedback.wallet('gain', tarefa, valorFinal);
       }
+      } finally { release(); }
     });
   }
 
@@ -824,6 +830,7 @@ document.addEventListener('DOMContentLoaded', () => {
           timerInterval = null;
           btnPlayPause.textContent = '▶️ Continuar';
           persistTimer();
+          UIFeedback.timer('Cronômetro pausado');
           if (typeof releaseWakeLock === 'function') releaseWakeLock();
           return;
         }
@@ -838,6 +845,7 @@ document.addEventListener('DOMContentLoaded', () => {
         persistTimer();
 
         btnPlayPause.textContent = '⏸️ Pausar';
+        UIFeedback.timer(tempoSegundos ? 'Cronômetro retomado' : 'Cronômetro iniciado');
       } catch (e) {
         console.error('Erro no timer:', e);
       }
@@ -892,6 +900,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (typeof atualizarDisplay === 'function') atualizarDisplay();
         btnPlayPause.textContent = '▶️ Começar';
         window.dispatchEvent(new CustomEvent('timer:settled', { detail: { amount: valorCredito } }));
+        if (valorCredito > 0) UIFeedback.wallet('gain', 'Ganho por tempo', valorCredito);
+        else UIFeedback.timer('Sessão encerrada');
       } catch (e) {
         console.error('Erro ao finalizar timer:', e);
       }

@@ -43,6 +43,7 @@ function renderDynamicCombo() {
       sessionHasEligibleTask = activeDynamicCount() > 0;
       persistTimer();
       renderDynamicCombo();
+      UIFeedback.timer('Atividade encerrada no combo');
     };
     area.append(chip);
   }
@@ -82,10 +83,12 @@ function aplicarBonusDeTarefaDuranteTimer(value, name) {
   if (!timerEmSessao) return;
   syncTimer();
   if (ELIGIBLE_TASKS.has(String(name).trim())) {
+    const newActivity = !sessionDynamicActivities.has(String(name).trim());
     sessionDynamicActivities.add(String(name).trim());
     legacyDynamicActivity = false;
     sessionHasEligibleTask = true;
     renderDynamicCombo();
+    if (newActivity) UIFeedback.timer('Nova atividade no combo · ' + activeDynamicCount() + ' ativa(s)');
   }
   contadorTarefasTimer++;
   const settings = getEconomy();

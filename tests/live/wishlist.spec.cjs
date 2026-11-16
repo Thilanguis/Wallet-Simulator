@@ -205,12 +205,12 @@ test('groups wishes from multiple people in one dated expense with contributions
   expect(entry.note).toMatch(/Dominadora · R\$\s*120,00[\s\S]*Colar ×2[\s\S]*Ana · R\$\s*45,00 · contribuição R\$\s*20,00[\s\S]*Bolsa ×3[\s\S]*Bruna · R\$\s*30,00 · contribuição R\$\s*10,00/);
   expect(await page.evaluate(() => JSON.parse(AppStorage.getItem('wishlist')).map((item) => item.purchaseNoteId))).toEqual([entry.id, entry.id, entry.id]);
   await page.locator('[data-panel=financePanel]').click();
-  const purchase = page.locator('#groupedFinanceList .notebook-line').filter({ hasText: 'Compra da Dominadora' });
+  const purchase = page.locator('#groupedFinanceList .notebook-line').filter({ hasText: 'Compra da Luana' });
   const heading = purchase.locator('.note-entry-featured');
-  await expect(heading.locator('.note-entry-title')).toContainText('Compra da Dominadora');
+  await expect(heading.locator('.note-entry-title')).toContainText('Compra da Luana');
   await expect(heading.locator('.note-entry-amount')).toHaveText(/R\$\s*195,00/);
   await expect(heading.locator('.note-dates time')).toHaveText('18/01/2026');
-  await expect(purchase.locator('.note-purchase-person-heading')).toHaveText([/Dominadora\s*R\$\s*120,00/, /Ana\s*R\$\s*45,00/, /Bruna\s*R\$\s*30,00/]);
+  await expect(purchase.locator('.note-purchase-person-heading')).toHaveText([/Luana\s*R\$\s*120,00/, /Ana\s*R\$\s*45,00/, /Bruna\s*R\$\s*30,00/]);
   const people = purchase.locator('.note-purchase-breakdown > .note-purchase-person');
   await expect(people).toHaveCount(3);
   await expect(people.nth(0).locator('.note-purchase-store > strong')).toHaveText('Shein');
@@ -273,9 +273,9 @@ test('groups wishes from multiple people in one dated expense with contributions
   });
   await page.locator('[data-panel=financePanel]').click();
   await expect(page.locator('.note-purchase-person li').filter({ hasText: 'Produto antigo' })).toContainText('50,00');
-  const sheinPurchase = page.locator('#groupedFinanceList .notebook-line').filter({ hasText: /Shein ✅: R\$\s*50,00/ });
+  const sheinPurchase = page.locator('#groupedFinanceList .notebook-line').filter({ hasText: 'Compra da Luana' });
   await expect(sheinPurchase.locator('.note-purchase-person')).toHaveCount(2);
-  await expect(sheinPurchase.locator('.note-purchase-store')).toHaveCount(0);
+  await expect(sheinPurchase.locator('.note-purchase-store')).toHaveCount(2);
   const mixed = page.locator('#groupedFinanceList .notebook-line').filter({ hasText: 'Compra em várias lojas' });
   const mixedPeople = mixed.locator('.note-purchase-breakdown > .note-purchase-person');
   await expect(mixedPeople.nth(0).locator('.note-purchase-store > strong')).toHaveText(['Shein', 'Pandora']);

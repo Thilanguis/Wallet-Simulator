@@ -1008,6 +1008,8 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   purchaseForm.onsubmit = (event) => {
     event.preventDefault();
+    const release = UIFeedback.busy(purchaseForm.querySelector('button[type=submit]'));
+    if (!release) return;
     try {
       const date = purchaseDate.value;
       if (!Finance.validDate(date) || date > purchaseToday()) throw new Error('Informe a data em que a compra foi realizada.');
@@ -1059,10 +1061,14 @@ document.addEventListener('DOMContentLoaded', () => {
       purchaseSelection.clear();
       purchaseDialog.close();
       $('wishPurchaseFeedback').textContent = 'Compra registrada na Lista de Compras · ' + Finance.format(total);
+      UIFeedback.wishes([...ids]);
       window.dispatchEvent(new Event('wishlist:purchase'));
+      const stores = [...new Set(groups.flatMap(group => group.wishes.map(item => item.store || 'Sem loja')))];
+      const units = groups.reduce((sum, group) => sum + group.wishes.reduce((n, item) => n + quantityOf(item), 0), 0);
+      UIFeedback.success('Compra registrada', (stores.length === 1 ? stores[0] : stores.length + ' lojas') + ' · ' + units + (units === 1 ? ' item · ' : ' itens · ') + Finance.format(total));
     } catch (error) {
       $('wishPurchaseError').textContent = error.message;
-    }
+    } finally { release(); }
   };
   function wishGroupButton(label, accessibleLabel) {
     const button = document.createElement('button');
@@ -1237,6 +1243,7 @@ document.addEventListener('DOMContentLoaded', () => {
       for (const item of items) {
         const row = document.createElement('div');
         row.className = 'wish-row';
+        row.dataset.wishId = item.id;
         const check = document.createElement('input');
         check.type = 'checkbox';
         if (bulk) bulk.bind(item, check);
@@ -1871,12 +1878,16 @@ document.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('finance:changed', render);
   selectStore.addEventListener('change', render);
   hideBought.addEventListener('change', render);
-  window.addEventListener('wishlist:purchase-undone', () => {
+  window.addEventListener('wishlist:purchase-undone', (event) => {
     selectStore.value = '';
     purchaseSelection.clear();
     render();
     const feedback = $('wishPurchaseFeedback');
     feedback.textContent = 'Compra desfeita. Os itens voltaram para a lista de desejos.';
+    if (event.detail?.ids?.length) {
+      UIFeedback.wishes(event.detail.ids, false);
+      UIFeedback.success('Compra desfeita', 'Os itens voltaram para a lista de desejos.');
+    }
     feedback.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
   });
   const incoming = new URL(location.href);
