@@ -121,8 +121,10 @@ window.PurchaseEditor = {
           if (index < 0 || JSON.stringify(old) !== JSON.stringify(updated[index])) throw Error('Um desejo mudou. Abra a compra novamente.');
           updated[index] = { ...updated[index], title: p.title, store: p.store, person: FinancePeople.canonical(old.person || 'Dominadora') === p.person ? (old.person || 'Dominadora') : p.person === 'Luana' ? 'Dominadora' : p.person, personId: undefined, quantity: p.quantity, purchasePaidBrl: p.amount, purchasePaidCad: p.cadAmount, updatedAt: Date.now() };
         }
+        const wishesBefore = now.simulator.wishlist;
         now.simulator.wishlist = JSON.stringify(updated);
         WalletStore.commitBoth(next, now.simulator);
+        FinanceUI.rememberChange(now.finance, next, wishesBefore, now.simulator.wishlist);
         window.dispatchEvent(new Event('wallet:remote'));
         window.dispatchEvent(new Event('finance:changed'));
         dialog.close();

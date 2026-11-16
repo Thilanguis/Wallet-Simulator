@@ -40,7 +40,7 @@ window.FinanceCad = (() => {
           reference.rateDate +
           (reference.method === 'interpolated' ? ' · data interpolada ' + reference.referenceDate : reference.inferredFrom ? ' · data aproximada ' + reference.referenceDate : '') +
           (reference.annualYear ? ' · média anual ' + reference.annualYear : '');
-    return '<small class="note-cad" title="' + escapeHTML(detail) + '">' + (reference.kind === 'original' ? '' : '≈ ') + F.format(reference.amount, 'CAD').replace('CA$', 'CAD') + '</small> ';
+    return '<button type="button" class="note-cad note-cad-detail" data-cad-entry="' + escapeHTML(entry.id) + '" aria-label="Ver detalhes do valor em CAD" title="' + escapeHTML(detail) + '">' + (reference.kind === 'original' ? '' : '≈ ') + F.format(reference.amount, 'CAD').replace('CA$', 'CAD') + '</button> ';
   }
   function totalLabel(entries) {
     if (!enabled) return '';
@@ -237,5 +237,12 @@ window.FinanceCad = (() => {
     }
     return { amount: Math.round(currency === 'CAD' ? amount * row.rate : amount / row.rate), rate: row.rate, rateDate: row.date };
   }
-  return { label, totalLabel, prepare, dateFor, original, fromWishes, referenceFor, convertPair, isEnabled:()=>enabled };
+  function details(entry) {
+    const ref = record(entry);
+    if (!ref) return 'A conversão deste lançamento ainda não está disponível.';
+    const date = value => value ? value.split('-').reverse().join('/') : 'Não informada';
+    if (ref.kind === 'original') return 'Valor original: ' + F.format(ref.amount, 'CAD') + '\nOrigem: ' + (ref.source === 'wishlist' ? 'Lista de desejos' : ref.source === 'purchase-items' ? 'Itens da compra' : 'Informado no cadastro') + '\nRegistrado em reais: ' + F.format(entry.amount) + '\nO valor em CAD foi registrado com a compra; não é uma estimativa pela cotação atual.';
+    return 'Valor estimado: ' + F.format(ref.amount, 'CAD') + '\nValor em reais: ' + F.format(entry.amount) + '\nCotação: 1 CAD = R$ ' + ref.rate.toLocaleString('pt-BR', {maximumFractionDigits:6}) + '\nFonte: ' + (ref.source || 'Não informada') + '\nData da cotação: ' + date(ref.rateDate) + '\nData de referência do gasto: ' + date(ref.referenceDate) + (ref.method === 'interpolated' ? ' (interpolada entre lançamentos)' : ref.inferredFrom ? ' (estimada por lançamentos próximos)' : '') + (ref.annualYear ? '\nFoi usada a média anual de ' + ref.annualYear + '.' : '');
+  }
+  return { details, label, totalLabel, prepare, dateFor, original, fromWishes, referenceFor, convertPair, isEnabled:()=>enabled };
 })();

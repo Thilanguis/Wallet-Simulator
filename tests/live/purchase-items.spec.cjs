@@ -57,4 +57,16 @@ for (const width of [1440, 393])
     await page.waitForTimeout(300);
     await page.screenshot({path:'.local/purchase-editor-'+width+'.png'});
     await page.locator('.purchase-items-editor [data-close]').click();
+    await page.locator('[data-note-ids=buy] [data-cad-item]').first().click();
+    await expect(page.locator('.finance-cad-explanation')).toContainText('Anel');
+    await expect(page.locator('.finance-cad-explanation')).toContainText('25,00');
+    await page.locator('.finance-cad-dialog button').click();
+    await page.locator('#financeUndo').click();
+    const restored = await page.evaluate(() => ({ entry: WalletStore.finance().entries[0], wishes: JSON.parse(AppStorage.getItem('wishlist')) }));
+    expect(restored.entry.amount).toBe(40000);
+    expect(restored.entry.purchaseItems).toBeUndefined();
+    expect(restored.wishes[0].purchasePaidBrl).toBeUndefined();
+    expect(restored.wishes[0].originalPrice).toBe(50);
+    expect(restored.wishes[0].purchaseNoteId).toBe('buy');
+    expect(restored.wishes[0].bought).toBe(true);
   });

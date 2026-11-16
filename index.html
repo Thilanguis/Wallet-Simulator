@@ -346,6 +346,7 @@
                 <label>De<input id="financeFrom" type="date" /></label>
                 <label>Até<input id="financeTo" type="date" /></label>
                 <label>Categoria<select id="financeCategory"></select></label>
+                <label>Pessoa<select id="financePerson"><option value="">Todas as pessoas</option></select></label>
                 <label>Loja<input id="financeStore" placeholder="Todas as lojas" /></label>
                 <label>Situação<select id="financeStatus">
                   <option value="">Todas</option>
@@ -359,6 +360,8 @@
             <details id="financeAdd" class="list-editor"><summary data-finance-jump="entry">＋ Nota / gasto</summary></details>
             <details id="financeImport" class="list-editor"><summary>⇧ Importar</summary><div class="list-import-actions"><button type="button" data-finance-jump="receipt">Comprovante</button><button type="button" data-finance-jump="import">Lista</button></div></details>
           </div>
+          <div id="financeUndoBar" class="finance-undo-bar" hidden role="status"><span>Última alteração registrada.</span><button id="financeUndo" type="button">Desfazer</button></div>
+          <details id="financeDuplicates" class="finance-duplicates" hidden><summary>Possíveis compras duplicadas</summary><div id="financeDuplicateRows"></div><p class="hint">Confira os registros. Nenhum lançamento foi removido ou bloqueado.</p></details>
           <p id="financeSearchResults" class="hint" role="status" hidden></p>
           <details id="financeTimeline" class="finance-timeline">
             <summary>Linha do tempo dos gastos</summary>
@@ -797,6 +800,7 @@
     <script defer src="js/finance-people.js"></script>
     <script defer src="js/purchase-items.js"></script>
     <script defer src="js/finance-cad.js"></script>
+    <script defer src="js/finance-tools.js"></script>
     <script defer src="js/finance-ui.js"></script>
     <script defer src="js/purchase-editor.js"></script>
     <script defer src="js/redemptions.js"></script>

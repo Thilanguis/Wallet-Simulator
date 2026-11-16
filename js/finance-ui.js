@@ -3,6 +3,35 @@ document.addEventListener('DOMContentLoaded', () => {
   const $ = (id) => document.getElementById(id),
     F = Finance,
     esc = escapeHTML;
+  const cadDialog = document.createElement('dialog');
+  cadDialog.className = 'finance-cad-dialog';
+  cadDialog.innerHTML = '<h2>Valor em dólar canadense</h2><p class="finance-cad-explanation"></p><form method="dialog"><button type="submit">Fechar</button></form>';
+  document.body.append(cadDialog);
+  $('financePanel').addEventListener('click', event => {
+    const button = event.target.closest('[data-cad-entry]');
+    if (!button) return;
+    const entry = state.entries.find(e => e.id === button.dataset.cadEntry);
+    if (!entry) return;
+    const itemId = button.dataset.cadItem;
+    const item = itemId ? PurchaseItems.read(entry, JSON.parse(AppStorage.getItem('wishlist') || '[]'), F).find(p => p.id === itemId) : null;
+    cadDialog.querySelector('p').textContent = item ? item.title + '\n' + (item.cadEstimated ? 'Valor estimado: ' : 'Valor original: ') + (item.cadAmount == null ? 'CAD indisponível' : F.format(item.cadAmount, 'CAD')) + '\nValor do produto em reais: ' + F.format(item.amount) + '\n\nReferência da compra:\n' + FinanceCad.details(entry) : FinanceCad.details(entry);
+    cadDialog.showModal();
+  });
+  const duplicateHint = document.createElement('p');
+  duplicateHint.id = 'entryDuplicateHint'; duplicateHint.className = 'notice'; duplicateHint.hidden = true;
+  duplicateHint.setAttribute('role','status');
+  $('entryFeedback').before(duplicateHint);
+  function updateDuplicateHint() {
+    let duplicates = [];
+    try {
+      const candidate = {store:$('entryStore').value, description:$('entryDescription').value, amount:F.cents($('entryAmount').value), date:$('entryDate').value, currency:$('entryCurrency').value};
+      const others = state.entries.filter(e => e.id !== editing);
+      duplicates = FinanceTools.duplicateGroups([...others, {...candidate,id:'draft'}]).find(g=>g.some(e=>e.id==='draft')) || [];
+    } catch {}
+    duplicateHint.hidden = !duplicates.length;
+    duplicateHint.textContent = duplicates.length ? 'Possível duplicata: há outro lançamento com a mesma loja, data e valor. Confira antes de salvar; você pode registrar outra compra.' : '';
+  }
+  for (const id of ['entryStore','entryDescription','entryAmount','entryDate','entryCurrency']) $(id).addEventListener('input',updateDuplicateHint);
   const statusLabels = { paid: 'Gasto registrado ✅', cancelled: 'Cancelado', refunded: 'Reembolsado' };
   const statusLabel = (e) => statusLabels[e.status === 'pending' ? 'paid' : e.status];
   let state;
@@ -12,13 +41,37 @@ document.addEventListener('DOMContentLoaded', () => {
     storageFailure(error);
     return;
   }
+  let lastChange = null;
+  const collapsedGroups = new Set();
+  try { JSON.parse(sessionStorage.getItem('financeCollapsedGroups') || '[]').forEach(name => collapsedGroups.add(name)); } catch {}
+  function rememberChange(before, after, wishesBefore, wishesAfter) {
+    const change = FinanceTools.capture(before, after, wishesBefore, wishesAfter);
+    if (!change) return;
+    lastChange = change;
+    $('financeUndoBar').hidden = !lastChange;
+  }
+  $('financeUndo').onclick = () => {
+    try {
+      const snapshot = WalletStore.snapshot();
+      const restored = FinanceTools.undo(snapshot.finance, lastChange, snapshot.simulator.wishlist);
+      if (restored.wishlist !== undefined) {
+        snapshot.simulator.wishlist = restored.wishlist;
+        WalletStore.commitBoth(restored.finance, snapshot.simulator);
+      } else WalletStore.commitFinance(restored.finance);
+      lastChange = null; $('financeUndoBar').hidden = true;
+      state = restored.finance; render();
+      window.dispatchEvent(new Event('finance:changed'));
+      window.dispatchEvent(new Event('wishlist:purchase-undone'));
+      message('Última alteração desfeita. Totais atualizados.');
+    } catch (error) { message(error.message, true); }
+  };
   let editing = null,
     proposed = null,
     receiptSuggestion = null,
     previewRevision = null;
   const draftKey = 'findom.notes-import-draft';
   const selectedFinance = new Set();
-  const filterFields = ['financeSearch', 'financeFrom', 'financeTo', 'financeCategory', 'financeStore', 'financeStatus'];
+  const filterFields = ['financeSearch', 'financeFrom', 'financeTo', 'financeCategory', 'financePerson', 'financeStore', 'financeStatus'];
   function selectableEntries() {
     return matchingEntries().filter((entry) => !entry.redemptionId);
   }
@@ -67,22 +120,25 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   function save(next) {
     F.validateState(next);
+    const before = WalletStore.finance();
     WalletStore.commitFinance(next);
+    rememberChange(before, next);
     state = next;
     render();
     window.dispatchEvent(new Event('finance:changed'));
   }
-  const filters = () => ({ search: $('financeSearch').value.trim(), from: $('financeFrom').value, to: $('financeTo').value, category: $('financeCategory').value, store: $('financeStore').value.trim(), status: $('financeStatus').value });
-  function matchingEntries({ search, store, ...criteria } = filters()) {
+  const filters = () => ({ search: $('financeSearch').value.trim(), from: $('financeFrom').value, to: $('financeTo').value, category: $('financeCategory').value, person: $('financePerson').value, store: $('financeStore').value.trim(), status: $('financeStatus').value });
+  function matchingEntries({ search, store, person, ...criteria } = filters()) {
     const terms = search ? F.norm(search).split(' ') : [];
     const shop = F.norm(store);
     return F.filtered(state.entries, criteria).filter((entry) => {
+      if (person && !FinancePeople.allocation(entry, peopleRoster()).some(p => p.person === person && p.amount > 0)) return false;
       if (shop && !F.norm(entry.store || '').includes(shop)) {
         const noteStores = entry.source === 'wishlist' ? [...(entry.note || '').matchAll(/ · Loja: ([^\r\n]+?) · R\$/g)] : [];
         if (!noteStores.some(([, name]) => F.norm(name).includes(shop))) return false;
       }
       if (!terms.length) return true;
-      const text = F.norm([entry.description, entry.store, entry.category, entry.note, entry.date, entry.date?.split('-').reverse().join('/'), F.format(entry.amount, entry.currency)].join(' '));
+      const text = F.norm([FinancePeople.allocation(entry, peopleRoster()).map(p => p.person).join(' '), entry.description, entry.store, entry.category, entry.note, entry.date, entry.date?.split('-').reverse().join('/'), F.format(entry.amount, entry.currency)].join(' '));
       return terms.every((term) => text.includes(term));
     });
   }
@@ -105,7 +161,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const items = PurchaseItems.read(entry, JSON.parse(AppStorage.getItem('wishlist') || '[]'), F);
         const groups = new Map();
         for (const item of items) {const person=FinancePeople.canonical(item.person);if(!groups.has(person))groups.set(person,[]);groups.get(person).push(item);}
-        const cad = p => !FinanceCad.isEnabled() ? '' : '<small class="note-cad">'+(p.cadAmount==null?'CAD —':(p.cadEstimated?'≈ ':'')+('CAD '+(p.cadAmount/100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})))+'</small> ';
+        const cad = p => !FinanceCad.isEnabled() ? '' : '<button type="button" class="note-cad note-cad-detail" data-cad-entry="'+esc(entry.id)+'" data-cad-item="'+esc(p.id)+'" aria-label="Ver detalhes do valor em CAD">'+(p.cadAmount==null?'CAD —':(p.cadEstimated?'≈ ':'')+('CAD '+(p.cadAmount/100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})))+'</button> ';
         const html = [...groups].map(([person,parts]) => {
           const stores = new Map();for(const item of parts){if(!stores.has(item.store))stores.set(item.store,[]);stores.get(item.store).push(item);}
           return '<div class="note-purchase-person"><div class="note-purchase-person-heading"><strong>'+esc(person)+'</strong><strong>'+F.format(parts.reduce((n,p)=>n+p.amount,0))+'</strong></div>'+[...stores].map(([store,products])=>'<div class="note-purchase-store"><strong>'+esc(store)+'</strong><ul>'+products.map(p=>'<li><span>'+esc(p.title)+(p.quantity>1?' ×'+p.quantity:'')+'</span><span class="purchase-product-price">'+cad(p)+F.format(p.amount)+' <button type="button" class="note-icon" data-purchase-edit="'+esc(entry.id)+'" data-purchase-item="'+esc(p.id)+'" aria-label="Editar produto '+esc(p.title)+'">✎</button></span></li>').join('')+'</ul></div>').join('')+'</div>';
@@ -186,13 +242,13 @@ document.addEventListener('DOMContentLoaded', () => {
       visibleGroups
         .map(
           (group) =>
-            '<section class="notebook-group" data-note-group="' +
+            '<section class="notebook-group' + (editable && collapsedGroups.has(group.category) ? ' is-collapsed' : '') + '" data-note-group="' +
             esc(group.category) +
-            '"><h3>' +
+            '"><h3>' + (editable ? '<button type="button" class="note-group-toggle" data-group-toggle="' + esc(group.category) + '" aria-expanded="' + !collapsedGroups.has(group.category) + '">' : '<span class="note-group-heading">') + '<span class="note-group-chevron" aria-hidden="true">' + (editable ? collapsedGroups.has(group.category) ? '▸' : '▾' : '') + '</span><span>' +
             group.number +
             '. ' +
             esc(group.title) +
-            '</h3><ul>' +
+            '</span><strong class="note-group-total">' + F.format(group.total) + '</strong>' + (editable ? '</button>' : '</span>') + '</h3><ul>' +
             group.rows
               .map((row) => {
                 const ids = row.entries.map((entry) => entry.id).join(',');
@@ -373,11 +429,24 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   function renderPeople() {
     const totals=FinancePeople.totals(state.entries,peopleRoster());
-    $('financePeopleTotals').innerHTML=totals.map(p=>'<div class="finance-person-total"><span>'+esc(p.person)+'</span><strong>'+F.format(p.amount)+'</strong></div>').join('');
+    const luana = totals.filter(p => p.person === 'Luana');
+    const friends = totals.filter(p => p.person !== 'Luana');
+    const row = p => '<div class="finance-person-total"><span>'+esc(p.person)+'</span><strong>'+F.format(p.amount)+'</strong></div>';
+    $('financePeopleTotals').innerHTML = luana.map(row).join('') +
+      '<div class="finance-friends-total"><span>Amigas juntas</span><strong>'+F.format(friends.reduce((sum, p) => sum + p.amount, 0))+'</strong></div>' +
+      '<div class="finance-friends-list" aria-label="Detalhamento das amigas">'+friends.map(row).join('')+'</div>';
   }
 
   function render() {
+    const selectedPerson = $('financePerson').value;
+    const names = [...new Set([...FinancePeople.names(peopleRoster()), ...FinancePeople.totals(state.entries, peopleRoster()).map(p => p.person)])];
+    $('financePerson').replaceChildren(new Option('Todas as pessoas', ''), ...names.map(name => new Option(name, name)));
+    $('financePerson').value = selectedPerson;
     renderPeople();
+    const duplicateGroups = FinanceTools.duplicateGroups(state.entries);
+    $('financeDuplicates').hidden = !duplicateGroups.length;
+    $('financeDuplicates').querySelector('summary').textContent = 'Possíveis duplicatas · ' + duplicateGroups.length + (duplicateGroups.length === 1 ? ' grupo' : ' grupos');
+    $('financeDuplicateRows').innerHTML = duplicateGroups.map(group => '<div class="finance-duplicate-group"><strong>'+esc(group[0].store || group[0].description)+' · '+F.format(group[0].amount, group[0].currency)+' · '+esc(group[0].date.split('-').reverse().join('/'))+'</strong><ul>'+group.map(e=>'<li><button type="button" data-duplicate-view="'+esc(e.id)+'">'+esc(e.description)+'</button></li>').join('')+'</ul></div>').join('');
     $('financeCadTotal').innerHTML = FinanceCad.totalLabel(state.entries);
     const activeFilters = filters();
     const filtering = Object.values(activeFilters).some(Boolean);
@@ -390,7 +459,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if ($('homeTotal').textContent !== total) $('homeTotal').textContent = total;
     const result = $('financeSearchResults');
     result.hidden = !filtering;
-    result.textContent = entries.length ? entries.length + (entries.length === 1 ? ' lançamento encontrado' : ' lançamentos encontrados') : 'Nenhum lançamento encontrado.';
+    result.textContent = entries.length ? entries.length + (entries.length === 1 ? ' lançamento encontrado' : ' lançamentos encontrados') + (activeFilters.person ? ' · Parte de ' + activeFilters.person + ': ' + F.format(entries.filter(e => e.currency === 'BRL' && !['cancelled','refunded'].includes(e.status)).reduce((sum, e) => sum + FinancePeople.allocation(e, peopleRoster()).filter(p => p.person === activeFilters.person).reduce((n, p) => n + p.amount, 0), 0)) : '') : 'Nenhum lançamento encontrado.';
     $('financeHistory').innerHTML = entries.map(entryHTML).join('') || '<p class="hint">Nenhum lançamento neste período.</p>';
     updateSelection();
     $('shareText').value = FinanceList.text(state.entries);
@@ -417,6 +486,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $('entryCadHint').textContent = '';
     fillPersonAllocations(null);
     $('entryFeedback').hidden = true;
+    duplicateHint.hidden = true;
     $('entryDate').value = today();
     $('entryOrigin').textContent = '';
     $('entryTitle').textContent = 'Novo lançamento';
@@ -439,6 +509,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $('entryCadOriginal').dataset.estimated = String(entry.cadReference?.kind !== 'original');
     fillPersonAllocations(entry);
     editing = edit ? entry.id : null;
+    updateDuplicateHint();
     $('entryTitle').textContent = edit ? 'Editar lançamento' : 'Conferir sugestão do comprovante';
     $('saveEntry').textContent = edit ? 'Confirmar correção' : 'Confirmar e registrar compra';
     $('cancelEdit').hidden = false;
@@ -459,6 +530,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const result = await FinanceCad.convertPair(amount, from, $('entryDate').value);
           if (revision !== conversionRevision) return;
           $(from === 'CAD' ? 'entryAmount' : 'entryCadOriginal').value = decimal(result.amount);
+          updateDuplicateHint();
           $('entryCadOriginal').dataset.estimated = String(from !== 'CAD');
           $('entryCadHint').textContent = '1 CAD ≈ ' + F.format(Math.round(result.rate*100)) + ' · ' + result.rateDate.split('-').reverse().join('/');
           updatePeopleRemainder();
@@ -589,6 +661,16 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   const notebook = $('groupedFinanceList');
   notebook.onclick = async (event) => {
+    const groupToggle = event.target.closest('[data-group-toggle]');
+    if (groupToggle) {
+      const category = groupToggle.dataset.groupToggle;
+      if (collapsedGroups.has(category)) collapsedGroups.delete(category); else collapsedGroups.add(category);
+      try { sessionStorage.setItem('financeCollapsedGroups', JSON.stringify([...collapsedGroups])); } catch {}
+      groupToggle.closest('.notebook-group').classList.toggle('is-collapsed', collapsedGroups.has(category));
+      groupToggle.setAttribute('aria-expanded', String(!collapsedGroups.has(category)));
+      groupToggle.querySelector('.note-group-chevron').textContent = collapsedGroups.has(category) ? '▸' : '▾';
+      return;
+    }
     const row = event.target.closest('[data-note-ids]');
     if (!row) return;
     const button = event.target.closest('button');
@@ -603,12 +685,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const entry = snapshot.finance.entries.find((item) => item.id === id && item.source === 'wishlist');
         const wishes = JSON.parse(snapshot.simulator.wishlist || '[]');
         if (!entry || !wishes.some((item) => item.purchaseNoteId === id)) throw new Error('A compra ou seus itens mudaram. Confira a lista antes de tentar novamente.');
+        const wishesBefore = snapshot.simulator.wishlist;
         const updatedAt = Date.now();
         snapshot.simulator.wishlist = JSON.stringify(wishes.map((item) =>
           item.purchaseNoteId === id ? { ...item, bought: false, purchaseNoteId: undefined, updatedAt } : item,
         ));
         const next = F.update(snapshot.finance, { type: 'delete', id });
         WalletStore.commitBoth(next, snapshot.simulator);
+        rememberChange(snapshot.finance, next, wishesBefore, snapshot.simulator.wishlist);
         refreshFinance();
         window.dispatchEvent(new Event('finance:changed'));
         document.querySelector('[data-panel="wishlistPanel"]').click();
@@ -795,6 +879,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
   filterFields.forEach((id) => $(id).addEventListener('input', render));
+  $('financeDuplicateRows').onclick = event => {
+    const button = event.target.closest('[data-duplicate-view]');
+    if (!button) return;
+    const entry = state.entries.find(e => e.id === button.dataset.duplicateView);
+    if (!entry) return;
+    collapsedGroups.delete(entry.category);
+    filterFields.forEach(id => $(id).value = '');
+    render(); requestAnimationFrame(() => highlightEditedNote(entry.id));
+  };
   $('clearFinanceFilters').onclick = () => {
     filterFields.forEach((id) => ($(id).value = ''));
     render();
@@ -1032,7 +1125,7 @@ document.addEventListener('DOMContentLoaded', () => {
       message(error.message, true);
     }
   };
-  window.FinanceUI = { getState: () => structuredClone(state), save, message, render };
+  window.FinanceUI = { rememberChange, getState: () => structuredClone(state), save, message, render };
   $('whatsappInput').addEventListener('input', () => rememberDraft(false));
   $('importDate').addEventListener('input', () => rememberDraft(false));
   try {
