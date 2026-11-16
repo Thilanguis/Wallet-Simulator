@@ -6,8 +6,9 @@
     <title>Findom</title>
 
     <link rel="manifest" href="manifest.json" />
-    <link rel="icon" type="image/png" href="icon-192.png" />
-    <meta name="theme-color" content="#8b0000" />
+    <link rel="icon" type="image/png" sizes="192x192" href="icons/wallet-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png" />
+    <meta name="theme-color" content="#321c29" />
 
     <link rel="stylesheet" href="css/app.css" />
     <link rel="stylesheet" href="css/bonusAtivoGPT.css" />
@@ -37,10 +38,16 @@
         </div>
       </div>
       <div id="storageWarning" role="alert" hidden></div>
-      <div id="walletConnectionLoader" class="wallet-connection-loader" role="status" aria-live="polite">
-        <span class="connection-emblem" aria-hidden="true">♛</span>
-        <span>Conectando à sua carteira…</span>
-        <span class="connection-track" aria-hidden="true"></span>
+      <div id="walletConnectionLoader" class="wallet-connection-loader" role="status" aria-live="polite" aria-atomic="true">
+        <div class="connection-mark" aria-hidden="true">
+          <span class="connection-spinner"></span>
+          <img src="icons/wallet.svg" width="80" height="80" alt="" />
+        </div>
+        <div class="connection-copy">
+          <strong>Preparando sua carteira</strong>
+          <span id="walletConnectionStage">Conectando com segurança…</span>
+        </div>
+        <span class="connection-caption">Seu saldo, seus desejos, tudo em um só lugar.</span>
       </div>
       <section id="firebaseAuthPanel" class="section firebase-auth-panel" aria-labelledby="firebaseAuthTitle">
         <h2 id="firebaseAuthTitle">Entrar na carteira</h2>

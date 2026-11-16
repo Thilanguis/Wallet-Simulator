@@ -13,11 +13,29 @@ test('production build precaches the offline shell and ships OCR assets on deman
   const assets = JSON.parse(worker.match(/const ASSETS\s*=\s*(\[[\s\S]*?\]);/)[1]);
   assert.ok(assets.includes('index.html'));
   for (const match of html.matchAll(/(?:src|href)="((?:js|css)\/[^"]+)"/g)) assert.ok(assets.includes(match[1]), match[1] + ' missing from offline cache');
-  assert.ok(assets.every((asset) => !asset.startsWith('vendor/')), 'optional vendor assets must stay out of the initial cache');
+  assert.ok(
+    assets.every((asset) => !asset.startsWith('vendor/')),
+    'optional vendor assets must stay out of the initial cache',
+  );
   for (const asset of ['vendor/lang/por.traineddata.gz', 'vendor/lang/eng.traineddata.gz', 'vendor/pdf/pdf.mjs', 'vendor/pdf/pdf.worker.mjs', 'vendor/tesseract/worker.min.js']) {
     assert.ok(fs.existsSync(path.join(root, 'dist', asset)), 'missing on-demand asset ' + asset);
   }
   for (const asset of assets) assert.ok(fs.existsSync(path.join(root, 'dist', asset)), 'missing asset ' + asset);
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, 'dist/manifest.json'), 'utf8'));
+  assert.equal(manifest.name, 'Findom Wallet');
+  assert.ok(manifest.icons.some((icon) => icon.purpose === 'maskable'));
+  for (const icon of manifest.icons) {
+    assert.ok(assets.includes(icon.src), 'installed icon missing from offline cache');
+    const png = fs.readFileSync(path.join(root, 'dist', icon.src));
+    assert.equal(png.subarray(1, 4).toString(), 'PNG');
+    assert.equal(png.readUInt32BE(16) + 'x' + png.readUInt32BE(20), icon.sizes, 'declared and actual icon sizes differ');
+  }
+  assert.ok(html.includes('icons/apple-touch-icon.png'));
+  assert.ok(assets.includes('icons/apple-touch-icon.png'));
+  assert.ok(assets.includes('icons/wallet.svg'));
+  const legacy = fs.readFileSync(path.join(root, 'dist/icon-192.png'));
+  assert.equal(legacy.readUInt32BE(16), 192);
+  assert.equal(legacy.readUInt32BE(20), 192);
 });
 
 test('public Pages build excludes the local Firebase config and includes the existing-project bootstrap', () => {

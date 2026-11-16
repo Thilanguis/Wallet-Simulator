@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="background" x1="64" y1="0" x2="448" y2="512" gradientUnits="userSpaceOnUse"><stop stop-color="#3c2035"/><stop offset="1" stop-color="#191316"/></linearGradient>
+    <linearGradient id="gold" x1="180" y1="110" x2="358" y2="378" gradientUnits="userSpaceOnUse"><stop stop-color="#f3deaa"/><stop offset="1" stop-color="#b78c49"/></linearGradient>
+    <linearGradient id="leather" x1="132" y1="220" x2="380" y2="378" gradientUnits="userSpaceOnUse"><stop stop-color="#542538"/><stop offset="1" stop-color="#301b28"/></linearGradient>
+  </defs>
+  <path fill="url(#background)" d="M0 0h512v512H0z"/>
+  <rect x="52" y="52" width="408" height="408" rx="106" stroke="#d6b875" stroke-opacity=".16" stroke-width="2"/>
+  <path d="m190 180-10-54 47 27 29-46 29 46 47-27-10 54z" fill="url(#gold)"/>
+  <path d="M144 220v-18a24 24 0 0 1 24-24h170a20 20 0 0 1 20 20v22" stroke="url(#gold)" stroke-width="12" stroke-linecap="round"/>
+  <rect x="126" y="218" width="260" height="160" rx="28" fill="url(#leather)" stroke="url(#gold)" stroke-width="12"/>
+  <path d="M342 270h48v58h-48a29 29 0 0 1 0-58Z" fill="url(#gold)"/>
+  <circle cx="354" cy="299" r="8" fill="#38202c"/>
+  <path d="M158 345h57" stroke="#dab97c" stroke-opacity=".55" stroke-width="5" stroke-linecap="round"/>
+</svg>

@@ -5,7 +5,7 @@ const root = path.resolve(__dirname, '..'),
   dest = path.join(root, 'dist');
 fs.mkdirSync(dest, { recursive: true });
 const { copy, prepareAssets } = require('./local-assets.cjs');
-for (const name of ['index.html', 'manifest.json', 'css', 'js', 'icon-192.png', 'icon-512.jpg', '💎 Contrato de Submissão e Resgate de Saldo.pdf']) copy(path.join(root, name), path.join(dest, name));
+for (const name of ['index.html', 'manifest.json', 'css', 'js', 'icons', 'icon-192.png', 'icon-512.jpg', '💎 Contrato de Submissão e Resgate de Saldo.pdf']) copy(path.join(root, name), path.join(dest, name));
 prepareAssets(root, dest);
 const publicBuild = process.argv.includes('--public');
 const localConfig = path.join(dest, 'firebaseConfiguration.js');

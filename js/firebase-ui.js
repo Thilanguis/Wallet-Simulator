@@ -57,6 +57,12 @@ document.addEventListener('DOMContentLoaded', () => {
       ready: 'Carregando a carteira existente…',
     };
     const text = descriptions[mode] || descriptions.connecting;
+    const loadingStages = {
+      connecting: 'Conferindo acesso à carteira…',
+      receiving: 'Recebendo seus dados…',
+      ready: 'Abrindo sua carteira…',
+    };
+    if (loadingStages[mode]) $('walletConnectionStage').textContent = loadingStages[mode];
     $('cloudStatusText').textContent = text;
     $('cloudSettingsStatus').textContent = text;
     $('cloudStatusBar').hidden = !currentUser;

@@ -3085,48 +3085,43 @@ body:not(.firebase-required) #firebaseAuthPanel {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 20px;
-  padding: 64px 20px;
-  margin: 24px auto;
-  max-width: 420px;
-  color: #c6b994;
-  font: 13px/1.5 system-ui;
+  gap: 24px;
+  width: min(100%, 400px);
+  margin: 32px auto;
+  padding: 36px 24px 28px;
+  border: 1px solid #74583d66;
+  border-radius: 20px;
+  background: radial-gradient(ellipse at 50% 0, #64314a33, transparent 65%), #1d181bcc;
+  box-shadow: 0 16px 48px #0003;
+  text-align: center;
+  color: #d7c6a4;
+  font: 13px/1.6 system-ui;
 }
-.connection-emblem {
+.connection-mark {
+  position: relative;
   display: grid;
   place-items: center;
-  width: 64px;
-  height: 64px;
-  border: 1px solid #8d7343;
+  width: 108px;
+  height: 108px;
+}
+.connection-mark img { display: block; border-radius: 22px; box-shadow: 0 8px 24px #0004; }
+.connection-spinner {
+  position: absolute;
+  inset: 0;
+  border: 2px solid #d6b87520;
+  border-top-color: #e7ca8b;
+  border-right-color: #b78c4980;
   border-radius: 50%;
-  color: #d7b66a;
-  font-size: 32px;
-  background: radial-gradient(circle, #b9923820, transparent 70%);
-  box-shadow: 0 0 0 7px #c6a55708;
+  animation: wallet-connection-spin 1.2s linear infinite;
 }
-.connection-track {
-  width: 150px;
-  height: 2px;
-  overflow: hidden;
-  background: #b8974930;
-}
-.connection-track::after {
-  content: '';
-  display: block;
-  width: 45%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, #d7b66a, transparent);
-  animation: wallet-connection-progress 1.5s ease-in-out infinite;
-}
-.firebase-checking footer {
-  visibility: hidden;
-}
-@keyframes wallet-connection-progress {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(325%); }
-}
+.connection-copy { display: flex; flex-direction: column; gap: 6px; }
+.connection-copy strong { color: #eddbb6; font-size: 18px; font-weight: 600; }
+.connection-copy > span { color: #c5b4bd; }
+.connection-caption { max-width: 260px; color: #9f9399; font-size: 12px; }
+.firebase-checking footer { visibility: hidden; }
+@keyframes wallet-connection-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
-  .connection-track::after { animation: none; width: 100%; }
+  .connection-spinner { animation: none; border-color: #b99a6066; border-top-color: #e7ca8b; }
 }
 .firebase-required .app-nav,
 .firebase-required .app-panel,
