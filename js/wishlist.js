@@ -726,6 +726,8 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       await navigator.clipboard.writeText(preview.value);
       $('wishShareStatus').textContent = 'Mensagem copiada.';
+      UIFeedback.pulse($('wishShareCopy'));
+      UIFeedback.pulse($('wishShareStatus'));
     } catch {
       preview.focus();
       preview.select();
@@ -1402,9 +1404,13 @@ document.addEventListener('DOMContentLoaded', () => {
     reset();
     $('wishEditor').open = false;
     message(additions.length + ' produtos adicionados.');
+    UIFeedback.wishes(additions.map(item => item.id), false);
+    UIFeedback.success('Desejos adicionados', additions.length + ' produtos na sua lista.');
   }
   $('wishForm').onsubmit = (event) => {
     event.preventDefault();
+    const release = UIFeedback.busy($('wishSave'), 'Salvando…');
+    if (!release) return;
     $('wishSaveError').textContent = '';
     try {
       if (!WalletStore.isWritable()) throw new Error('Aguarde a conexão com a carteira para salvar o desejo.');
@@ -1446,13 +1452,16 @@ document.addEventListener('DOMContentLoaded', () => {
       const next = { bought: false, ...previous, ...changes, id: editing || crypto.randomUUID(), updatedAt: Date.now() };
       const nextRows = editing ? list.map((x) => (x.id === editing ? next : x)) : [...list, next];
       save(nextRows, registered);
+      const updated = !!editing;
       reset();
       $('wishEditor').open = false;
+      UIFeedback.wishes([next.id], false);
+      UIFeedback.success(updated ? 'Desejo atualizado' : 'Desejo adicionado', next.title);
     } catch (error) {
       $('wishSaveError').textContent = error?.name === 'QuotaExceededError'
         ? 'O navegador atingiu o limite real de armazenamento. Tente adicionar este produto por link, sem foto embutida.'
         : error.message;
-    }
+    } finally { release(); }
   };
   function drawWishPhoto(bitmap, max, crop = { x: 0, y: 0, w: 1, h: 1 }, maxScale = 1, padding = 0) {
     const width = bitmap.naturalWidth ?? bitmap.width;

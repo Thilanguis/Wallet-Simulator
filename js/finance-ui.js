@@ -904,6 +904,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       await navigator.clipboard.writeText($('shareText').value);
       message('Resumo copiado. Escolha a conversa no WhatsApp.');
+      UIFeedback.pulse($('copySummary'));
     } catch {
       $('shareText').select();
       message('Selecione e copie o resumo acima.');

@@ -18,7 +18,7 @@ window.UIFeedback = (() => {
   function busy(button, label = 'Registrando…') {
     if (!button || locks.has(button)) return null;
     dismiss();
-    const children = [...button.childNodes],
+    const children = [...button.childNodes].filter((node) => !node.classList?.contains('motion-ripple')),
       disabled = button.disabled,
       aria = button.getAttribute('aria-busy');
     locks.set(button, true);

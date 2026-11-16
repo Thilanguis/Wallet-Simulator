@@ -62,7 +62,7 @@
     // Se quiser, ativa também partículas no fundo global:
     // intervalGlobal = setInterval(spawnGlobalGlow, 420);
 
-    if (!matchMedia('(prefers-reduced-motion: reduce)').matches) intervalBlocks = setInterval(spawnBlockGlow, 520);
+    if (!document.hidden && !matchMedia('(prefers-reduced-motion: reduce)').matches) intervalBlocks = setInterval(spawnBlockGlow, 520);
   }
 
   function stopGlowEffect() {
@@ -129,6 +129,12 @@
       handleToggle();
     });
 
+    // Pause decorative work without changing the stored bonus or its gold appearance.
+    const motion = matchMedia('(prefers-reduced-motion: reduce)');
+    function refreshGlowMotion() { stopGlowEffect(); if (checkbox.checked) startGlowEffect(); }
+    motion.addEventListener('change', refreshGlowMotion);
+    document.addEventListener('visibilitychange', refreshGlowMotion);
+    window.addEventListener('pageshow', refreshGlowMotion);
     // Limpa quando sai da página
     window.addEventListener('pagehide', stopGlowEffect, { once: true });
   }

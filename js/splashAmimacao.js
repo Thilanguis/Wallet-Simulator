@@ -5,7 +5,16 @@ const letras = titulo.textContent.split('');
 // Envolvendo cada letra em um span
 titulo.innerHTML = letras.map((l) => `<span>${l}</span>`).join('');
 
+const titleMotion = matchMedia('(prefers-reduced-motion: reduce)');
+let titleFlickerTimeout = null;
+function pauseTitleMotion() {
+  clearTimeout(titleFlickerTimeout); titleFlickerTimeout = null;
+  titulo.querySelectorAll('.spark').forEach(spark => spark.remove());
+  titulo.querySelectorAll('span').forEach(span => { span.style.opacity = '1'; });
+}
 function flickerAndSpark() {
+  clearTimeout(titleFlickerTimeout); titleFlickerTimeout = null;
+  if (document.hidden || titleMotion.matches) return;
   const spans = titulo.querySelectorAll('span');
   const chance = 0.07; // 7% de chance por ciclo de falha
   spans.forEach((span) => {
@@ -45,7 +54,7 @@ function flickerAndSpark() {
     }
   });
 
-  setTimeout(flickerAndSpark, 400 + Math.random() * 600);
+  titleFlickerTimeout = setTimeout(flickerAndSpark, 400 + Math.random() * 600);
 }
 
 const bonusCheckbox = document.getElementById('bonusEspecialCheckbox');
@@ -80,5 +89,10 @@ bonusCheckbox.addEventListener('change', updateTituloColor);
 // Inicializa no estado atual do checkbox
 updateTituloColor();
 
+function resumeTitleMotion() { pauseTitleMotion(); flickerAndSpark(); }
+titleMotion.addEventListener('change', resumeTitleMotion);
+document.addEventListener('visibilitychange', resumeTitleMotion);
+window.addEventListener('pagehide', pauseTitleMotion);
+window.addEventListener('pageshow', resumeTitleMotion);
 // Inicia efeito
 flickerAndSpark();

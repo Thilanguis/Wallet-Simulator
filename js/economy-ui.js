@@ -135,6 +135,7 @@ document.addEventListener('DOMContentLoaded', () => {
       render();
       feedback.className = 'notice';
       feedback.textContent = 'Catálogo salvo. Valores e novas opções já estão disponíveis.';
+      UIFeedback.success('Catálogo atualizado', 'Suas alterações foram aplicadas.');
     } catch (error) {
       feedback.className = 'notice error';
       feedback.textContent = error instanceof SyntaxError ? 'JSON inválido: confira vírgulas, aspas e colchetes. ' + error.message : error.message;

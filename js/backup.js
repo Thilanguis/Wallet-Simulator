@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       $('backupMessage').textContent = 'Backup exportado. Guarde o arquivo em local privado.';
+      UIFeedback.success('Backup preparado', 'Arquivo JSON pronto para download.');
     } catch (error) {
       $('backupMessage').textContent = error.message;
     }

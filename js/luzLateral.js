@@ -3,6 +3,7 @@
   const IS_MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const DPR_MAX = 2;
   const compactScreen = matchMedia('(max-width: 760px)');
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
   // Aparência (igual à versão que você gostou)
   const EDGE_WIDTH_PX = IS_MOBILE ? 28 : 42;
@@ -223,7 +224,7 @@
   // API pública
   const EdgeFire = {
     enable() {
-      if (running) return;
+      if (running || compactScreen.matches || reducedMotion.matches) return;
       ensureCanvas();
       running = true;
       last = 0;
@@ -251,6 +252,10 @@
   // expõe
   compactScreen.addEventListener('change', () => {
     if (compactScreen.matches) EdgeFire.disable();
+    else if (document.getElementById('bonusEspecialCheckbox')?.checked) EdgeFire.enable();
+  });
+  reducedMotion.addEventListener('change', () => {
+    if (reducedMotion.matches) EdgeFire.disable();
     else if (document.getElementById('bonusEspecialCheckbox')?.checked) EdgeFire.enable();
   });
   global.EdgeFire = EdgeFire;

@@ -3971,3 +3971,33 @@ button.fx-busy { display: inline-flex; align-items: center; justify-content: cen
 }
 
 @media(prefers-reduced-motion: reduce) { .money-glow { display: none !important; animation: none !important; } }
+
+/* Financial-app inspired motion, retaining the Wallet wine and gold palette. */
+:root { --motion-ease: cubic-bezier(.2,.8,.2,1); }
+.app-nav { isolation: isolate; }
+.motion-nav-indicator {
+  position: absolute; inset: 0 auto auto 0; z-index: 2; pointer-events: none;
+  border: 0; border-radius: 10px;
+  box-shadow: inset 0 -2px 0 #d8b05e;
+  transition: transform 260ms var(--motion-ease), width 260ms var(--motion-ease), height 260ms var(--motion-ease);
+}
+.motion-surface { overflow: hidden; isolation: isolate; }
+.motion-static { position: relative; }
+button, summary { transition: transform 140ms var(--motion-ease), background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease; }
+.motion-pressed:not(:disabled) { transform: scale(.975) !important; }
+.motion-ripple { position: absolute; border-radius: 50%; background: #e9ca8e; pointer-events: none; z-index: 3; opacity: 0; }
+.motion-value { display: inline-block; }
+.app-nav .nav-glyph { transition: transform 220ms var(--motion-ease), stroke 180ms ease; }
+.app-nav button[aria-pressed='true'] .nav-glyph { transform: translateY(-1px); }
+#contadorBloco progress::-webkit-progress-value, .limit-progress::-webkit-progress-value { transition: width 360ms ease; }
+@media(min-width: 601px) { .app-nav { position: relative; } }
+@media(hover:hover) and (pointer:fine) {
+  .quick-nav button:hover, #privilegeSeal:hover { transform: translateY(-2px); }
+}
+@media(prefers-reduced-motion: reduce) {
+  button, summary, .motion-nav-indicator, .app-nav .nav-glyph { transition: none !important; }
+  .motion-pressed:not(:disabled), .app-nav button[aria-pressed='true'] .nav-glyph { transform: none !important; }
+  .quick-nav button:hover, #privilegeSeal:hover { transform: none !important; }
+  .motion-ripple { display: none; }
+  .limit-progress::-webkit-progress-value { transition: none; }
+}

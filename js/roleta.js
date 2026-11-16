@@ -478,13 +478,15 @@
     const rotFinal = rotacaoAtual + voltas + (OFFSET - anguloDoSetor);
     rotacaoAtual = rotFinal;
 
-    // ponteiro balança forte no começo
-    pointer.style.animation = 'ponteiro-wiggle-forte .12s infinite';
+    const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const spinDuration = reducedMotion ? 0 : 5500;
+    // The draw and reward are unchanged; reduced motion skips the decorative spin.
+    pointer.style.animation = reducedMotion ? 'none' : 'ponteiro-wiggle-forte .12s infinite';
 
-    wheel.style.transition = 'transform 5.5s cubic-bezier(.12,1,.22,1)';
+    wheel.style.transition = reducedMotion ? 'none' : 'transform 5.5s cubic-bezier(.12,1,.22,1)';
     wheel.style.transform = `rotate(${rotFinal}deg)`;
 
-    const pregosInterval = iniciarTicsDuranteGiro(wheel);
+    const pregosInterval = reducedMotion ? null : iniciarTicsDuranteGiro(wheel);
 
     // Sorteia um índice de setor baseado nos pesos (chances)
     function sortearIndicePorPeso() {
@@ -492,7 +494,7 @@
     }
 
     // perto do fim, troca pra um balanço bem mais suave
-    setTimeout(() => {
+    if (!reducedMotion) setTimeout(() => {
       pointer.style.animation = 'ponteiro-wiggle-suave .18s infinite';
     }, 3500);
 
@@ -519,7 +521,7 @@
         overlay.remove();
         if (onFinish) onFinish();
       }, 7000);
-    }, 5500);
+    }, spinDuration);
   }
 
   // ====================================================================
