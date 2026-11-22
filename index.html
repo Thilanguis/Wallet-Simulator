@@ -525,6 +525,8 @@
             <label>Fotos ou prints dos produtos<input id="wishUpload" type="file" accept="image/jpeg,image/png,image/webp,image/bmp" multiple /></label>
             <input id="wishFileUpload" type="file" multiple hidden />
             <button id="wishBrowseFiles" type="button" class="wish-share-button">Procurar em Arquivos</button>
+            <button id="wishRetryPhoto" type="button" class="wish-share-button" hidden>Tentar ler texto novamente</button>
+            <button id="wishAddPhotoRow" type="button" class="wish-share-button" hidden>Adicionar outra linha com esta foto</button>
             <button id="wishRemovePhoto" type="button" class="wish-share-button" hidden>Remover foto</button>
           </div>
           <p class="hint">Também dá para colar um print ou arrastar fotos para o formulário.</p>
@@ -552,7 +554,7 @@
           <p id="wishConversion" class="hint" role="status"></p>
           <div id="wishBatch" hidden>
             <p class="hint">Confira cada produto e selecione os que quer adicionar. A pessoa escolhida vale para o lote.</p>
-            <div id="wishBatchRows" class="scroll-area"></div>
+            <div id="wishBatchRows"></div>
           </div>
           <p id="wishSaveError" class="hint" role="alert"></p>
           <div class="btn-row"><button type="submit" id="wishSave">Adicionar desejo</button><button type="button" id="wishCancel" class="subtle-btn" hidden>Cancelar edição</button></div>
@@ -825,6 +827,8 @@
     <script defer src="js/firebase-primary-model.js"></script>
     <script defer src="js/firebase-ui.js"></script>
     <script defer src="js/wishlist-product.js"></script>
+    <script defer src="js/wishlist-photo-list.js"></script>
+    <script defer src="js/wishlist-photo-ink.js"></script>
     <script defer src="js/wishlist-fx.js"></script>
     <script defer src="js/wishlist.js"></script>
     <script defer src="js/list-popovers.js"></script>

@@ -3041,7 +3041,8 @@ body:not(.firebase-required) #firebaseAuthPanel {
 @keyframes wish-photo-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .wish-photo-spinner { animation: none; } }
 #wishForm .hint:empty, #entryOrigin:empty { display: none; }
-#wishForm input[aria-invalid="true"] { border-color: #ff92a8; outline: 1px solid #ff92a8; }
+#wishForm:has(#wishBatch:not([hidden])) #wishPhotoMessage { color: #f2c8d9; font-weight: 700; }
+#wishForm :is(input, select)[aria-invalid="true"] { border-color: #ff92a8; outline: 1px solid #ff92a8; }
 #wishSaveError, .wish-field-error { color: #ffb4c5; }
 .wish-field-error { display: block; margin-top: 4px; font: 12px/1.4 system-ui; }
 .wish-field-error:empty { display: none; }

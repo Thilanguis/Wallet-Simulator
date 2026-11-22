@@ -10,7 +10,11 @@ document.addEventListener('DOMContentLoaded', () => {
     draftImage = null,
     photoRevision = 0,
     photoBusy = false,
-    photoBatch = null;
+    photoPreparing = false,
+    photoBatch = false,
+    singlePhoto = null;
+  const photoRows = new WeakMap();
+  let photoRowId = 0;
   const validQuantity = (value) => Number.isSafeInteger(value) && value > 0;
   const quantityOf = (item) => validQuantity(item.quantity) ? item.quantity : 1;
   const countUnits = (items) => items.reduce((sum, item) => sum + quantityOf(item), 0);
@@ -37,10 +41,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const item = { originalPrice: unitPrice, quantity, taxQuebec: $('wishTaxQuebec').checked };
     const base = validQuantity(quantity) && Number.isFinite(unitPrice) ? originalSubtotal(item) : null;
     const value = base == null ? null : taxableSubtotal(item);
-    const estimate = value == null ? null : WishFx.convert(value, currency);
+    const estimate = value == null || !currency ? null : WishFx.convert(value, currency);
     const date = WishFx.current()?.dates[currency];
     const taxes = base != null && item.taxQuebec ? ' · GST/QST ' + originalPriceLabel(quebecTax(item), currency) : '';
-    $('wishConversion').textContent = base == null ? '' :
+    $('wishConversion').textContent = base == null || !currency ? '' :
       (quantity > 1 ? quantity + ' unidades · ' : '') + originalPriceLabel(base, currency) + taxes +
       ' · total ' + originalPriceLabel(value, currency) +
       (estimate == null ? ' · cotação indisponível' : ' ≈ ' + formatBR(estimate)) +
@@ -169,7 +173,8 @@ document.addEventListener('DOMContentLoaded', () => {
     request?.abort();
     clearTimeout(autoRead);
     $('wishForm').reset();
-    setPhotoBatch(null);
+    setPhotoBatch(false);
+    setSinglePhoto(null);
     updatePeople(rows(), defaultPerson);
     showDraftImage(null);
     $('wishPhotoMessage').textContent = '';
@@ -1342,7 +1347,7 @@ document.addEventListener('DOMContentLoaded', () => {
       person,
       originalPrice: $('wishPrice').value === '' ? null : Number($('wishPrice').value),
       quantity: $('wishQuantity').valueAsNumber,
-      currency: $('wishCurrency').value,
+      currency: $('wishCurrency').value || ($('wishPrice').value === '' ? 'BRL' : ''),
       taxQuebec: $('wishTaxQuebec').checked,
       imageUrl: draftImage || undefined,
     };
@@ -1369,13 +1374,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const personId = personKey(person) === personKey(defaultPerson) ? undefined : registerPerson(person, registered).id;
     const additions = [];
     const invalidFields = [];
-    for (const [i, row] of [...$('wishBatchRows').children].entries()) {
+    for (const row of $('wishBatchRows').children) {
       if (!row.querySelector('input[type=checkbox]').checked) continue;
       const fieldInput = (field) => row.querySelector('[data-field=' + field + ']');
       const get = (field) => fieldInput(field).value.trim();
-      const title = get('title'), store = get('store'), currency = get('currency');
+      const title = get('title'), store = get('store');
       const rawPrice = get('price');
       const originalPrice = rawPrice === '' ? null : /^\d+(?:[.,]\d{1,2})?$/.test(rawPrice) ? Number(rawPrice.replace(',', '.')) : NaN;
+      const currency = get('currency') || (originalPrice === null ? 'BRL' : '');
       const rawQuantity = get('quantity');
       const taxQuebec = fieldInput('taxQuebec').checked;
       const quantity = Number(rawQuantity);
@@ -1384,6 +1390,7 @@ document.addEventListener('DOMContentLoaded', () => {
         title: title ? '' : 'Informe o nome do produto.',
         store: store ? '' : 'Informe a loja.',
         price: validLinePrice(originalPrice, quantityValid ? quantity : 1) ? '' : 'Informe um preço unitário válido.',
+        currency: currency ? '' : 'Escolha a moeda do preço.',
         quantity: quantityValid ? '' : 'Informe uma quantidade inteira a partir de 1.',
       };
       for (const [field, error] of Object.entries(errors)) {
@@ -1392,7 +1399,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (error) invalidFields.push(input);
       }
       if (Object.values(errors).some(Boolean)) continue;
-      additions.push({ id: crypto.randomUUID(), url: '', title, store, person, personId, originalPrice, currency, quantity, taxQuebec, imageUrl: photoBatch[i].imageUrl, price: originalPrice == null ? null : WishFx.convert(originalPrice, currency), bought: false, updatedAt: Date.now() });
+      const { photo, url = '' } = photoRows.get(row);
+      additions.push({ id: crypto.randomUUID(), url, title, store, person, personId, originalPrice, currency, quantity, taxQuebec, imageUrl: photo.imageUrl, price: originalPrice == null ? null : WishFx.convert(originalPrice, currency), bought: false, updatedAt: Date.now() });
     }
     if (invalidFields.length) {
       invalidFields[0].focus();
@@ -1414,7 +1422,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $('wishSaveError').textContent = '';
     try {
       if (!WalletStore.isWritable()) throw new Error('Aguarde a conexão com a carteira para salvar o desejo.');
-      if (photoBusy) throw new Error('Aguarde a foto ficar pronta antes de salvar.');
+      if (photoPreparing) throw new Error('Aguarde a prévia da foto antes de salvar.');
       if (photoBatch) {
         savePhotoBatch();
         return;
@@ -1425,6 +1433,10 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!title || !store || !person || person.length > 80) throw new Error('Confira produto, loja e pessoa.');
       if (!validQuantity(quantity)) throw new Error('Informe uma quantidade inteira a partir de 1.');
       if (!validLinePrice(originalPrice, quantity)) throw new Error('Confira o preço unitário e a quantidade.');
+      if (!currency) {
+        $('wishCurrency').focus();
+        throw new Error('Escolha a moeda do preço.');
+      }
       const list = rows(),
         previous = list.find((x) => x.id === editing);
       if (editing && !previous) throw new Error('Este desejo foi removido no outro aparelho.');
@@ -1488,20 +1500,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     throw new Error('Não foi possível compactar esta foto. Tente um recorte menor ou adicione o produto pelo link.');
   }
-  function knownWishStore(title) {
-    const key = personKey(normalizeName(title));
-    if (!key) return '';
-    const stores = new Map(rows()
-      .filter((item) => item.store?.trim() && personKey(normalizeName(item.title)) === key)
-      .map((item) => [personKey(normalizeName(item.store)), item.store]));
-    return stores.size === 1 ? stores.values().next().value : '';
-  }
   $('wishRemovePhoto').onclick = () => {
     photoRevision++;
     setPhotoBusy(false);
     $('wishUpload').value = '';
     $('wishFileUpload').value = '';
     $('wishPhotoMessage').textContent = '';
+    setSinglePhoto(null);
     showDraftImage(null);
   };
   async function decodeWishPhoto(file) {
@@ -1553,84 +1558,237 @@ document.addEventListener('DOMContentLoaded', () => {
       return { warning: 'O navegador não conseguiu ler este arquivo. Use Procurar em Arquivos e selecione a foto em Imagens ou Downloads.' };
     }
   }
-  async function readWishPhoto(file, url, recognize, onImage = () => {}) {
-    const bitmap = await decodeWishPhoto(file);
-    let detailPhoto, pricePhoto, headerPhoto, badgePhoto, badgesArea, awardPhoto;
-    let imageUrl;
+  async function prepareWishPhoto(file) {
+    const copied = await copyPickedPhoto(file);
+    if (!copied.file) return copied;
     try {
-      const isPortrait = (bitmap.naturalHeight ?? bitmap.height) > (bitmap.naturalWidth ?? bitmap.width);
-      const sample = drawWishPhoto(bitmap, isPortrait ? 320 : 160);
-      const regions = WishProduct.screenshotRegions(sample.getContext('2d').getImageData(0, 0, sample.width, sample.height));
-      imageUrl = compressWishPhoto(bitmap, regions?.photo);
-      onImage(imageUrl);
-      const cropFile = async (region, scale, padding) => {
-        const canvas = drawWishPhoto(bitmap, 1550, region, scale, padding);
-        const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
-        return blob && new File([blob], file.name, { type: blob.type });
-      };
-      const textRegion = regions?.text || (isPortrait ? { x: 0, y: 0.43, w: 0.84, h: 0.48 } : null);
-      if (textRegion) detailPhoto = await cropFile(textRegion, 2);
-      if (isPortrait) {
-        pricePhoto = await cropFile({
-          x: textRegion.x,
-          y: textRegion.y + textRegion.h * 0.42,
-          w: Math.min(textRegion.w, 0.72),
-          h: textRegion.h * 0.58,
-        }, 3, 16);
-        headerPhoto = await cropFile({ x: 0.12, y: 0.035, w: 0.76, h: 0.085 }, 3, 16);
-        const badgeSample = drawWishPhoto(bitmap, 1280);
-        const badge = WishProduct.mobileStoreBadge(badgeSample.getContext('2d').getImageData(0, 0, badgeSample.width, badgeSample.height));
-        if (badge) badgePhoto = await cropFile(badge, 5, 16);
-        badgesArea = await cropFile({ x: 0.80, y: 0.105, w: 0.20, h: 0.10 }, 4, 16);
-        awardPhoto = await cropFile({ x: 0.825, y: 0.15, w: 0.15, h: 0.04 }, 5, 16);
+      const bitmap = await decodeWishPhoto(copied.file);
+      try {
+        return {
+          file: copied.file,
+          imageUrl: compressWishPhoto(bitmap),
+          width: bitmap.naturalWidth ?? bitmap.width,
+          height: bitmap.naturalHeight ?? bitmap.height,
+        };
+      } finally {
+        bitmap.close?.();
       }
+    } catch (error) {
+      return { warning: error.message };
+    }
+  }
+
+  function photoWarning(suggestion) {
+    if (suggestion.failed) return 'Não foi possível ler o texto. A foto está pronta e você pode preencher os campos manualmente.';
+    if (suggestion.priceIssue === 'ambiguous') return 'O print tem mais de um preço possível. Informe o preço atual e confira a moeda.';
+    if (suggestion.priceIssue === 'currency') {
+      return suggestion.price == null
+        ? 'A moeda não ficou clara. Informe o preço e a moeda do produto.'
+        : 'Encontrei o valor. Escolha a moeda indicada na loja antes de salvar.';
+    }
+    const missing = [!suggestion.title && 'nome', !suggestion.store && 'loja', suggestion.price == null && 'preço'].filter(Boolean);
+    return missing.length ? 'Confira e preencha o que faltar: ' + missing.join(', ') + '.' : 'Confira nome, loja, preço e moeda antes de salvar.';
+  }
+
+  async function wishPhotoOcrSource(photo) {
+    // Messaging apps often compress tall screenshots until letters look alike.
+    if (photo.width >= 700 || photo.height < 1.5 * photo.width || photo.height >= 2200) return photo.file;
+    const bitmap = await decodeWishPhoto(photo.file);
+    let canvas;
+    try {
+      canvas = drawWishPhoto(bitmap, 2750, undefined, 2);
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      return blob ? new File([blob], photo.file.name, { type: blob.type }) : photo.file;
     } finally {
       bitmap.close?.();
+      if (canvas) canvas.width = canvas.height = 0;
     }
-    const suggestion = { imageUrl };
-    const readText = async (image, mode) => {
-      const options = mode ? { tessedit_pageseg_mode: mode } : undefined;
-      const result = await recognize(image, () => {}, options).catch(() => null);
-      return result?.text || '';
-    };
-    const mergeProduct = (text, retry = false) => {
-      const fields = WishProduct.readPhotoText(text, url, { skipDiscountLines: retry });
-      suggestion.title ||= fields.title;
-      suggestion.store ||= fields.store;
-      if (suggestion.price == null && fields.price != null) {
-        suggestion.price = fields.price;
-        suggestion.currency = fields.currency;
-      }
-    };
-    const primaryText = await readText(detailPhoto || file);
-    mergeProduct(primaryText);
-    if (!primaryText && detailPhoto) mergeProduct(await readText(detailPhoto), true);
-    if (suggestion.price == null && pricePhoto) {
-      const { price, currency } = WishProduct.readPhotoText(await readText(pricePhoto, '11'), url, { skipDiscountLines: true });
-      if (price != null) Object.assign(suggestion, { price, currency });
-    }
-    if (detailPhoto && (!suggestion.title || suggestion.price == null || !suggestion.store)) {
-      mergeProduct(await readText(file), true);
-    }
-    if (!suggestion.title || suggestion.price == null) {
-      mergeProduct(await readText(detailPhoto || file, '11'), true);
-    }
-    if (!suggestion.store && headerPhoto) {
-      suggestion.store = WishProduct.readPhotoText(await readText(headerPhoto, '11'), url).store;
-    }
-    if (!suggestion.store && badgesArea) {
-      const yesStyle = /\b(?:[yv][eo]sstyl[eo]|esstyle)\b/i;
-      const badge = badgePhoto && await readText(badgePhoto, '7');
-      if (yesStyle.test(badge || '') || yesStyle.test(await readText(badgesArea, '11')) || (awardPhoto && yesStyle.test(await readText(awardPhoto, '6')))) suggestion.store = 'YesStyle';
-    }
-    suggestion.store ||= knownWishStore(suggestion.title);
-    const missing = [!suggestion.title && "nome", suggestion.price == null && "preço", !suggestion.store && "loja"].filter(Boolean);
-    if (missing.length) suggestion.warning = 'Confira e preencha ' + missing.join(', ') + '.';
-    return suggestion;
   }
-  function setPhotoBatch(batch) {
-    photoBatch = batch;
-    const active = batch !== null;
+
+  async function wishPhotoPriceInspector(source) {
+    const bitmap = await decodeWishPhoto(source);
+    let canvas;
+    try {
+      canvas = drawWishPhoto(bitmap, 2200);
+      const scaleX = canvas.width / (bitmap.naturalWidth ?? bitmap.width);
+      const scaleY = canvas.height / (bitmap.naturalHeight ?? bitmap.height);
+      const image = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+      return ({ x0, x1, y0, y1 }) => WishPhotoInk.inspect(image, {
+        x0: x0 * scaleX, x1: x1 * scaleX, y0: y0 * scaleY, y1: y1 * scaleY,
+      });
+    } finally {
+      bitmap.close?.();
+      if (canvas) canvas.width = canvas.height = 0;
+    }
+  }
+
+  async function recognizeWishPhoto(photo, url, recognize, isCurrent) {
+    const source = await wishPhotoOcrSource(photo).catch(() => photo.file);
+    const first = await recognize(source, undefined, { tessedit_pageseg_mode: '3' }, { layout: true })
+      .catch(() => null);
+    let inspector;
+    async function readList(result) {
+      if (!result || Number.isFinite(result.confidence) && result.confidence < 45) return [];
+      if (result.lines?.length) inspector ||= wishPhotoPriceInspector(source).catch(() => null);
+      return WishPhotoList.read(result, url, { inspectPrice: await inspector });
+    }
+    const products = await readList(first);
+    const parse = ({ text, confidence }) => {
+      if (Number.isFinite(confidence) && confidence < 45) return WishProduct.readPhotoText('', url);
+      return WishProduct.readPhotoText(text, url, { keepUnconfirmedAmount: true });
+    };
+    const primary = parse(first || {});
+    const suggestion = { ...primary };
+    if (!isCurrent()) return suggestion;
+    if (!products.length && primary.title && primary.store && primary.price != null && primary.currency && (first?.lines?.length || 0) < 5) return suggestion;
+
+    const alternatives = [];
+    async function tryRegion(image, full = false) {
+      if (!isCurrent()) return;
+      try {
+        const result = await recognize(image, undefined, { tessedit_pageseg_mode: '11' }, { layout: full });
+        if (full) {
+          const products = await readList(result);
+          if (products.length > 1) return products;
+        }
+        alternatives.push(parse(result));
+      } catch {
+        // Other OCR attempts can fail independently of the opened image.
+      }
+    }
+    const sparseProducts = await tryRegion(source, true) || [];
+    if (products.length || sparseProducts.length) {
+      // The sparse pass often sees more rows in a wide table. Compare by
+      // product name so contradictory values still require review.
+      const [best, alternate] = sparseProducts.length >= products.length ? [sparseProducts, products] : [products, sparseProducts];
+      return { products: best.map(item => {
+        const matches = alternate.filter(other => photoProductKey(other.title) === photoProductKey(item.title));
+        const match = matches.length === 1 ? matches[0] : null;
+        if (item.price != null && (match?.priceIssue === 'ambiguous' || match?.price != null &&
+            (item.price !== match.price || item.currency && match.currency && item.currency !== match.currency))) {
+          return { ...item, price: null, currency: null, priceIssue: 'ambiguous' };
+        }
+        return item;
+      }) };
+    }
+    if (isCurrent() && (!primary.title || (primary.price == null && !primary.priceIssue)) &&
+        !alternatives.some(result => result.title && result.price != null)) {
+      try {
+        const bitmap = await decodeWishPhoto(photo.file);
+        try {
+          const portrait = (bitmap.naturalHeight ?? bitmap.height) > (bitmap.naturalWidth ?? bitmap.width);
+          // Use overlapping halves when text is too small or split among columns.
+          const regions = portrait
+            ? [{ x: 0, y: 0, w: 1, h: .62 }, { x: 0, y: .38, w: 1, h: .62 }]
+            : [{ x: 0, y: 0, w: .62, h: 1 }, { x: .38, y: 0, w: .62, h: 1 }];
+          for (const region of regions) {
+            if (!isCurrent()) break;
+            const canvas = drawWishPhoto(bitmap, 1800, region, 2, 12);
+            const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+            canvas.width = canvas.height = 0;
+            if (blob) await tryRegion(blob);
+          }
+        } finally {
+          bitmap.close?.();
+        }
+      } catch {
+        // The full-image reading and preview remain available if crops fail.
+      }
+    }
+    const textFields = (key) => [...new Set(alternatives.map(item => item[key]).filter(Boolean))];
+    for (const key of ['title', 'store']) {
+      const values = textFields(key);
+      if (!suggestion[key] && values.length === 1) suggestion[key] = values[0];
+    }
+    // A crop cannot settle a conflict visible in the original print or turn an
+    // old price, shipping charge or installment into the current price.
+    if (suggestion.price == null && !primary.priceIssue) {
+      const excluded = [primary, ...alternatives].flatMap(item => item.excludedPrices);
+      const observed = alternatives.filter(item => item.price != null &&
+        !excluded.some(other => other.price === item.price && (!other.currency || other.currency === item.currency)));
+      const firstPrice = observed[0];
+      if (firstPrice && !alternatives.some(item => item.priceIssue === 'ambiguous') &&
+          observed.every(item => item.price === firstPrice.price && item.currency === firstPrice.currency)) {
+        suggestion.price = firstPrice.price;
+        suggestion.currency = firstPrice.currency;
+        suggestion.priceIssue = firstPrice.priceIssue;
+      } else if (observed.length) suggestion.priceIssue = 'ambiguous';
+      else suggestion.priceIssue = alternatives.find(item => item.priceIssue)?.priceIssue;
+    }
+    return first || alternatives.length ? suggestion : { failed: true };
+  }
+
+  const photoFields = ['title', 'store', 'price', 'currency'];
+  const singleFields = Object.fromEntries(photoFields.map(key => [key, $('wish' + key[0].toUpperCase() + key.slice(1))]));
+  const touchedPhotoFields = new WeakSet();
+  $('wishForm').addEventListener('input', markPhotoField);
+  $('wishForm').addEventListener('change', markPhotoField);
+  function markPhotoField({ target }) {
+    if (Object.values(singleFields).includes(target) || photoFields.includes(target.dataset?.field)) touchedPhotoFields.add(target);
+  }
+  function setSinglePhoto(photo) {
+    singlePhoto = photo;
+    $('wishRetryPhoto').hidden = !photo;
+    $('wishAddPhotoRow').hidden = !photo || !!editing;
+    if (photo) showDraftImage(photo.imageUrl);
+    else for (const field of Object.values(singleFields)) touchedPhotoFields.delete(field);
+  }
+  function applyPhotoSuggestion(fields, suggestion) {
+    for (const key of ['title', 'store']) {
+      if (!fields[key].value.trim() && !touchedPhotoFields.has(fields[key]) && suggestion[key]) fields[key].value = suggestion[key];
+    }
+    const { price, currency } = fields;
+    if (suggestion.price == null || touchedPhotoFields.has(price)) return;
+    const editedCurrency = touchedPhotoFields.has(currency);
+    if (editedCurrency && suggestion.currency && currency.value !== suggestion.currency) return;
+    const code = suggestion.currency || '';
+    if (price.value === '') {
+      price.value = suggestion.price;
+    } else if (Number(price.value) !== suggestion.price || currency.value || !code) {
+      return;
+    }
+    if (!editedCurrency) {
+      if (![...currency.options].some(option => option.value === code)) {
+        currency.add(new Option(code || 'Escolha a moeda', code));
+      }
+      currency.value = code;
+    }
+  }
+  async function readPhotoSuggestions(items, token, onResult) {
+    const isCurrent = () => token === photoRevision;
+    let index = 0;
+    function finish(suggestion) {
+      const completed = index++;
+      if (isCurrent()) onResult(items[completed], suggestion, completed);
+    }
+    try {
+      await withReceiptReader(async (recognize) => {
+        for (const item of items) {
+          if (!isCurrent()) return;
+          let suggestion = null;
+          if (item.photo.file) {
+            try {
+              suggestion = await recognizeWishPhoto(item.photo, item.url, recognize, isCurrent);
+            } catch {
+              // A failed image or worker must not prevent reading the remaining rows.
+              suggestion = { failed: true };
+            }
+          }
+          finish(suggestion);
+        }
+      });
+    } catch {
+      while (index < items.length && isCurrent()) finish(items[index].photo.file ? { failed: true } : null);
+    }
+  }
+  function showPhotoBatchReview() {
+    const count = $('wishBatchRows').querySelectorAll('[data-field="title"]').length;
+    $('wishPhotoMessage').textContent = count
+      ? count + (count === 1 ? ' produto para revisar.' : ' produtos para revisar.')
+      : 'Nenhuma foto pôde ser aberta. Confira os avisos abaixo.';
+  }
+  function setPhotoBatch(active) {
+    photoBatch = !!active;
     $('wishBatch').hidden = !active;
     $('wishSingleFields').hidden = active;
     $('wishUrl').closest('.wish-link-row').hidden = active;
@@ -1645,25 +1803,51 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     $('wishBatchRows').replaceChildren();
   }
-  function createPhotoRow(file, suggestion, i) {
+  function createPhotoRow(file, suggestion, { first = true, url = '' } = {}) {
+    const i = ++photoRowId;
     const esc = escapeHTML;
     const row = document.createElement('div');
     row.className = 'preview-row';
-    const currency = suggestion.currency || 'BRL';
-    const currencies = new Set([...$('wishCurrency').options].map((option) => option.value).concat(currency));
-    const field = (label, key, attributes) => `<label>${label}<input data-field="${key}" ${attributes}><small class="wish-field-error" id="wishBatchError-${i}-${key}"></small></label>`;
-    row.innerHTML = `<label class="row-title"><input type="checkbox" ${suggestion.imageUrl ? 'checked' : 'disabled'}> <span>${i + 1}. ${esc(file.name)}</span></label>${
-      suggestion.imageUrl ? `<div class="form-grid">
-        ${field('Produto', 'title', `maxlength="300" value="${esc(suggestion.title || '')}"`)}
-        ${field('Loja', 'store', `maxlength="150" value="${esc(suggestion.store || '')}"`)}
-        ${field('Preço unitário', 'price', `inputmode="decimal" value="${suggestion.price ?? ''}"`)}
-        <label>Moeda<select data-field="currency">${[...currencies].map((value) => `<option ${value === currency ? 'selected' : ''}>${esc(value)}</option>`).join('')}</select></label>
-        ${field('Quantidade', 'quantity', 'inputmode="numeric" value="1"')}
-        <label class="wish-tax-option"><input type="checkbox" data-field="taxQuebec"> Taxas do Québec (GST 5% + QST 9,975%)</label>
-      </div>` : ''
-    }${suggestion.warning ? `<p class="hint">${esc(suggestion.warning)}</p>` : ''}`;
+    photoRows.set(row, { photo: suggestion, file, url });
+    const currencies = [...$('wishCurrency').options].map(option => option.value).filter(Boolean);
+    const field = (label, key, attributes) => '<label>' + label + '<input data-field="' + key + '" ' + attributes + '><small class="wish-field-error" id="wishBatchError-' + i + '-' + key + '"></small></label>';
+    row.innerHTML = '<label class="row-title"><input type="checkbox" ' + (suggestion.imageUrl ? 'checked' : 'disabled') + '> <span>' + esc(file.name) + '</span></label>';
     const image = thumbnail(suggestion.imageUrl);
-    if (image) row.querySelector('.row-title').after(image);
+    if (image) {
+      image.alt = 'Prévia de ' + file.name;
+      row.append(image);
+      row.insertAdjacentHTML('beforeend', '<div class="form-grid">' +
+        field('Produto', 'title', 'maxlength="300"') +
+        field('Loja', 'store', 'maxlength="150"') +
+        field('Preço unitário', 'price', 'inputmode="decimal"') +
+        '<label>Moeda<select data-field="currency">' + currencies.map(value => '<option>' + esc(value) + '</option>').join('') + '</select><small class="wish-field-error" id="wishBatchError-' + i + '-currency"></small></label>' +
+        field('Quantidade', 'quantity', 'inputmode="numeric" value="1"') +
+        '<label class="wish-tax-option"><input type="checkbox" data-field="taxQuebec"> Taxas do Québec (GST 5% + QST 9,975%)</label></div>' +
+        '<p class="hint" data-photo-status role="status"></p>');
+      const retry = document.createElement('button');
+      retry.type = 'button';
+      retry.className = 'wish-share-button';
+      retry.dataset.retryPhoto = '';
+      retry.disabled = photoBusy;
+      retry.textContent = 'Tentar ler texto novamente';
+      retry.onclick = () => void retryRecognizePhoto(suggestion, row);
+      row.append(retry);
+      if (first) {
+        const add = document.createElement('button');
+        add.type = 'button';
+        add.className = 'wish-share-button';
+        add.dataset.addPhotoRow = '';
+        add.disabled = photoBusy;
+        add.textContent = 'Adicionar outra linha com esta foto';
+        add.onclick = () => addManualPhotoRow(row);
+        row.append(add);
+      }
+    } else {
+      const warning = document.createElement('p');
+      warning.className = 'hint';
+      warning.textContent = suggestion.warning;
+      row.append(warning);
+    }
     if (!suggestion.imageUrl) {
       const retry = document.createElement('button');
       retry.type = 'button';
@@ -1674,28 +1858,141 @@ document.addEventListener('DOMContentLoaded', () => {
       picker.hidden = true;
       retry.onclick = () => { if (!photoBusy) picker.click(); };
       picker.onchange = () => {
-        if (picker.files[0] && !photoBusy) void retryPhotoRow(picker, row, i);
+        if (picker.files[0] && !photoBusy) void retryPhotoRow(picker, row);
       };
       row.append(retry, picker);
     }
     return row;
   }
-  async function retryPhotoRow(picker, row, index) {
-    const file = picker.files[0];
+  function batchPhotoFields(row) {
+    return Object.fromEntries(photoFields.map(key => [key, row.querySelector('[data-field=' + key + ']')]));
+  }
+  function photoProductKey(title) {
+    return personKey(normalizeName(title || ''));
+  }
+  function fillBatchPhotoFields(row, result) {
+    applyPhotoSuggestion(batchPhotoFields(row), result);
+    row.querySelector('[data-photo-status]').textContent = photoWarning(result);
+  }
+  function expandPhotoRows(row, products) {
+    const draft = photoRows.get(row);
+    const fields = batchPhotoFields(row);
+    const draftKey = photoProductKey(fields.title.value);
+    const matches = products.filter(item => draftKey && photoProductKey(item.title) === draftKey);
+    const hasInput = draft.url || photoFields.some(key => touchedPhotoFields.has(fields[key]) || (key !== 'currency' && fields[key].value.trim())) ||
+      row.querySelector('[data-field=quantity]').value !== '1' || row.querySelector('[data-field=taxQuebec]').checked;
+    const selected = row.querySelector('.row-title input').checked;
+    const reused = matches.length === 1 ? matches[0] : !hasInput ? products[0] : null;
+    let insertAfter = row;
+    for (const item of products) {
+      const itemRow = item === reused ? row : createPhotoRow(draft.file, draft.photo, { first: false });
+      if (itemRow !== row) {
+        if (reused && products.indexOf(item) < products.indexOf(reused)) row.before(itemRow);
+        else {
+          insertAfter.after(itemRow);
+          insertAfter = itemRow;
+        }
+        itemRow.querySelector('.row-title input').checked = selected;
+      }
+      photoRows.get(itemRow).productKey = photoProductKey(item.title);
+      itemRow.querySelector('.row-title span').textContent = item.title + ' · ' + draft.file.name;
+      fillBatchPhotoFields(itemRow, item);
+    }
+    if (!reused) {
+      draft.productKey = draftKey;
+      // Keep a draft that cannot safely be matched. Leave it unchecked to
+      // avoid adding that product twice, while keeping all its edits available.
+      row.querySelector('.row-title input').checked = false;
+      row.querySelector('[data-photo-status]').textContent = 'Confira seu rascunho e marque esta linha se quiser adicioná-la.';
+    }
+  }
+  function fillBatchPhoto({ row }, result) {
+    if (!result) return;
+    const draft = photoRows.get(row);
+    if (draft.productKey !== undefined) {
+      if (result.failed) return fillBatchPhotoFields(row, result);
+      const matches = result.products?.filter(item => photoProductKey(item.title) === draft.productKey);
+      if (matches?.length === 1) fillBatchPhotoFields(row, matches[0]);
+      else row.querySelector('[data-photo-status]').textContent = 'Não consegui confirmar este item na nova leitura. Confira os campos.';
+    } else if (result.products) expandPhotoRows(row, result.products);
+    else fillBatchPhotoFields(row, result);
+  }
+  function reviewSinglePhotoAsBatch(photo) {
+    const rawUrl = $('wishUrl').value.trim();
+    let url = '';
+    try { if (rawUrl) url = link(rawUrl).href; } catch {}
+    setPhotoBatch(true);
+    const row = createPhotoRow(photo.file, photo, { url });
+    $('wishBatchRows').append(row);
+    const fields = batchPhotoFields(row);
+    for (const key of photoFields) {
+      if (key === 'currency' && !singleFields.currency.value) {
+        fields.currency.add(new Option('Escolha a moeda', ''));
+      }
+      fields[key].value = singleFields[key].value;
+      if (touchedPhotoFields.has(singleFields[key])) touchedPhotoFields.add(fields[key]);
+    }
+    row.querySelector('[data-field=quantity]').value = $('wishQuantity').value;
+    row.querySelector('[data-field=taxQuebec]').checked = $('wishTaxQuebec').checked;
+    setSinglePhoto(null);
+    return row;
+  }
+  function addManualPhotoRow(row) {
+    const { file, photo } = photoRows.get(row);
+    const newRow = createPhotoRow(file, photo, { first: false });
+    const related = [...$('wishBatchRows').children].filter(other => photoRows.get(other).photo === photo);
+    related.at(-1).after(newRow);
+    photoRows.get(newRow).productKey = '';
+    newRow.querySelector('[data-photo-status]').textContent = 'Preencha os dados do produto desta foto.';
+    showPhotoBatchReview();
+    batchPhotoFields(newRow).title.focus();
+  }
+  $('wishAddPhotoRow').onclick = () => {
+    if (!singlePhoto || photoBusy || editing) return;
+    addManualPhotoRow(reviewSinglePhotoAsBatch(singlePhoto));
+  };
+  function fillSinglePhoto({ photo }, result) {
+    if (!result) return;
+    if (result.products) {
+      if (editing) {
+        $('wishPhotoMessage').textContent = 'Este print tem vários produtos. Confira os dados deste desejo ou importe o print em Adicionar desejo.';
+        return;
+      }
+      expandPhotoRows(reviewSinglePhotoAsBatch(photo), result.products);
+      showPhotoBatchReview();
+      return;
+    }
+    applyPhotoSuggestion(singleFields, result);
+    conversion();
+    void WishFx.refresh();
+    $('wishPhotoMessage').textContent = 'Foto pronta. ' + photoWarning(result);
+  }
+  async function retryRecognizePhoto(photo, row) {
+    if (photoBusy || !photo?.imageUrl) return;
     const token = ++photoRevision;
     setPhotoBusy(true);
     try {
-      const photo = await copyPickedPhoto(file);
+      await readPhotoSuggestions([{photo, row, url: row ? '' : $('wishUrl').value}], token, row ? fillBatchPhoto : fillSinglePhoto);
+    } finally {
+      if (token === photoRevision) {
+        if (photoBatch) showPhotoBatchReview();
+        setPhotoBusy(false);
+      }
+    }
+  }
+  $('wishRetryPhoto').onclick = () => void retryRecognizePhoto(singlePhoto);
+  async function retryPhotoRow(picker, row) {
+    const file = picker.files[0];
+    const token = ++photoRevision;
+    setPhotoBusy(true, '', true);
+    try {
+      const photo = await prepareWishPhoto(file);
       if (token !== photoRevision) return;
-      const suggestion = photo.file
-        ? await withReceiptReader((recognize) => readWishPhoto(photo.file, '', recognize)).catch((error) => ({ warning: error.message || 'Não foi possível abrir a foto.' }))
-        : photo;
-      if (token !== photoRevision) return;
-      photoBatch[index] = suggestion;
-      row.replaceWith(createPhotoRow(file, suggestion, index));
-      $('wishPhotoMessage').textContent = photoBatch.some(({ imageUrl }) => imageUrl)
-        ? 'Confira os produtos antes de adicionar.'
-        : 'Nenhuma foto pôde ser aberta. Confira os avisos abaixo.';
+      const replacement = createPhotoRow(file, photo);
+      row.replaceWith(replacement);
+      setPhotoBusy(true);
+      await readPhotoSuggestions([{photo, row: replacement, url: ''}], token, fillBatchPhoto);
+      if (token === photoRevision) showPhotoBatchReview();
     } finally {
       if (token === photoRevision) {
         picker.value = '';
@@ -1704,11 +2001,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
   $('wishBatchRows').addEventListener('input', ({ target }) => {
-    if (target.matches('input[aria-invalid]')) batchFieldError(target, '');
-    if (target.matches('input[type="checkbox"]') && !target.checked) {
-      for (const input of target.closest('.preview-row').querySelectorAll('input[aria-invalid]')) batchFieldError(input, '');
+    if (target.matches('[data-field][aria-invalid]')) batchFieldError(target, '');
+    if (target.matches('.row-title input[type="checkbox"]') && !target.checked) {
+      for (const input of target.closest('.preview-row').querySelectorAll('[data-field][aria-invalid]')) batchFieldError(input, '');
     }
-    if (!$('wishBatchRows').querySelector('input[aria-invalid]')) $('wishSaveError').textContent = '';
+    if (!$('wishBatchRows').querySelector('[data-field][aria-invalid]')) $('wishSaveError').textContent = '';
   });
   const isAndroid = /Android/i.test(navigator.userAgent);
   // Chromium can route image-only inputs through the Android photo picker.
@@ -1734,11 +2031,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const photos = transferredPhotos(event.dataTransfer);
     if (photos.length) void importWishPhotos(photos);
   });
-  function setPhotoBusy(busy, progress = '') {
+  function setPhotoBusy(busy, progress = '', preparing = false) {
     photoBusy = busy;
+    photoPreparing = busy && preparing;
+    $('wishSave').disabled = photoPreparing;
     $('wishPhotoProgress').textContent = progress;
     $('wishPhotoLoading').hidden = !busy;
-    for (const id of ['wishSave', 'wishUpload', 'wishBrowseFiles']) $(id).disabled = busy;
+    for (const id of ['wishUpload', 'wishBrowseFiles', 'wishRetryPhoto', 'wishAddPhotoRow']) $(id).disabled = busy;
+    for (const button of $('wishBatchRows').querySelectorAll('[data-retry-photo], [data-add-photo-row]')) button.disabled = busy;
   }
   async function importWishPhotos(files, clearInput = () => {}) {
     if (!files.length || photoBusy) return;
@@ -1755,60 +2055,39 @@ document.addEventListener('DOMContentLoaded', () => {
     message('');
     const count = files.length > 1 ? '0/' + files.length : '';
     status.textContent = '';
-    setPhotoBusy(true, count);
+    setPhotoBusy(true, count, true);
     try {
       const picked = [];
       for (const file of files) {
-        picked.push(await copyPickedPhoto(file));
+        picked.push(await prepareWishPhoto(file));
         if (token !== photoRevision) return;
       }
-      if (token !== photoRevision) return;
       if (photoBatch) {
         reset();
         token = ++photoRevision;
-        setPhotoBusy(true, count);
+        setPhotoBusy(true, count, true);
       }
       if (files.length > 1) {
-        const batch = [];
-        setPhotoBatch(batch);
-        await withReceiptReader(async (recognize) => {
-          for (const [i, file] of files.entries()) {
-            if (token !== photoRevision) return;
-            const photo = picked[i];
-            const suggestion = photo.file
-              ? await readWishPhoto(photo.file, '', recognize).catch((error) => ({ warning: error.message || 'Não foi possível abrir a foto.' }))
-              : photo;
-            if (token !== photoRevision) return;
-            batch.push(suggestion);
-            $('wishBatchRows').append(createPhotoRow(file, suggestion, i));
-            $('wishPhotoProgress').textContent = (i + 1) + '/' + files.length;
-          }
+        setSinglePhoto(null);
+        setPhotoBatch(true);
+        const items = files.map((file, index) => {
+          const row = createPhotoRow(file, picked[index]);
+          $('wishBatchRows').append(row);
+          return { photo: picked[index], row, url: '' };
         });
-        if (token === photoRevision) status.textContent = batch.some(({ imageUrl }) => imageUrl)
-          ? 'Confira os produtos antes de adicionar.'
-          : 'Nenhuma foto pôde ser aberta. Confira os avisos abaixo.';
+        setPhotoBusy(true, count);
+        await readPhotoSuggestions(items, token, (item, result, index) => {
+          fillBatchPhoto(item, result);
+          $('wishPhotoProgress').textContent = (index + 1) + '/' + files.length;
+        });
+        if (token === photoRevision) showPhotoBatchReview();
         return;
       }
       const photo = picked[0];
-      if (!photo.file) throw new Error(photo.warning);
-      const suggestion = await withReceiptReader((recognize) => readWishPhoto(photo.file, $('wishUrl').value, recognize, (imageUrl) => {
-        if (token !== photoRevision) return;
-        showDraftImage(imageUrl);
-      }));
-      if (token !== photoRevision) return;
-      if (!$('wishTitle').value.trim()) $('wishTitle').value = suggestion.title || '';
-      if (!$('wishStore').value.trim()) $('wishStore').value = suggestion.store || '';
-      if ($('wishPrice').value === '' && suggestion.price != null) {
-        $('wishPrice').value = suggestion.price;
-        selectCurrency(suggestion.currency);
-      }
-      conversion();
-      void WishFx.refresh();
-      status.textContent = suggestion.title && suggestion.store && suggestion.price != null
-        ? 'Confira nome, loja, preço e moeda antes de salvar.'
-        : !suggestion.store && suggestion.title && suggestion.price != null
-          ? 'Nome e preço encontrados. Informe a loja ou cole o link do produto.'
-          : 'Foto pronta. Confira e complete os campos que ficaram vazios.';
+      if (!photo.imageUrl) throw new Error(photo.warning);
+      setSinglePhoto(photo);
+      setPhotoBusy(true);
+      await readPhotoSuggestions([{photo, url: $('wishUrl').value}], token, fillSinglePhoto);
     } catch (error) {
       if (token === photoRevision) status.textContent = error.message || 'Não foi possível abrir a foto.';
     } finally {

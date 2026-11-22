@@ -25,190 +25,133 @@
     if (typeof value === 'string' && value.length <= photoLimit && /^data:image\/jpeg;base64,\/[A-Za-z0-9+/]+=*$/.test(value)) return value;
     return imageUrl(value);
   }
-  function readPhotoText(text, productUrl = '', { skipDiscountLines = false } = {}) {
-    const lines = String(text).split(/\r?\n/).map((line) => line.trim()
-      // In screenshots, Tesseract sometimes reads the dollar sign as S.
-      .replace(/^C\s*A\s*(?:S\s*\$?|\$)\s*(\d+[.,])\s*(\d{2})(?!\d)/i, (_, amount, cents) => 'CA$ ' + amount + cents)).filter(Boolean);
-    const domain = lines.map((line) => line.match(/\b([\w.-]+\.(?:com\.br|co\.uk|com|net|ca))\b/i)?.[1]).find(Boolean);
-    let host = domain || '';
-    try { host = new URL(productUrl).hostname || host; } catch {}
-    const brand = lines.join(' ').match(/\b(Pandora|Amazon|Shein|YesStyle|Coach|Shopee|AliExpress|Mercado Livre|Browns Shoes|MICHI|Sephora|Zara|Temu|Nike|Adidas)\b/i)?.[0] || '';
-    const explicitStore = lines.map((line) => line.match(/^(?:loja|store|vendido por|sold by)\s*:\s*(.+)$/i)?.[1]).find(Boolean);
-    const storeName = explicitStore || (host ? store(host.toLowerCase(), brand) : brand);
-    const region = /^ca\.|\.ca$/i.test(host) || /\b(?:Canada|Canadá|Québec|Ontario)\b/i.test(text) ? 'CAD'
-      : /^us\./i.test(host) || /\b(?:United States|USA)\b/i.test(text) ? 'USD'
-      : /\.br$/i.test(host) ? 'BRL' : null;
-    const money = /(?:(CAD|USD|BRL|EUR|GBP|AUD|CA\$|C\$|US\$|R\$|A\$|€|£|\$)\s*\$?\s*([\d.,]+)|([\d.,]+)\s*(CAD|USD|BRL|EUR|GBP|AUD|€|£))/gi;
-    const codes = { 'CA$': 'CAD', 'C$': 'CAD', 'US$': 'USD', 'R$': 'BRL', 'A$': 'AUD', '€': 'EUR', '£': 'GBP', '$': region };
+  const currencyCodes = 'CAD|BRL|USD|EUR|GBP|AUD|JPY|CNY|CHF|NZD|HKD|SGD|MXN';
+  const currencies = { 'CA$': 'CAD', 'C$': 'CAD', 'R$': 'BRL', 'US$': 'USD', 'A$': 'AUD', 'AU$': 'AUD', 'NZ$': 'NZD', 'HK$': 'HKD', 'S$': 'SGD', 'MX$': 'MXN', 'JP¥': 'JPY', 'CN¥': 'CNY', '€': 'EUR', '£': 'GBP' };
+  const currencyPrefix = '(?<![\\p{L}])(?:' + currencyCodes + ')(?![\\p{L}])|(?:CA|US|AU|NZ|HK|MX|[CRAS])?\\$|(?:JP|CN)?¥|[€£]';
+  const currencySuffix = '(?:' + currencyCodes + ')(?![\\p{L}])|[€£¥]';
+  const digits = "(?:\\d{1,3}(?:[., '’]\\d{3})+|\\d+)(?:[.,] *\\d{1,2})?";
+  const money = () => new RegExp('(' + currencyPrefix + ')\\s*\\$?\\s*(' + digits + ')(?![\\d.,])|(?<![\\d.,])(' + digits + ')\\s*(' + currencySuffix + ')', 'giu');
+  const oldLabel = /\b(?:was|original(?: price)?|regular(?: price)?|list price|before|formerly|rrp|msrp|previous price|prix (?:initial|régulier|normal|conseillé)|au lieu de|preço (?:anterior|original|normal|de tabela)|antes|de)\s*[:–—=-]?\s*$/iu;
+  const feeLabel = /\b(?:frete|shipping|delivery|livraison|expédition|entrega|parcelas?|instal+l?ments?|[0-9]+\s*x(?:\s+de)?|subtotal|impostos?|tax(?:es)?|taxas?|économisez|économie|rabais|duty|duties|save|economize|desconto|discount|cashback|a partir de|starting at|from|up to|rewards?)\b/iu;
+  const currentLabel = /\b(?:sale price|current price|your price|offer price|prix (?:actuel|promotionnel)|maintenant|now|agora|por|à vista|preço (?:atual|promocional)|valor atual|price|preço)\s*[:–—=-]?\s*$/iu;
+  const heading = /^(?:nome do produto|produto|product(?: name)?|item)\s*:\s*(.+)$/iu;
+  const storeLabel = /^(?:(?:loja|store|seller|vendedor|boutique)\s*:\s*|(?:vendido por|sold by|vendu par)(?:\s*:\s*|\s+))(.+)$/iu;
+  const knownStoreHeading = /^(?:Pandora|Amazon|Shein|YesStyle|Coach|Shopee|AliExpress|Mercado Livre|Browns Shoes|MICHI|Sephora|Zara|Temu|Nike|Adidas)$/iu;
+  const domainPattern = /(?:https?:\/\/|www\.)[a-z0-9-]+(?:\.[a-z0-9-]+)+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com(?:\.br|\.au)?|co\.(?:uk|jp|nz)|net|org|shop|store|ca|br|uk|de|fr|us|au|jp|cn|ch|io)\b/iu;
+
+  function numberFromPhoto(raw) {
+    const compact = raw.replace(/\s+/g, '').replace(/['’]/g, '');
+    const decimal = compact.match(/[.,](\d{1,2})$/);
+    const whole = decimal ? compact.slice(0, decimal.index) : compact;
+    if (!/^\d+$|^\d{1,3}(?:[.,]\d{3})+$/u.test(whole)) return null;
+    const value = Number(whole.replace(/[.,]/g, '') + (decimal ? '.' + decimal[1] : ''));
+    return Number.isFinite(value) && Number.isSafeInteger(Math.round(value * 100)) ? value : null;
+  }
+
+  function photoPriceCandidates(lines, host, isStruck) {
+    const region = /(?:^ca\.|\.ca$)/i.test(host) ? 'CAD' : /^us\.|\.us$/i.test(host) ? 'USD'
+      : /\.au$/i.test(host) ? 'AUD' : /\.nz$/i.test(host) ? 'NZD'
+      : /^jp\.|\.jp$/i.test(host) ? 'JPY' : /\.cn$/i.test(host) ? 'CNY' : null;
+    const explicitCurrencies = new Set();
+    for (const line of lines) {
+      // A selected currency or an explicit currency on an amount can disambiguate a bare symbol.
+      const selected = line.match(new RegExp('^(?:currency|moeda)\\s*:\\s*(' + currencyCodes + ')\\b', 'iu'));
+      if (selected) explicitCurrencies.add(selected[1].toUpperCase());
+      for (const match of line.matchAll(money())) {
+        const symbol = (match[1] || match[4]).toUpperCase();
+        const code = currencies[symbol] || (/^[A-Z]{3}$/.test(symbol) ? symbol : null);
+        if (code && (symbol.endsWith('$') || symbol.endsWith('¥') || /^[A-Z]{3}$/.test(symbol))) explicitCurrencies.add(code);
+      }
+    }
+    const sharedCurrency = explicitCurrencies.size === 1 ? [...explicitCurrencies][0] : null;
+    const resolveCurrency = (symbol) => {
+      if (symbol === '$') return ['CAD','USD','AUD','NZD','HKD','SGD','MXN'].includes(sharedCurrency) ? sharedCurrency : region;
+      if (symbol === '¥') return ['JPY','CNY'].includes(sharedCurrency) ? sharedCurrency : ['JPY','CNY'].includes(region) ? region : null;
+      return currencies[symbol] || symbol;
+    };
     const candidates = [];
     for (const [index, line] of lines.entries()) {
-      if (/\b(?:frete|shipping|delivery|parcelas?|instalments?|installments?|save|economize|regular|original|was|points?|pontos?|cashback|rewards?)\b/i.test(line) || /^de\s*:/i.test(line)) continue;
-      const priority = /\d+\s*%\s*(?:off|de desconto)\b/i.test(line) ? 0 : /\b(?:agora|now|preço|price|sale|por)\b/i.test(line) ? 2 : 1;
-      if (skipDiscountLines && priority === 0) continue;
-      for (const match of line.matchAll(money)) {
-        const code = (match[1] || match[4]).toUpperCase();
-        const currency = Object.hasOwn(codes, code) ? codes[code] : code;
-        const digits = (match[2] || match[3]).replace(/[.,]+$/, '');
-        const decimal = digits.match(/[.,]\d{2}$/);
-        const normalized = decimal ? digits.slice(0, -3).replace(/[.,]/g, '') + '.' + digits.slice(-2) : digits.replace(/[.,]/g, '');
-        if (!/^(?:\d+(?:\.\d{2})?|\.\d{2})$/.test(normalized)) continue;
-        const price = Number(normalized);
-        if (currency && Number.isFinite(price)) candidates.push({ price, currency, index, priority });
+      let matches = [...line.matchAll(money())];
+      const currencyless = !matches.length && line.match(new RegExp('^(.*?)(' + digits + ')\\s*$', 'iu'));
+      if (currencyless) {
+        const prefix = currencyless[1].trim();
+        const standaloneCode = new RegExp('^(?:' + currencyCodes + ')$', 'iu');
+        const adjacentCode = !prefix && [lines[index - 1], lines[index + 1]].find(value => value && standaloneCode.test(value));
+        if (currentLabel.test(prefix) || (!prefix && (adjacentCode || currentLabel.test(lines[index - 1] || '')))) {
+          matches = [{ 0: currencyless[2], 1: adjacentCode || '', 2: currencyless[2], index: currencyless[1].length }];
+        }
+      }
+      for (const [position, match] of matches.entries()) {
+        const prefix = line.slice(position ? matches[position - 1].index + matches[position - 1][0].length : 0, match.index).trim();
+        const suffix = line.slice(match.index + match[0].length, matches[position + 1]?.index ?? line.length).trim();
+        const lastLine = lines[index - 1] || '';
+        const label = prefix || (/[:：]$/.test(lastLine) || /^(?:now|agora|price|preço|frete|shipping|regular price|original price|sale price)$/iu.test(lastLine) ? lastLine : '');
+        const current = currentLabel.test(label);
+        const previousPriceLabel = suffix.match(/^\(([^)]+)\)/)?.[1];
+        const excluded = isStruck?.(index, match.index, match.index + match[0].length) || oldLabel.test(label) || (previousPriceLabel && oldLabel.test(previousPriceLabel)) || (!current && feeLabel.test(label)) ||
+          /^(?:(?:\/|per|por)\s*(?:m[eê]s|month|week|semana|parcela)|(?:em|in)\s+\d+\s*(?:x|parcelas?|instal+l?ments?)|(?:de\s+)?(?:frete|shipping|tax(?:es)?|impostos?)\b)/iu.test(suffix) ||
+          /^\d+[.,]?\d*\s*%\s*(?:off|de desconto)\b/iu.test(suffix) && !current;
+        const range = /^(?:-|–|—|a|to|até)\s*\d/iu.test(suffix);
+        const price = numberFromPhoto(match[2] || match[3]);
+        const symbol = (match[1] || match[4] || '').toUpperCase();
+        if (price != null) candidates.push({ price, currency: symbol ? resolveCurrency(symbol) : sharedCurrency, index, excluded, range, priority: current ? 2 : 1 });
       }
     }
-    const highest = candidates.reduce((priority, item) => Math.max(priority, item.priority), -1);
-    const top = candidates.filter((item) => item.priority === highest);
+    return candidates;
+  }
+
+  function normalizePhotoLine(line) {
+    return String(line || '').normalize('NFKC').trim()
+      .replace(/\bC\s*A\s*(?:S\s*\$?|\$)\s*(\d+[.,])\s*(\d{2})(?!\d)/gi, (_, amount, cents) => 'CA$ ' + amount + cents)
+      .replace(/\bU\s*S\s*S?\s*\$\s*(?=\d)/gi, 'US$ ');
+  }
+  function readPhotoText(text, productUrl = '', { keepUnconfirmedAmount = false, isStruck } = {}) {
+    const lines = String(text || '').split(/\r?\n/).map(normalizePhotoLine).filter(Boolean);
+    let host = '', domainIndex = -1;
+    try { host = new URL(productUrl).hostname; } catch {}
+    if (!host) {
+      for (const [index, line] of lines.entries()) {
+        const domain = line.match(domainPattern)?.[0];
+        if (!domain) continue;
+        try { host = new URL(/^https?:/i.test(domain) ? domain : 'https://' + domain).hostname; domainIndex = index; break; } catch {}
+      }
+    }
+    const labeledStore = lines.map(line => line.match(storeLabel)?.[1]).find(Boolean);
+    const brand = lines.find(line => knownStoreHeading.test(line));
+    const storeName = (labeledStore || (host && store(host.toLowerCase())) || brand || '').slice(0, 150);
+    const candidates = photoPriceCandidates(lines, host, isStruck);
+    const eligible = candidates.filter(item => !item.excluded);
+    const highest = Math.max(0, ...eligible.map(item => item.priority));
+    const top = eligible.filter(item => item.priority === highest);
     const first = top[0];
-    const best = first && top.every((item) => item.price === first.price && item.currency === first.currency) ? first : null;
-    const titleLine = (line) => /[\p{L}]{3}/u.test(line) && ![storeName, brand].some((name) => name && name.toLowerCase() === line.toLowerCase())
-      && (line.split(/\s+/).length < 4 || (line.match(/\p{L}{3,}/gu) || []).length >= 2)
-      && !/^(?:loja|store|vendido por|sold by)\s*:/i.test(line)
-      && !/^(?:sterling si\s*l?\s*ver|prata(?: esterlina| 925)?|stainless steel|aço inoxidável|(?:\d+\s*k\s+)?(?:yellow |rose |white )?gold|gold plated|platinum plated)$/i.test(line)
-      && !/(?:https?:\/\/|\bwww\.|\b(?:CAD|USD|BRL|EUR|GBP|AUD)\b|[$€£]|\b(?:shipping|delivery|frete|subtotal|checkout|carrinho|add to|shop now|adicionar|sale price|view product details|style your own|sold|reviews?|pick up|select a store|get it delivered|business hours|points?|pontos?|cashback)\b)/i.test(line)
-      && !/^(?:\W*(?:black friday|best seller|gallery)\W*|(?:home|shop|bag|saved|account|menu|search|busca)(?:\s+(?:home|shop|bag|saved|account|menu|search|busca))*|novo|new|sale|oferta|ofertas|preço|price|produto|product|cadastro|login|sign in)$/i.test(line)
-      && !/^\W*(?:black friday|deal is|\d+\s*(?:ml|g|oz)\s+in.stock)\b/i.test(line);
-    const beforePrice = lines.slice(0, first?.index ?? lines.length);
-    const lastTitle = beforePrice.findLastIndex(titleLine);
-    let start = lastTitle;
-    for (let i = lastTitle; i >= Math.max(0, lastTitle - 3) && titleLine(beforePrice[i]); i--) {
-      if (/^[\p{L}\d][\p{L}\d &.'-]{1,40}\s+-\s+\p{L}/u.test(beforePrice[i])) {
-        start = i;
-        break;
-      }
-    }
+    const oneAmount = first && top.every(item => !item.range && item.price === first.price);
+    const oneCurrency = oneAmount && top.every(item => item.currency === first.currency);
+    const best = oneCurrency && first.currency ? first : null;
+    const confirmedAmount = keepUnconfirmedAmount && oneAmount ? first.price : null;
+    const titleLine = (line, index) => index !== domainIndex && !line.match(domainPattern) && !storeLabel.test(line) &&
+      ![storeName, brand].some(name => name && name.toLowerCase() === line.toLowerCase()) &&
+      /\p{L}{3}/u.test(line) && ![...line.matchAll(money())].length &&
+      !/^(?:[★☆*]|\d+[\d.,]*\s*(?:reviews?|sold|vendidos?)|(?:black friday|best seller|promoção|ofertas?|descontos?|new|sale|gallery|menu|search|home|shop|bag|saved|account|login|sign in|newsletter|product details|detalhes do produto|explore|discover|browse|view all|confira|descubra|cart|categoria|início|por|price|preço|payment|pagamento|reviews?|avaliações|select|choose|escolha|add to|adicionar|comprar|promo code|sku|color|cor|size|tamanho|estoque|in stock|frete|shipping|delivery|entrega|taxas?|tax(?:es)?|installments?|parcelas?|currency|moeda|sterling silver|prata(?: esterlina| 925)?|stainless steel|gold plated|platinum plated|retirar|pickup|buy now|checkout|subtotal|total|description|descrição)(?:\b|:))/iu.test(line) &&
+      !/\b(?:points?|pontos?|cashback|free delivery|free shipping|sem juros|por mês|em até|off)\b/iu.test(line) &&
+      !/^[\d.,]+\s*(?:ml|g|oz|mm|cm|kg)\b/iu.test(line);
+    const explicitTitle = lines.map(line => line.match(heading)?.[1]).find(Boolean);
+    const reference = (best || first || candidates[0])?.index;
+    const names = lines.map((line, index) => ({ line, index })).filter(({line,index}) => titleLine(line,index));
     const productHeading = /^[\p{L}\d][\p{L}\d &.'-]{1,40}\s+-\s+\p{L}/u;
-    const headingIndex = beforePrice.findLastIndex((line) => titleLine(line) && productHeading.test(line));
-    let titleLines = lastTitle >= 0 ? beforePrice.slice(start, lastTitle + 1) : [];
-    if (headingIndex >= 0) {
-      const name = beforePrice[headingIndex].split(/\s+-\s+/)[0].toLowerCase();
-      titleLines = [beforePrice[headingIndex]];
-      for (const line of beforePrice.slice(headingIndex + 1)) {
-        if (!titleLine(line) || line.toLowerCase() === name || /^(?:[*★☆]|(?:[Aa]\s+)?[AaKk]{3,}\s+\d)/.test(line)) break;
-        titleLines.push(line);
-      }
+    const scored = names.map(item => ({
+      ...item,
+      score: (productHeading.test(item.line) ? 8 : 0) + (item.line.split(/\s+/).length >= 2 ? 3 : 0) +
+        (reference == null ? 0 : item.index < reference ? Math.max(0, 4 - (reference - item.index) / 2) : item.index === reference + 1 ? 2 : 0),
+    })).sort((a, b) => b.score - a.score);
+    const chosen = scored[0];
+    let title = explicitTitle || (chosen && chosen.score >= 3 ? chosen.line : '');
+    if (!explicitTitle && chosen && title && productHeading.test(title) && reference != null && chosen.index < reference) {
+      const next = lines[chosen.index + 1];
+      if (next && chosen.index + 1 < reference && titleLine(next, chosen.index + 1) && !productHeading.test(next) && next.split(/\s+/).length >= 2) title += ' ' + next;
     }
-    const title = titleLines.join(' ').slice(0, 300);
-    return { title, store: storeName.slice(0, 150), price: best?.price ?? null, currency: best?.currency ?? null };
-  }
-  function mobileStoreBadge({ data, width, height }) {
-    const limit = Math.floor(height * 0.33);
-    const minYellow = Math.ceil(width * 0.028);
-    const minHeight = Math.ceil(height * 0.005);
-    let first = -1, left = width, right = 0;
-    for (let y = Math.floor(height * 0.10); y <= limit; y++) {
-      let yellow = 0, rowLeft = width, rowRight = 0;
-      for (let x = Math.floor(width * 0.80); y < limit && x < width; x++) {
-        const i = (y * width + x) * 4;
-        if (data[i] > 205 && data[i + 1] > 165 && data[i + 2] < 135) {
-          yellow++;
-          rowLeft = Math.min(rowLeft, x);
-          rowRight = x + 1;
-        }
-      }
-      if (yellow >= minYellow) {
-        if (first < 0) first = y;
-        left = Math.min(left, rowLeft);
-        right = Math.max(right, rowRight);
-        continue;
-      }
-      if (first >= 0 && y - first >= minHeight && y - first <= height * 0.025) {
-        left = Math.max(0, left - 1);
-        right = Math.min(width, right + 1);
-        return { x: left / width, y: (first - 1) / height, w: (right - left) / width, h: (y - first + 2) / height };
-      }
-      first = -1;
-      left = width;
-      right = 0;
-    }
-    return null;
-  }
-  function mobileSaleRegions(data, width, height) {
-    if (height < width * 1.5) return null;
-    const pixel = (x, y) => (y * width + x) * 4;
-    const red = (i) => data[i] > 175 && data[i] - data[i + 1] > 95 && data[i] - data[i + 2] > 95;
-    let start = -1;
-    for (let y = Math.floor(height * 0.33); y < height * 0.67; y++) {
-      if (red(pixel(2, y)) && red(pixel(width - 3, y))) {
-        if (start < 0) start = y;
-        continue;
-      }
-      if (start < 0) continue;
-      const band = y - start;
-      const whiteBelow = [0.2, 0.5, 0.8].every((x) => {
-        const i = pixel(Math.floor(width * x), y + 2);
-        return Math.min(data[i], data[i + 1], data[i + 2]) > 235;
-      });
-      if (band >= height * 0.025 && band <= height * 0.10 && whiteBelow) {
-        return { photo: { x: 0, y: 0.035, w: 1, h: start / height - 0.088 }, text: { x: 0, y: (y + 1) / height, w: 0.89, h: 0.28 } };
-      }
-      start = -1;
-    }
-    return null;
-  }
-  function screenshotRegions({ data, width, height }) {
-    if (width < height * 1.25) return mobileSaleRegions(data, width, height);
-    const offset = (x, y) => (y * width + x) * 4;
-    const upper = Math.floor(height * 0.8);
-    // Product pages often have a white gutter between the gallery and details.
-    let gapStart = -1;
-    const gaps = [];
-    for (let x = Math.floor(width * 0.22); x <= Math.floor(width * 0.62); x++) {
-      let white = 0;
-      for (let y = 0; y < upper; y++) {
-        const i = offset(x, y);
-        if (Math.min(data[i], data[i + 1], data[i + 2]) >= 248) white++;
-      }
-      if (white >= upper * 0.95) {
-        if (gapStart < 0) gapStart = x;
-      } else if (gapStart >= 0) {
-        if (x - gapStart >= width * 0.05 && gapStart <= width * 0.48) gaps.push([gapStart, x]);
-        gapStart = -1;
-      }
-    }
-    if (!gaps.length) return null;
-    const [left, right] = gaps.sort((a, b) => (b[1] - b[0]) - (a[1] - a[0]))[0];
-    // Ignore gallery bands that touch an edge, such as the next image below the product.
-    const marks = new Uint8Array(left * height);
-    for (let y = 0; y < height; y++) for (let x = 0; x < left; x++) {
-      const i = offset(x, y);
-      const min = Math.min(data[i], data[i + 1], data[i + 2]);
-      const max = Math.max(data[i], data[i + 1], data[i + 2]);
-      marks[y * left + x] = Number(min < 158 || max - min > 28);
-    }
-    const components = [];
-    for (let i = 0; i < marks.length; i++) {
-      if (!marks[i]) continue;
-      marks[i] = 0;
-      const queue = [i];
-      let x0 = left, y0 = height, x1 = 0, y1 = 0;
-      for (let head = 0; head < queue.length; head++) {
-        const cell = queue[head], x = cell % left, y = Math.floor(cell / left);
-        x0 = Math.min(x0, x); y0 = Math.min(y0, y);
-        x1 = Math.max(x1, x); y1 = Math.max(y1, y);
-        for (const [nx, ny] of [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]]) {
-          if (nx < 0 || nx >= left || ny < 0 || ny >= height) continue;
-          const next = ny * left + nx;
-          if (marks[next]) { marks[next] = 0; queue.push(next); }
-        }
-      }
-      if (x0 <= 0 || x1 >= left - 1 || y0 <= 0 || y1 >= height - 1 || queue.length < 4) continue;
-      components.push({ x0, y0, x1, y1, size: queue.length });
-    }
-    const best = components.sort((a, b) => b.size - a.size)[0];
-    if (!best || best.size < left * height * 0.01) return null;
-    const span = Math.max(best.x1 - best.x0, best.y1 - best.y0);
-    const nearby = Math.ceil(span * 0.25);
-    const object = { ...best };
-    for (const part of components) {
-      if (part.x1 < best.x0 - nearby || part.x0 > best.x1 + nearby || part.y1 < best.y0 - nearby || part.y0 > best.y1 + nearby) continue;
-      object.x0 = Math.min(object.x0, part.x0); object.y0 = Math.min(object.y0, part.y0);
-      object.x1 = Math.max(object.x1, part.x1); object.y1 = Math.max(object.y1, part.y1);
-    }
-    const pad = Math.ceil(span * 0.16);
-    const x = Math.max(0, object.x0 - pad), y = Math.max(0, object.y0 - pad);
-    const bounds = { x: x / width, y: y / height, w: (Math.min(left, object.x1 + pad + 1) - x) / width, h: (Math.min(height, object.y1 + pad + 1) - y) / height };
-    const textX = Math.max(0, (right - 2) / width);
-    return { photo: bounds, text: { x: textX, y: 0, w: 1 - textX, h: 0.55 } };
+    return { title: title.slice(0, 300), store: storeName, price: best?.price ?? confirmedAmount, currency: best?.currency ?? null,
+      priceIssue: !best && top.length ? (oneAmount && top.some(item => !item.currency) ? 'currency' : 'ambiguous') : null,
+      excludedPrices: candidates.filter(item => item.excluded).map(({price, currency}) => ({price, currency})) };
   }
   function read(doc, host, pageUrl) {
     const meta = (selector) => doc.querySelector(selector)?.content;
@@ -243,5 +186,5 @@
       imageUrl: images.map((value) => imageUrl(value, pageUrl)).find(Boolean) || null,
     };
   }
-  return { store, read, imageUrl, savedImageUrl, readPhotoText, screenshotRegions, mobileStoreBadge, photoLimit };
+  return { store, read, imageUrl, savedImageUrl, readPhotoText, normalizePhotoLine, photoLimit };
 });
