@@ -527,7 +527,7 @@ test('expands a multi-product print alongside another photo and lets missing row
   expect(saved.find(item => item.title === 'Scalp Brush').originalPrice).toBe(7.25);
 });
 
-test('reads the current prices in a stacked cart and asks for the currency', async ({ page }) => {
+test('reads current prices in a stacked cart and defaults to editable CAD', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
@@ -587,17 +587,13 @@ test('reads the current prices in a stacked cart and asks for the currency', asy
     await expect(row.locator('[data-field=title]')).toHaveValue(title);
     await expect(row.locator('[data-field=store]')).toHaveValue('Jardim do Norte');
     await expect(row.locator('[data-field=price]')).toHaveValue(price);
-    await expect(row.locator('[data-field=currency]')).toHaveValue('');
+    await expect(row.locator('[data-field=currency]')).toHaveValue('CAD');
   }
-  await page.locator('#wishSave').click();
-  await expect(page.locator('.wish-row')).toHaveCount(0);
-  await expect(rows.first().locator('[data-field=currency]')).toBeFocused();
-  await expect(rows.first().locator('[data-field=currency]')).toHaveAttribute('aria-invalid', 'true');
-  for (const row of await rows.all()) await row.locator('[data-field=currency]').selectOption('CAD');
+  await rows.last().locator('[data-field=currency]').selectOption('USD');
   await page.locator('#wishSave').click();
   await expect(page.locator('.wish-row img')).toHaveCount(2);
   const saved = await page.evaluate(() => JSON.parse(AppStorage.getItem('wishlist')));
-  expect(saved.map(({ originalPrice, currency }) => [originalPrice, currency])).toEqual([[33.2, 'CAD'], [16.75, 'CAD']]);
+  expect(saved.map(({ originalPrice, currency }) => [originalPrice, currency])).toEqual([[33.2, 'CAD'], [16.75, 'USD']]);
 });
 
 test('uses the right prices across staggered product columns', async ({ page }) => {
@@ -659,4 +655,59 @@ test('uses the right prices across staggered product columns', async ({ page }) 
     ['Silky Body Lotion with Oat Extract', 'Casa Aurora', '61.5', 'BRL'],
     ['Vanilla Candle Glass Jar', 'Casa Aurora', '37.2', 'BRL'],
   ]);
+});
+
+test('reads compact checkout rows without taking crossed-out prices or modal headings', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  await page.locator('[data-panel=wishlistPanel]').click();
+  await page.locator('#wishEditor > summary').click();
+  const print = await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 906;
+    canvas.height = 1280;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#666';
+    ctx.fillRect(0, 0, 906, 1280);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 255, 906, 985);
+    ctx.font = '14px Arial';
+    ctx.fillStyle = '#555';
+    ctx.fillText('Order Details', 410, 280);
+    for (const [index, title, store, price, old] of [
+      [0, 'Cotton Crew Socks', 'Hearth', '8.28', '15.43'],
+      [1, 'Denim Wide Leg Jeans', 'Field House', '55.08', '74.43'],
+      [2, 'Warm Knit Sweater', 'North Loom', '23.97', '39.89'],
+    ]) {
+      const top = 312 + index * 114;
+      ctx.fillStyle = '#6e2229';
+      ctx.fillRect(105, top, 69, 12);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 9px Arial';
+      ctx.fillText('BLACK FRIDAY', 108, top + 9);
+      ctx.fillStyle = '#222';
+      ctx.font = '13px Arial';
+      ctx.fillText(title, 180, top + 10);
+      ctx.fillText('Sold by ' + store, 105, top + 31);
+      ctx.fillText('One size', 105, top + 50);
+      ctx.fillStyle = '#ae4925';
+      ctx.font = 'bold 14px Arial';
+      ctx.fillText('CA$' + price, 105, top + 75);
+      ctx.fillStyle = '#666';
+      ctx.font = '12px Arial';
+      ctx.fillText('CA$' + old, 181, top + 75);
+      ctx.fillRect(181, top + 71, 55, 1);
+    }
+    return canvas.toDataURL('image/jpeg', .78).split(',')[1];
+  });
+  await page.locator('#wishUpload').setInputFiles({
+    name: 'checkout-compacto.jpg', mimeType: 'image/jpeg', buffer: Buffer.from(print, 'base64'),
+  });
+  const rows = page.locator('#wishBatchRows .preview-row');
+  await expect(rows).toHaveCount(3, { timeout: 45000 });
+  for (const [index, [title, price]] of [['Cotton Crew Socks', '8.28'], ['Denim Wide Leg Jeans', '55.08'], ['Warm Knit Sweater', '23.97']].entries()) {
+    await expect(rows.nth(index).locator('[data-field=title]')).toHaveValue(new RegExp(title, 'i'));
+    await expect(rows.nth(index).locator('[data-field=price]')).toHaveValue(price);
+    await expect(rows.nth(index).locator('[data-field=currency]')).toHaveValue('CAD');
+  }
 });

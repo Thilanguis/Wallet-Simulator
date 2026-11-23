@@ -1490,6 +1490,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function photoWarning(suggestion) {
     if (suggestion.failed) return 'Não foi possível ler o texto. A foto está pronta e você pode preencher os campos manualmente.';
     if (suggestion.priceIssue === 'ambiguous') return 'O print tem mais de um preço possível. Informe o preço atual e confira a moeda.';
+    if (suggestion.assumedCurrency) return 'CAD sugerido. Altere a moeda se o preço for de outro país.';
     if (suggestion.priceIssue === 'currency') {
       return suggestion.price == null
         ? 'A moeda não ficou clara. Informe o preço e a moeda do produto.'
@@ -1522,7 +1523,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const { price, currency } = fields;
     if (suggestion.price == null || touchedPhotoFields.has(price)) return;
     const editedCurrency = touchedPhotoFields.has(currency);
-    if (editedCurrency && suggestion.currency && currency.value !== suggestion.currency) return;
+    if (editedCurrency && !suggestion.assumedCurrency && suggestion.currency && currency.value !== suggestion.currency) return;
     const code = suggestion.currency || '';
     if (price.value === '') {
       price.value = suggestion.price;

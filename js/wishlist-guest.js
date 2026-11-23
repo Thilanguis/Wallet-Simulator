@@ -513,12 +513,13 @@ function appendPhotoRow(suggestion, source, caption, checked = true) {
     thumb.src = source.imageUrl;
     row.append(thumb);
   }
-  if (suggestion.failed || suggestion.priceIssue || !source || !suggestion.title || suggestion.price == null) {
+  if (suggestion.failed || suggestion.priceIssue || suggestion.assumedCurrency || !source || !suggestion.title || suggestion.price == null) {
     const note = document.createElement('p');
     note.className = 'guest-hint';
     note.textContent = !source ? 'Não foi possível abrir a foto. Você pode preencher os dados manualmente.' :
       suggestion.priceIssue === 'currency' ? 'Moeda não identificada no print.' :
         suggestion.priceIssue ? 'Confira qual preço é o atual no print.' :
+          suggestion.assumedCurrency ? 'CAD sugerido. Altere se necessário.' :
           !suggestion.title && suggestion.price == null ? 'Preencha o nome e o preço que aparecem no print.' :
           !suggestion.title ? 'Nome não identificado no print.' : 'Preço não identificado no print.';
     row.append(note);
@@ -610,7 +611,7 @@ async function readPhoto(attempt = ++photoRevision) {
       return;
     }
     applySuggestion(suggestions[0] || result);
-    status.textContent = result.failed ? 'Foto pronta. Preencha os campos manualmente.' : 'Foto pronta. Confira os dados antes de salvar.';
+    status.textContent = result.failed ? 'Foto pronta. Preencha os campos manualmente.' : result.assumedCurrency ? 'Foto pronta. CAD sugerido; altere se necessário.' : 'Foto pronta. Confira os dados antes de salvar.';
   } catch {
     if (current()) status.textContent = 'Foto pronta. Preencha os campos manualmente.';
   } finally {
