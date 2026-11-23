@@ -35,6 +35,8 @@ jobs:
         with:
           name: ${{ env.PAGES_ARTIFACT }}
           path: dist
+      - name: Wait for the Pages artifact to become visible
+        run: sleep 25
       - uses: actions/deploy-pages@v4
         id: deployment
         with:
