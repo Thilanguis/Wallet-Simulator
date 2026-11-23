@@ -1,6 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { hub } = require('./firebase-primary-hub.cjs');
 const root = 'usuarios/gabriel-local';
+const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
 test('catalog changes sync to the other account and survive reload without replacing wallet data', async ({ browser }) => {
   const server = await hub(),
@@ -87,7 +88,7 @@ test('accelerator checkpoints stay bounded and a companion gain does not replay 
     await b.locator('#adicionar').click();
     await b.clock.runFor(100);
     await a.clock.runFor(100);
-    await expect(a.locator('#saldoDominadora')).toHaveText('R$ 950,00');
+    await expect(a.locator('#saldoDominadora')).toHaveText(brl.format(1010 - Number(reducer.split('|')[0])));
     for (const page of [a, b]) await expect(page.locator('#storageWarning')).toBeHidden();
     await a.clock.runFor(41000);
     await b.clock.runFor(41000);
@@ -138,14 +139,15 @@ test('two tabs of the same browser stay usable and preserve typed form values', 
     await a.locator('#selectGanho').selectOption('Outro');
     await a.locator('#valorGanho').fill('17');
     await b.locator('[data-jump=gasto]').click();
-    await b.locator('#selectTarefa').selectOption({ index: 1 });
+    const [service] = await b.locator('#selectTarefa').selectOption({ index: 1 });
+    const cost = Number(service.split('|')[0]);
     await b.locator('#adicionar').click();
     await b.locator('[data-dialog-confirm]').click();
-    await expect(a.locator('#saldoDominadora')).toHaveText('R$ 970,00');
+    await expect(a.locator('#saldoDominadora')).toHaveText(brl.format(1000 - cost));
     await expect(a.locator('#valorGanho')).toHaveValue('17');
     await expect(a.locator('#adicionar')).toBeEnabled();
     await a.locator('#adicionar').click();
-    await expect(b.locator('#saldoDominadora')).toHaveText('R$ 987,00');
+    await expect(b.locator('#saldoDominadora')).toHaveText(brl.format(1017 - cost));
     await expect(a.locator('#storageWarning')).toBeHidden();
     await expect(b.locator('#storageWarning')).toBeHidden();
   } finally {

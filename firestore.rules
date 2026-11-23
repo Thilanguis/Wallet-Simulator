@@ -1,12 +1,202 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function walletMember() {
+    function verifiedGoogle() {
       return request.auth != null
+        && request.auth.token.email is string
         && request.auth.token.email_verified == true
-        && request.auth.token.firebase.sign_in_provider == 'google.com'
-        && request.auth.token.email in get(/databases/$(database)/documents/usuarios/gabriel-local/config/acesso).data.emails;
+        && request.auth.token.firebase.sign_in_provider == 'google.com';
     }
+    function accessConfig() {
+      return get(/databases/$(database)/documents/usuarios/gabriel-local/config/acesso).data;
+    }
+    function legacyMember(config) {
+      return config is map && config.get('emails', []) is list
+        && request.auth.token.email in config.get('emails', []);
+    }
+    function accessEnabled(config) {
+      return config is map && config.get('emails', []) is list
+        && config.get('adminEmail', '') is string && config.get('adminEmail', '') != ''
+        && config.get('adminEmail', '') in config.get('emails', []);
+    }
+    function emailAccount() {
+      let id = 'email:' + request.auth.token.email;
+      return /databases/$(database)/documents/usuarios/gabriel-local/wishlistAccounts/$(id);
+    }
+    function registeredAccount() {
+      let uidPath = /databases/$(database)/documents/usuarios/gabriel-local/wishlistAccounts/$(request.auth.uid);
+      return exists(emailAccount()) ? get(emailAccount()).data : (exists(uidPath) ? get(uidPath).data : {});
+    }
+    function approvedRole(account, role) {
+      return account is map && account.email == request.auth.token.email
+        && account.status == 'approved' && account.role == role;
+    }
+    function walletMember() {
+      let config = accessConfig();
+      return verifiedGoogle() && (accessEnabled(config)
+        ? (request.auth.token.email == config.adminEmail
+          || (legacyMember(config) && !exists(emailAccount()))
+          || approvedRole(registeredAccount(), 'coadmin'))
+        : legacyMember(config));
+    }
+    function accessManager() {
+      let config = accessConfig();
+      return verifiedGoogle() && accessEnabled(config) && walletMember();
+    }
+    function accessAdmin() {
+      let config = accessConfig();
+      return verifiedGoogle() && accessEnabled(config) && request.auth.token.email == config.adminEmail;
+    }
+    function documentKey(id) {
+      return id is string && id.matches('^[A-Za-z0-9_-]{1,128}$') && !id.matches('^__.*__$');
+    }
+    function validAccount(account) {
+      let fields = ['email', 'status', 'role', 'personId', 'canManagePurchased'];
+      return account.keys().hasAll(fields) && account.keys().size() == fields.size()
+        && account.email is string && account.email.size() > 0 && account.email.size() <= 320
+        && account.status in ['pending', 'approved', 'blocked']
+        && account.role in ['guest', 'coadmin'] && account.canManagePurchased is bool
+        && (account.personId == '' || documentKey(account.personId))
+        && (account.status != 'pending' || (account.role == 'guest' && account.personId == ''))
+        && (account.status != 'approved' || account.role != 'guest' || documentKey(account.personId));
+    }
+    function ownsPrimaryList(config, email) {
+      return accessEnabled(config) && config.emails.size() == 2
+        && email != config.adminEmail && email in config.emails;
+    }
+    function validAssignment(account) {
+      return account.status != 'approved' || account.role != 'guest'
+        || ((account.personId != 'primary-luana' || ownsPrimaryList(accessConfig(), account.email))
+          && existsAfter(privateListPath(account.personId)));
+    }
+    function guestList(personId, config) {
+      let account = registeredAccount();
+      return approvedRole(account, 'guest') && account.personId == personId
+        && (personId != 'primary-luana' || ownsPrimaryList(config, account.email));
+    }
+    function guestListAccess(personId) {
+      let config = accessConfig();
+      return verifiedGoogle() && accessEnabled(config) && documentKey(personId) && guestList(personId, config);
+    }
+    function validList(list) {
+      let fields = ['name', 'items', 'walletRevision', 'editedId'];
+      return list.keys().hasAll(fields) && list.keys().hasOnly(fields.concat(['shareKey'])) && list.name is string
+        && list.name.size() > 0 && list.name.size() <= 80 && list.items is map
+        && list.walletRevision is int && list.walletRevision >= 0
+        && (list.editedId == '' || documentKey(list.editedId))
+        && (list.get('shareKey', '') == '' || shareToken(list.shareKey));
+    }
+    function validWish(id, wish) {
+      let fields = ['id', 'title', 'store', 'originalPrice', 'currency', 'quantity', 'taxQuebec', 'bought'];
+      return wish is map && wish.keys().hasAll(fields) && wish.keys().size() == fields.size() && wish.id == id
+        && wish.title is string && wish.title.size() > 0 && wish.title.size() <= 300
+        && wish.store is string && wish.store.size() <= 150
+        && wish.currency is string && wish.currency.matches('^[A-Z]{3}$')
+        && wish.quantity is int && wish.quantity >= 1 && wish.quantity <= 9007199254740991
+        && (wish.originalPrice == null || (wish.originalPrice is number && wish.originalPrice >= 0
+          && wish.originalPrice <= 90071992547409 / wish.quantity))
+        && wish.taxQuebec is bool && wish.bought is bool;
+    }
+    function guestMutation(id, oldItems, newItems) {
+      let changed = newItems.diff(oldItems).affectedKeys();
+      let previous = oldItems.get(id, {'bought': false});
+      return changed.size() == 1 && changed.hasOnly([id]) && previous is map
+        && previous.get('bought', null) is bool
+        && (!previous.bought || canManagePersonalPurchase())
+        && (!(id in newItems) || (validWish(id, newItems[id]) && newItems[id].bought == previous.bought));
+    }
+    function shareToken(token) {
+      return token is string && token.matches('^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$');
+    }
+    function sharePath(token) {
+      return /databases/$(database)/documents/wishlistShares/$(token);
+    }
+    function privateListPath(personId) {
+      return /databases/$(database)/documents/usuarios/gabriel-local/wishlistLists/$(personId);
+    }
+    function changesPersonalPurchaseStatus(oldItems, newItems, id) {
+      let changed = newItems.diff(oldItems).affectedKeys();
+      return documentKey(id) && changed.size() == 1 && changed.hasOnly([id])
+        && id in oldItems && id in newItems
+        && oldItems[id].bought is bool && newItems[id].bought is bool
+        && oldItems[id].bought != newItems[id].bought
+        && newItems[id].diff(oldItems[id]).affectedKeys().hasOnly(['bought']);
+    }
+    function sharingProfile() {
+      let config = accessConfig();
+      let email = request.auth.token.email;
+      let account = registeredAccount();
+      let approved = account.get('status', '') == 'approved' && account.get('email', '') == email;
+      let established = config.get('emails', []);
+      return !accessEnabled(config) ? ''
+        : email == config.adminEmail ? 'wallet-admin'
+        : established.size() == 2 && email in established
+          ? (approved || account.size() == 0 ? 'primary-luana' : '')
+          : approved && account.role in ['guest', 'coadmin'] ? 'account-' + request.auth.uid : '';
+    }
+    function ownsProfile(owner, profile) {
+      return documentKey(profile) && owner == profile;
+    }
+    function readsPersonal(owner, profile) {
+      return documentKey(profile) && (owner == profile
+        || (exists(grantPath(owner, profile)) && activeDirectoryProfile(owner)));
+    }
+    function readsGrant(data, profile) {
+      return documentKey(profile) && (data.owner == profile || data.recipient == profile);
+    }
+    function directoryPath(id) {
+      return /databases/$(database)/documents/usuarios/gabriel-local/wishlistDirectory/$(id);
+    }
+    function grantPath(owner, recipient) {
+      let id = owner + '~' + recipient;
+      return /databases/$(database)/documents/usuarios/gabriel-local/wishlistGrants/$(id);
+    }
+    function activeDirectoryProfile(id) {
+      let data = get(directoryPath(id)).data;
+      let accountId = data.get('accountId', '');
+      return data.active == true && (accountId == '' ? activeWalletProfile(id) : directoryAccountActive(id, accountId));
+    }
+    function activeWalletProfile(id) {
+      let config = accessConfig();
+      return id == 'wallet-admin' || (id == 'primary-luana' && config.emails.size() == 2 && activeLuana(config));
+    }
+    function activeLuana(config) {
+      let email = config.emails[0] == config.adminEmail ? config.emails[1] : config.emails[0];
+      let id = 'email:' + email;
+      let path = /databases/$(database)/documents/usuarios/gabriel-local/wishlistAccounts/$(id);
+      return !exists(path) || get(path).data.status == 'approved';
+    }
+    function directoryAccountActive(id, accountId) {
+      let account = get(/databases/$(database)/documents/usuarios/gabriel-local/wishlistAccounts/$(accountId)).data;
+      return id == 'account-' + accountId && account.status == 'approved' && account.role in ['guest', 'coadmin'];
+    }
+    function canManagePersonalPurchase() {
+      return walletMember() || registeredAccount().get('canManagePurchased', false) == true;
+    }
+    function validPersonal(data) {
+      return data.keys().hasOnly(['items', 'editedId']) && data.items is map && data.editedId is string;
+    }
+    function personalUpdate() {
+      let next = request.resource.data;
+      return validPersonal(next) && (changesPersonalPurchaseStatus(resource.data.items, next.items, next.editedId)
+        || (documentKey(next.editedId) && guestMutation(next.editedId, resource.data.items, next.items)));
+    }
+    function walletSimulator(envelope) {
+      return envelope.get('simulator', {}) is map ? envelope.get('simulator', {}) : {};
+    }
+    function walletEnvelope(data) {
+      return data.get('walletAtualV4', {}) is map ? data.get('walletAtualV4', {}) : {};
+    }
+    function compatibleWishlistWrite() {
+      let before = walletSimulator(walletEnvelope(resource.data));
+      let updatedEnvelope = walletEnvelope(request.resource.data);
+      let changes = walletSimulator(updatedEnvelope).diff(before).affectedKeys();
+      let revision = updatedEnvelope.get('revision', 0);
+      let marker = updatedEnvelope.get('wishlistWriteRevision', 0);
+      return !changes.hasAny(['wishlist', 'wishlistPeople'])
+        || (revision is int && revision > 0 && marker is int && marker == revision);
+    }
+
     match /usuarios/gabriel-local {
       allow read: if walletMember();
       allow update: if walletMember()
@@ -17,7 +207,8 @@ service cloud.firestore {
           'timerValorPorMinuto', 'timerAtivo', 'timerRodando', 'atualizadoEm'
         ])
         && request.resource.data.saldoDominadora is number
-        && request.resource.data.bonusEspecialAtivo is bool;
+        && request.resource.data.bonusEspecialAtivo is bool
+        && (!accessEnabled(accessConfig()) || compatibleWishlistWrite());
       allow create, delete: if false;
       match /config/acesso {
         allow read: if walletMember();
@@ -32,12 +223,78 @@ service cloud.firestore {
         allow read: if walletMember();
         allow write: if false;
       }
+      match /wishlistAccounts/{uid} {
+        allow get: if (verifiedGoogle() && (request.auth.uid == uid || uid == 'email:' + request.auth.token.email) && accessEnabled(accessConfig()))
+          || accessManager();
+        allow list: if accessManager();
+        allow create: if verifiedGoogle() && accessEnabled(accessConfig())
+          && request.auth.uid == uid && !uid.matches('^email:.*') && request.resource.data.email == request.auth.token.email
+          && validAccount(request.resource.data) && request.resource.data.status == 'pending'
+          && request.resource.data.canManagePurchased == false;
+        allow create: if accessAdmin() && uid == 'email:' + request.resource.data.email
+          && request.resource.data.email != accessConfig().adminEmail
+          && request.resource.data.email in accessConfig().emails
+          && validAccount(request.resource.data) && validAssignment(request.resource.data)
+          && request.resource.data.status in ['approved', 'blocked'];
+        allow update: if accessManager() && validAccount(request.resource.data)
+          && validAssignment(request.resource.data) && request.resource.data.email == resource.data.email
+          && resource.data.email != accessConfig().adminEmail
+          && (request.resource.data.role == resource.data.role
+            || (resource.data.status == 'approved' && request.resource.data.status == 'approved'))
+          && (resource.data.status != 'pending' || request.resource.data.status != 'approved'
+            || (request.resource.data.role == 'guest' && request.resource.data.canManagePurchased == false))
+          && (accessAdmin()
+            || (resource.data.status == 'pending' && resource.data.role == 'guest'
+              && request.resource.data.status == 'approved' && request.resource.data.role == 'guest'
+              && request.resource.data.canManagePurchased == resource.data.canManagePurchased));
+        allow delete: if false;
+      }
+      match /wishlistLists/{personId} {
+        // Historic wallet mirrors stay scoped to wallet managers.
+        allow read: if walletMember();
+        allow create, update: if walletMember() && accessEnabled(accessConfig())
+          && documentKey(personId) && validList(request.resource.data);
+        allow delete: if walletMember() && accessEnabled(accessConfig()) && documentKey(personId);
+      }
+      match /wishlistGifts/{personId} {
+        allow get: if walletMember() || guestListAccess(personId);
+        allow create, update: if accessManager() && documentKey(personId) && validList(request.resource.data);
+        allow delete: if accessManager() && documentKey(personId);
+      }
+      match /wishlistDirectory/{id} {
+        allow read: if verifiedGoogle() && documentKey(sharingProfile());
+        allow create, update: if accessManager() && documentKey(id)
+          && request.resource.data.keys().hasOnly(['name', 'accountId', 'active'])
+          && request.resource.data.name is string && request.resource.data.name.size() > 0
+          && request.resource.data.name.size() <= 80 && request.resource.data.accountId is string
+          && request.resource.data.active is bool
+          && (request.resource.data.accountId == '' ? id in ['wallet-admin', 'primary-luana']
+            : id == 'account-' + request.resource.data.accountId);
+      }
+      match /wishlistPersonal/{owner} {
+        allow get: if verifiedGoogle() && readsPersonal(owner, sharingProfile());
+        allow create: if verifiedGoogle() && ownsProfile(owner, sharingProfile())
+          && validPersonal(request.resource.data) && documentKey(request.resource.data.editedId)
+          && guestMutation(request.resource.data.editedId, {}, request.resource.data.items);
+        allow update: if verifiedGoogle() && ownsProfile(owner, sharingProfile()) && personalUpdate();
+      }
+      match /wishlistGrants/{id} {
+        function matchesGrant(data) {
+          return data.keys().hasOnly(['owner', 'recipient'])
+            && documentKey(data.owner) && documentKey(data.recipient)
+            && data.owner != data.recipient && id == data.owner + '~' + data.recipient;
+        }
+        allow read: if verifiedGoogle() && readsGrant(resource.data, sharingProfile());
+        allow create: if verifiedGoogle() && matchesGrant(request.resource.data)
+          && ownsProfile(request.resource.data.owner, sharingProfile())
+          && activeDirectoryProfile(request.resource.data.recipient);
+        allow delete: if verifiedGoogle() && ownsProfile(resource.data.owner, sharingProfile());
+      }
       match /tarefas/{taskId} { allow read, create, update: if walletMember(); allow delete: if false; }
       match /historico/{recordId} { allow read, create, update: if walletMember(); allow delete: if false; }
       match /debugRoleta/{spinId} { allow read, create, update: if walletMember(); allow delete: if false; }
       match /accelBoosts/{boostId} { allow read, create, update: if walletMember(); allow delete: if false; }
     }
-    // Other paths are denied by default. Administrative backups and access
-    // management use IAM, never an end-user permission to edit the allowlist.
+    // Other paths are denied by default. Only IAM can edit the private allowlist.
   }
 }

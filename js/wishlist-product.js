@@ -186,5 +186,13 @@
       imageUrl: images.map((value) => imageUrl(value, pageUrl)).find(Boolean) || null,
     };
   }
-  return { store, read, imageUrl, savedImageUrl, readPhotoText, normalizePhotoLine, photoLimit };
+  async function readLink(url, signal) {
+    const response = await fetch(url.href, { credentials: 'omit', referrerPolicy: 'no-referrer', signal });
+    if (!response.ok || !response.headers.get('content-type')?.includes('text/html')) throw Error('Página indisponível.');
+    const text = await response.text();
+    if (text.length > 2000000) throw Error('Página muito grande.');
+    const doc = new DOMParser().parseFromString(text, 'text/html');
+    return read(doc, url.hostname, response.url || url.href);
+  }
+  return { store, read, readLink, imageUrl, savedImageUrl, readPhotoText, normalizePhotoLine, photoLimit };
 });

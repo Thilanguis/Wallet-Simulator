@@ -1,6 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { hub } = require('./firebase-primary-hub.cjs');
 const root = 'usuarios/gabriel-local';
+const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 for (const width of [1440, 393, 820])
   test(`two Google accounts ${width}: same shared wallet, purchases and task completion without session buttons`, async ({ browser }) => {
     const server = await hub(),
@@ -15,16 +16,17 @@ for (const width of [1440, 393, 820])
       await expect(b.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
       await expect(b.locator('#saldoDominadora')).toHaveText('R$ 1.000,00');
       await a.locator('[data-jump=gasto]').click();
-      await a.locator('#selectTarefa').selectOption({ index: 1 });
+      const [service] = await a.locator('#selectTarefa').selectOption({ index: 1 });
+      const cost = Number(service.split('|')[0]);
       await a.locator('#adicionar').click();
       await a.locator('[data-dialog-confirm]').click();
-      await expect(b.locator('#saldoDominadora')).toHaveText('R$ 970,00');
+      await expect(b.locator('#saldoDominadora')).toHaveText(brl.format(1000 - cost));
       await expect(b.locator('#tarefasPendentes .tarefa-item')).toHaveCount(1);
       expect([...server.docs.keys()].filter((key) => key.startsWith(root + '/historico/')).length).toBe(1);
       expect([...server.docs.keys()].filter((key) => key.startsWith(root + '/tarefas/')).length).toBe(1);
       await expect(a.locator('#cloudControl')).toHaveCount(0);
       expect(await b.evaluate(() => WalletStore.isWritable())).toBe(true);
-      await b.locator('#tarefasPendentes input[type=checkbox]').check();
+      await b.locator('#tarefasPendentes input[type=checkbox]').click();
       await expect(a.locator('#tarefasPendentes .tarefa-item')).toHaveCount(0);
       const task = [...server.docs].find(([key]) => key.startsWith(root + '/tarefas/'))[1];
       expect(task.status).toBe('concluida');
@@ -32,9 +34,9 @@ for (const width of [1440, 393, 820])
       await b.locator('#selectGanho').selectOption('Outro');
       await b.locator('#valorGanho').fill('10');
       await b.locator('#adicionar').click();
-      await expect(a.locator('#saldoDominadora')).toHaveText('R$ 980,00');
+      await expect(a.locator('#saldoDominadora')).toHaveText(brl.format(1010 - cost));
       await b.reload();
-      await expect(b.locator('#saldoDominadora')).toHaveText('R$ 980,00');
+      await expect(b.locator('#saldoDominadora')).toHaveText(brl.format(1010 - cost));
     } finally {
       await first.close();
       await second.close();

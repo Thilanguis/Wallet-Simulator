@@ -13,7 +13,8 @@ document.addEventListener('DOMContentLoaded', () => {
     generation = 0,
     received = false,
     importAttempted = false,
-    activated = false;
+    activated = false,
+    accessSession = null;
   function preserve(wallet) {
     if (!localStorage.getItem(recoveryKey)) localStorage.setItem(recoveryKey, JSON.stringify(wallet));
     else if (engine?.state().pending) localStorage.setItem('findom.firebase.unsent.v4', JSON.stringify(wallet));
@@ -109,8 +110,71 @@ document.addEventListener('DOMContentLoaded', () => {
       preserve(localBeforeLoad);
     }
   }
+  async function offerGuestAccess(user, attempt) {
+    if (!user.emailVerified || !navigator.onLine) return;
+    try {
+      const { openWishlistAccess } = await import('./wishlist-access.js');
+      const access = await openWishlistAccess({ db: session.db, user });
+      if (attempt === generation && access.enabled && ['request', 'pending', 'guest', 'blocked'].includes(access.role)) {
+        location.replace(new URL('./wishlist-guest.html', location.href).href);
+      }
+    } catch {
+      // Preserve the wallet's connection error if this installation has no guest access.
+    }
+  }
+
+  async function setupAccess(transport, user, signal) {
+    const panel = $('wishAccessSettings');
+    const status = $('wishAccessStatus');
+    const active = Boolean(transport.accessRole);
+    panel.hidden = false;
+    $('wishAccessPending').hidden = active;
+    $('wishAccessHelp').hidden = !active;
+    signal.addEventListener('abort', () => {
+      panel.open = false;
+      panel.hidden = true;
+      status.textContent = '';
+    }, { once: true });
+    if (!active) {
+      status.textContent = 'Primeiro publique as novas regras do Firestore. Depois, em usuarios/gabriel-local/config/acesso, preencha adminEmail com o e-mail Google de Gabriel que já consta na lista de acesso.';
+      return;
+    }
+    try {
+      if (transport.trackAccess) {
+        const { openWishlistAccess } = await import('./wishlist-access.js');
+        const access = await openWishlistAccess({ db: session.db, user });
+        if (signal.aborted) return;
+        if (access.role !== 'coadmin') {
+          void connect(user);
+          return;
+        }
+        const stop = access.watchAccount(profile => {
+          if (!signal.aborted && profile.role !== 'coadmin') void connect(user);
+        }, error => {
+          if (!signal.aborted && error.code === 'permission-denied') void connect(user);
+        });
+        signal.addEventListener('abort', stop, { once: true });
+      }
+      const circle = $('wishCircleOpen');
+      const { openWishlistSharing } = await import('./wishlist-sharing.js');
+      const { showWishlistPeople } = await import('./wishlist-people.js');
+      if (signal.aborted) return;
+      circle.hidden = false;
+      circle.addEventListener('click', () => void showWishlistPeople(async () => ({
+        profile: transport.personalProfile,
+        api: await openWishlistSharing(session.db, transport.personalProfile),
+      }), { signal, personalLink: './wishlist-guest.html?pessoal' }), { signal });
+      signal.addEventListener('abort', () => { circle.hidden = true; }, { once: true });
+      const { mountWishlistAccess } = await import('./wishlist-access-admin.js');
+      await mountWishlistAccess({ db: session.db, role: transport.accessRole, existingAccounts: transport.existingAccounts, signal });
+    } catch (error) {
+      if (!signal.aborted) status.textContent = message(error);
+    }
+  }
   async function connect(user) {
     const attempt = ++generation;
+    accessSession?.abort();
+    accessSession = new AbortController();
     engine?.stop();
     engine = null;
     window.SharedWallet = null;
@@ -140,10 +204,10 @@ document.addEventListener('DOMContentLoaded', () => {
     $('firebaseAuthMessage').textContent = 'Conferindo acesso à carteira…';
     state({ mode: 'connecting' });
     try {
-      preserve(localBeforeLoad);
       const { createPrimaryFirebaseTransport } = await import('./firebase-primary-transport.js');
       const transport = await createPrimaryFirebaseTransport({ db: session.db, user, template: { simulator: localBeforeLoad.simulator, emptyFinance: Finance.empty() } });
       if (attempt !== generation) return;
+      preserve(localBeforeLoad);
       engine = WalletShared.create({
         store: WalletStore,
         transport,
@@ -167,10 +231,12 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       window.SharedWallet = engine;
       engine.connect();
+      void setupAccess(transport, user, accessSession.signal);
     } catch (error) {
       if (attempt === generation) {
         WalletStore.setWritable(false);
         state({ mode: 'error', error });
+        if (error?.code === 'permission-denied') void offerGuestAccess(user, attempt);
       }
     }
   }

@@ -5,13 +5,18 @@ const root = path.resolve(__dirname, '..'),
   dest = path.join(root, 'dist');
 fs.mkdirSync(dest, { recursive: true });
 const { copy, prepareAssets } = require('./local-assets.cjs');
-for (const name of ['index.html', 'manifest.json', 'css', 'js', 'icons', 'icon-192.png', 'icon-512.jpg', '💎 Contrato de Submissão e Resgate de Saldo.pdf']) copy(path.join(root, name), path.join(dest, name));
+for (const name of ['index.html', 'wishlist-guest.html', 'wishlist-shared.html', 'manifest.json', 'css', 'js', 'icons', 'icon-192.png', 'icon-512.jpg', '💎 Contrato de Submissão e Resgate de Saldo.pdf']) copy(path.join(root, name), path.join(dest, name));
 prepareAssets(root, dest);
 const publicBuild = process.argv.includes('--public');
 const localConfig = path.join(dest, 'firebaseConfiguration.js');
 if (publicBuild) {
   // The existing-project bootstrap works without publishing the local config.
   if (fs.existsSync(localConfig)) fs.unlinkSync(localConfig);
+  fs.rmSync(path.join(dest, 'js/local-access-menu.js'), { force: true });
+  const index = path.join(dest, 'index.html');
+  const localEntry = '    <script src="js/local-access-menu.js"></script>';
+  const html = fs.readFileSync(index, 'utf8');
+  fs.writeFileSync(index, html.replace(localEntry + (html.includes('\r\n') ? '\r\n' : '\n'), ''));
 } else if (fs.existsSync(path.join(root, 'firebaseConfiguration.js'))) copy(path.join(root, 'firebaseConfiguration.js'), localConfig);
 const files = [];
 function walk(dir) {

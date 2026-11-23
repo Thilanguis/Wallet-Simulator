@@ -2882,6 +2882,34 @@ body {
 .cloud-settings {
   margin-bottom: 24px;
 }
+#wishAccessPending { margin-inline-start: 4px; color: #e4bb86; font-size: .875em; }
+#wishAccessAccounts { display: grid; gap: 10px; list-style: none; padding: 0; margin: 14px 0 0; font: 13px/1.4 system-ui, sans-serif; }
+#wishAccessAccounts > li { overflow-wrap: anywhere; }
+.wish-access-card { border: 1px solid #473c31; border-radius: 10px; background: #211d1a; }
+.wish-access-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 12px 14px; }
+.wish-access-identity { flex: 1 1 230px; min-width: 0; }
+.wish-access-identity strong { color: #f0e7d8; font-size: 14px; }
+.wish-access-identity p { margin: 6px 0 0; color: #bcb2a3; font-size: 12px; }
+.wish-access-badges, .wish-access-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.wish-access-badges { margin-top: 6px; }
+.wish-access-badge { padding: 2px 8px; border-radius: 20px; background: #352e26; color: #e5d1ad; font-size: 11px; font-weight: 650; }
+.wish-access-badge[data-status="approved"] { background: #21392f; color: #b5dfc9; }
+.wish-access-badge[data-status="pending"] { background: #433520; color: #f0cf88; }
+.wish-access-badge[data-status="blocked"] { background: #492b31; color: #ffbdc5; }
+.wish-access-form:not([hidden]) { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 14px; border-top: 1px solid #473c31; padding: 12px 14px 14px; background: #181614; border-radius: 0 0 10px 10px; }
+.wish-access-form > label:not([hidden]) { flex: 0 1 260px; margin: 0; font: 650 12px/1.4 system-ui, sans-serif; color: #e5d1ad; }
+#wishAccessAccounts select { margin-bottom: 0; min-height: 36px; padding: 6px 9px; font-size: 13px; border-color: #5a4b3b; }
+.wish-access-form .wish-access-permission:not([hidden]) { display: flex; align-items: center; gap: 6px; flex: 1 0 100%; }
+.wish-access-permission input[type="checkbox"] { width: auto; margin: 0; }
+.wish-access-form .wish-access-actions { flex: 1 0 100%; }
+#wishAccessAccounts .wish-access-actions button { width: auto; min-height: 34px; font: 650 12px/1.2 system-ui, sans-serif; padding: 7px 12px; }
+#wishAccessAccounts .wish-access-revoke { background: #3c2528; border-color: #69404a; color: #ffc2c9; }
+#wishAccessAccounts .wish-access-revoke:hover { background: #633039; }
+#wishAccessAccounts .wish-access-save { background: #584324; border-color: #80643d; color: #fff0cf; }
+@media (max-width: 540px) {
+  .wish-access-header, .wish-access-form:not([hidden]) { padding-inline: 10px; }
+  .wish-access-form > label:not([hidden]) { flex-basis: 100%; }
+}
 .cloud-settings input {
   font: 12px/1.6 monospace;
 }
@@ -3035,11 +3063,27 @@ body:not(.firebase-required) #firebaseAuthPanel {
 .wish-upload-row { display: flex; flex-wrap: wrap; align-items: end; gap: 8px 12px; margin: 8px 0; }
 .wish-upload-row label { flex: 1 1 210px; min-width: 0; max-width: 360px; }
 #wishForm #wishUpload { width: 100%; height: auto; max-width: 100%; }
-.wish-photo-loading:not([hidden]) { display: flex; align-items: center; gap: 9px; margin: 8px 0; color: #f2c8d9; font: 600 0.85rem system-ui; }
-#wishPhotoProgress { font-variant-numeric: tabular-nums; }
-.wish-photo-spinner { width: 1rem; height: 1rem; border: 2px solid #75465a; border-top-color: #f4c8dc; border-radius: 50%; animation: wish-photo-spin 0.8s linear infinite; }
+/* Shared progress for both wishlist editors. */
+.wish-photo-loading:not([hidden]) {
+  display: flex; align-items: center; gap: 12px; margin: 10px 0; padding: 10px 13px;
+  border: 1px solid #774559; border-radius: 12px; color: #ffe0e9;
+  background: linear-gradient(110deg,#422538,#251c25 70%); font: 13px/1.4 system-ui;
+}
+.wish-photo-stage { display: grid; gap: 2px; }
+.wish-photo-stage > span { color: #ddbacb; font-variant-numeric: tabular-nums; }
+.wish-photo-stage > span:empty { display: none; }
+.wish-photo-spinner {
+  display: grid; place-items: center; position: relative; flex: none;
+  width: 34px; aspect-ratio: 1; border-radius: 50%; border: 1px solid #a46280;
+}
+.wish-photo-spinner::before, .wish-photo-spinner::after {
+  content: ""; position: absolute; border-radius: 50%; animation: wish-photo-spin 1.15s linear infinite;
+}
+.wish-photo-spinner::before { inset: -1px; border: 2px solid transparent; border-top-color: #ffd5e5; border-right-color: #d986aa; }
+.wish-photo-spinner::after { inset: 5px; border: 1px dashed #bd7598; animation-direction: reverse; animation-duration: 2.2s; }
+.wish-photo-spinner i { width: 6px; aspect-ratio: 1; border-radius: 50%; background: #ffdfaa; box-shadow: 0 0 7px #ffcf83; }
 @keyframes wish-photo-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .wish-photo-spinner { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .wish-photo-spinner::before, .wish-photo-spinner::after { animation: none; } }
 #wishForm .hint:empty, #entryOrigin:empty { display: none; }
 #wishForm:has(#wishBatch:not([hidden])) #wishPhotoMessage { color: #f2c8d9; font-weight: 700; }
 #wishForm :is(input, select)[aria-invalid="true"] { border-color: #ff92a8; outline: 1px solid #ff92a8; }
@@ -3148,59 +3192,69 @@ body:not(.firebase-required) #firebaseAuthPanel {
   position: relative;
   border: 0;
   padding: 0;
+  margin: 0;
   background: none;
-  font-family: Arial, sans-serif;
+  font-family: system-ui, sans-serif;
 }
 .account-menu summary {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 0;
-  cursor: pointer;
-  color: #c9b98b;
-  font-size: 12px;
-  list-style: none;
+  display: flex; align-items: center; gap: 6px;
+  min-height: 36px; padding: 5px 9px; border-radius: 8px;
+  cursor: pointer; color: #e0c995; font-size: 12px; list-style: none;
 }
-.account-menu summary::-webkit-details-marker {
-  display: none;
-}
-.account-menu summary svg {
-  width: 15px;
-  height: 15px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.5;
+.account-menu summary::-webkit-details-marker { display: none; }
+.account-menu summary:hover, .account-menu[open] summary { background: #332820; color: #fff0c6; }
+.account-menu summary svg, .account-menu-avatar svg {
+  width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5;
 }
 .account-menu-content {
   position: absolute;
-  right: 0;
-  top: 100%;
-  z-index: 30;
-  display: flex;
-  align-items: center;
+  inset: calc(100% + 8px) 0 auto auto;
+  z-index: 42;
+  width: 19rem;
+  max-width: calc(100vw - 32px);
+  display: grid;
   gap: 12px;
   padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: #211d1a;
-  box-shadow: 0 8px 20px #0006;
-  width: max-content;
-  min-width: min(260px, calc(100vw - 40px));
-  max-width: calc(100vw - 40px);
+  border: 1px solid #70553e;
+  border-radius: 14px;
+  color: #f4e6cd;
+  background: linear-gradient(145deg, #302620, #201b1a 76%);
+  box-shadow: 0 10px 26px #0008;
 }
-.account-menu-content span {
-  min-width: 0;
-  overflow-wrap: anywhere;
+.account-menu-identity {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid #503c31;
+  padding-bottom: 11px;
 }
-.account-menu-content button {
-  flex-shrink: 0;
-  white-space: nowrap;
-  background: transparent;
-  border: 1px solid #66523d;
-  border-radius: 6px;
-  padding: 5px 9px;
-  font-size: 11px;
-  box-shadow: none;
+.account-menu-avatar {
+  display: grid; place-items: center; width: 36px; height: 36px;
+  border: 1px solid #70553e; border-radius: 50%; color: #edce8b; background: #403024;
+}
+.account-menu-identity strong { display: block; font-size: 13px; }
+.account-menu-identity #firebaseAccount {
+  display: block; margin-top: 2px; color: #d2c1af; font-size: 12px; overflow-wrap: anywhere;
+}
+.account-menu-content button, .account-menu-content select {
+  min-width: 0; margin: 0; font: 600 12px/1.4 system-ui;
+}
+.account-menu-content #firebaseSignOut {
+  justify-self: start; min-height: 36px; padding: 6px 14px;
+  color: #f1d8c2; background: #342522; border: 1px solid #725348; border-radius: 8px;
+  box-shadow: none; text-transform: none; letter-spacing: normal;
+}
+.account-menu-content #firebaseSignOut:hover { background: #4b2d2b; }
+.account-menu-test {
+  display: grid; gap: 4px; grid-row: 2; color: #d2c1af;
+  font: 600 12px/1.4 system-ui;
+}
+.account-menu-content .account-menu-test select { width: 100%; min-height: 36px; }
+@media (max-width: 700px) {
+  .wallet-header-line { position: relative; }
+  .wallet-header-line .account-menu { position: static; }
+  .wallet-header-line .account-menu-content { inset-inline: auto 0; width: min(19rem, 100%); }
 }
 .firebase-required:not(.firebase-authenticated) .account-menu {
   display: none;
