@@ -335,5 +335,61 @@
     return resultRows;
   }
 
-  return { read };
+  function readBlocks(result, url = '', { inspectPrice, cleanHeading, allowNoSeller = false } = {}) {
+    const parts = (result.lines || []).filter(line => line.bbox && (!Number.isFinite(line.confidence) || line.confidence >= 30))
+      .map(line => observation(trimEdgeNoise(line)))
+      .sort((a, b) => a.box.y0 + a.box.y1 - b.box.y0 - b.box.y1 || a.box.x0 - b.box.x0);
+    const sellers = parts.flatMap((part, index) => itemMerchant.test(part.text) ? [index] : []);
+    const height = part => part.box.y1 - part.box.y0;
+    const middle = part => (part.box.y0 + part.box.y1) / 2;
+    const description = part => {
+      if (part.hasMoney || !part.title) return null;
+      const title = cleanHeading?.(part) || part.title;
+      if (/^(?:black friday|order details|items? in this category|one[- ]size|uni(?:que|versal) size|taille unique|tamanho único|price drop)\b/iu.test(title)) return null;
+      return title.length >= 4 && /\p{L}{3}/u.test(title) ? { ...part, title } : null;
+    };
+    const isPrice = part => part.hasMoney && !pricedSummary.test(part.text) && !itemDetails.test(part.text);
+    const rows = [];
+    if (sellers.length >= 2) {
+      const headings = sellers.map(index => {
+        const seller = parts[index];
+        return parts.slice(0, index).reverse().find(part =>
+          middle(seller) - middle(part) <= 3.5 * Math.max(height(seller), height(part)) &&
+          part.box.x1 >= seller.box.x0 && part.box.x0 < seller.box.x1 && description(part));
+      });
+      for (const [index, seller] of sellers.entries()) {
+        const heading = headings[index];
+        if (!heading) continue;
+        const next = headings[index + 1];
+        const end = next ? parts.indexOf(next) : sellers[index + 1] ?? parts.length;
+        const start = parts.indexOf(heading);
+        const amounts = parts.slice(start, end).filter(isPrice);
+        // Wide checkout tables may put a price beside the heading, in its own OCR line.
+        const beside = parts.slice(0, start).filter(part => isPrice(part) &&
+          Math.abs(middle(part) - middle(heading)) <= .55 * height(heading) && part.box.x1 <= heading.box.x0);
+        rows.push(interpret({ title: description(heading), context: [parts[seller].text], amounts: [...beside, ...amounts] }, url, inspectPrice));
+      }
+    } else if (allowNoSeller) {
+      let start = 0;
+      for (const [index, part] of parts.entries()) {
+        if (index < start || !isPrice(part)) continue;
+        // Use the first description in the block. Size and color often sit
+        // directly above the price, but after the actual product heading.
+        const section = parts.slice(start, index);
+        const heading = section.find(candidate => description(candidate) &&
+          middle(part) - middle(candidate) <= 7 * Math.max(height(candidate), height(part)));
+        if (heading) {
+          const following = parts.slice(index + 1).findIndex(candidate => !isPrice(candidate) ||
+            Math.abs(middle(candidate) - middle(part)) > 1.9 * Math.max(height(candidate), height(part)));
+          const end = following < 0 ? parts.length : index + 1 + following;
+          rows.push(interpret({ title: description(heading), context: [], amounts: parts.slice(index, end) }, url, inspectPrice));
+          start = end;
+        } else if (index >= start) start = index + 1;
+      }
+    }
+    const recognized = rows.filter(row => row.price != null || row.priceIssue === 'ambiguous').length;
+    return rows.length >= 2 && recognized >= 2 ? rows : [];
+  }
+
+  return { read, readBlocks };
 });

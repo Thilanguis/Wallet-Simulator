@@ -26,7 +26,7 @@ function show(next, message) {
   state = next;
   $('guestAccess').hidden = next === 'list';
   $('guestWishlist').hidden = next !== 'list';
-  $('guestAdd').hidden = next !== 'list';
+  $('guestHeadingActions').hidden = next !== 'list';
   $('guestGifts').hidden = next !== 'list' || !giftItems.length;
   $('guestSignIn').hidden = next !== 'login';
   $('guestRequest').hidden = next !== 'request';
@@ -65,6 +65,7 @@ function clearList() {
   listName = '';
   items = [];
   selection.clear();
+  $('guestHideBought').checked = false;
   itemChecks.clear();
   $('guestWishTitle').textContent = 'Seus desejos';
   $('guestWishCount').textContent = '';
@@ -88,14 +89,16 @@ function priceLabel(item) {
 function updateSelection() {
   const count = selection.size;
   const all = $('guestSelectAll');
-  all.checked = items.length > 0 && count === items.length;
-  all.indeterminate = count > 0 && count < items.length;
-  $('guestSelectAllLabel').hidden = !items.length;
-  $('guestShareActions').hidden = !items.length;
+  const visibleCount = itemChecks.size;
+  all.checked = visibleCount > 0 && count === visibleCount;
+  all.indeterminate = count > 0 && count < visibleCount;
+  $('guestSelectAllLabel').hidden = !visibleCount;
+  $('guestShareActions').hidden = !visibleCount;
   $('guestCopy').disabled = !count;
   $('guestShare').disabled = !count;
   $('guestWishCount').textContent = !items.length ? 'Sua lista está vazia.'
-    : items.length + (items.length === 1 ? ' item' : ' itens') + ' · ' + count + (count === 1 ? ' selecionado' : ' selecionados');
+    : !visibleCount ? 'Nenhum desejo a comprar.'
+      : visibleCount + (visibleCount === 1 ? ' item' : ' itens') + (count ? ' · ' + count + (count === 1 ? ' selecionado' : ' selecionados') : '');
 }
 
 function renderList(list) {
@@ -104,12 +107,18 @@ function renderList(list) {
   giftItems = Array.isArray(list?.gifts) ? list.gifts : [];
   renderReadonlyWishlist($('guestGiftItems'), giftItems);
   closeDisallowedDrafts();
-  const ids = new Set(items.map(item => item.id));
+  $('guestWishTitle').textContent = listName || 'Seus desejos';
+  renderPersonalItems();
+  show('list');
+}
+
+function renderPersonalItems() {
+  const visible = $('guestHideBought').checked ? items.filter(item => !item.bought) : items;
+  const ids = new Set(visible.map(item => item.id));
   for (const id of selection) if (!ids.has(id)) selection.delete(id);
   itemChecks = new Map();
-  $('guestWishTitle').textContent = listName || 'Seus desejos';
   const stores = new Map();
-  for (const item of items) {
+  for (const item of visible) {
     const store = typeof item.store === 'string' ? item.store.trim() : '';
     if (!stores.has(store)) stores.set(store, []);
     stores.get(store).push(item);
@@ -131,7 +140,6 @@ function renderList(list) {
   $('guestWishItems').replaceChildren(...groups);
   clearShare();
   updateSelection();
-  show('list');
 }
 
 function renderItem(item) {
@@ -177,9 +185,10 @@ function renderItem(item) {
     thumb.src = attachment.imageUrl;
     label.insertBefore(thumb, name);
   }
-  if (attachment.url) {
+  const savedUrl = productUrl(item, attachment);
+  if (savedUrl) {
     const productLink = document.createElement('a');
-    productLink.href = attachment.url;
+    productLink.href = savedUrl;
     productLink.target = '_blank';
     productLink.rel = 'noopener noreferrer';
     productLink.className = 'guest-item-meta';
@@ -314,7 +323,7 @@ function shareText() {
   if (!selected.length) return '';
   const title = 'Lista de Desejos' + (listName ? ' · ' + listName : '');
   const lines = selected.map(item => [item.title + (quantity(item) > 1 ? ' ×' + quantity(item) : ''), item.store, priceLabel(item),
-    item.bought ? 'Comprado' : '', item.taxQuebec ? 'Taxas do Québec à parte' : ''].filter(Boolean).join(' · '));
+    item.bought ? 'Comprado' : '', item.taxQuebec ? 'Taxas do Québec à parte' : '', productUrl(item)].filter(Boolean).join(' · '));
   return [title, ...lines].join('\n\n');
 }
 
@@ -364,7 +373,7 @@ async function readLink() {
     if (!formFields.store.value && !touched.has('store')) {
       applySuggestion({ store: WishProduct.store(url.hostname) }, { preserveMissing: true });
     }
-    status.textContent = 'A loja não permitiu a leitura do link. Você pode preencher os dados ou usar um print.';
+    status.textContent = 'Prévia indisponível. Preencha o nome ou use um print. O link será salvo com o desejo.';
   } finally {
     clearTimeout(deadline);
     if (current()) cancelLinkRead();
@@ -373,6 +382,7 @@ async function readLink() {
 
 $('guestReadLink').onclick = () => void readLink();
 formFields.url.addEventListener('input', () => {
+  WishProduct.updateLinkAction($('guestOpenLink'), formFields.url.value);
   cancelLinkRead();
   $('guestLinkStatus').textContent = '';
   if (editDraft?.imageUrl && !editDraft.imageUrl.startsWith('data:')) {
@@ -393,6 +403,10 @@ function readAttachment(id) {
   } catch {
     return {};
   }
+}
+
+function productUrl(item, attachment = readAttachment(item.id)) {
+  return WishProduct.imageUrl(item.url ?? attachment.url) || '';
 }
 
 function photoPreview(imageUrl) {
@@ -461,6 +475,9 @@ function setBatch(active) {
   $('guestPhotoBatch').hidden = !active;
   $('guestSingleFields').hidden = active;
   $('guestSingleFields').disabled = active;
+  $('guestSingleLink').hidden = active;
+  formFields.url.disabled = active;
+  if (active) cancelLinkRead();
   $('guestSave').textContent = active ? 'Salvar selecionados' : 'Salvar desejo';
   if (active) {
     $('guestPhotoPreview').hidden = true;
@@ -472,6 +489,8 @@ function setBatch(active) {
   }
   updateBatchCurrency();
 }
+const applyDefaultStore = WishProduct.bindDefaultStore($('guestDefaultStore'), () =>
+  batchRows.size ? [...batchRows.values()].map(({ fields }) => fields.querySelector('[name=store]')) : [formFields.store]);
 function appendPhotoRow(suggestion, source, caption, checked = true) {
   const row = document.createElement('div');
   row.className = 'guest-photo-row';
@@ -499,6 +518,9 @@ function appendPhotoRow(suggestion, source, caption, checked = true) {
       field.value = value ?? '';
     }
   }
+  const inputs = Object.fromEntries([...fields.querySelectorAll('[name]')].map(field => [field.name, field]));
+  fields.prepend(WishProduct.batchLinkField(inputs, { value: suggestion.url }));
+  applyDefaultStore(inputs.store);
   include.onchange = () => {
     fields.disabled = !include.checked;
     updateBatchCurrency();
@@ -513,10 +535,11 @@ function appendPhotoRow(suggestion, source, caption, checked = true) {
     thumb.src = source.imageUrl;
     row.append(thumb);
   }
-  if (suggestion.failed || suggestion.priceIssue || suggestion.assumedCurrency || !source || !suggestion.title || suggestion.price == null) {
+  if (!suggestion.manual && (suggestion.failed || suggestion.priceIssue || suggestion.assumedCurrency || !source || !suggestion.title || suggestion.price == null)) {
     const note = document.createElement('p');
     note.className = 'guest-hint';
-    note.textContent = !source ? 'Não foi possível abrir a foto. Você pode preencher os dados manualmente.' :
+    note.textContent = !source && suggestion.url ? 'Seu rascunho foi mantido. Marque esta linha se quiser salvá-lo.' :
+      !source ? 'Não foi possível abrir a foto. Você pode preencher os dados manualmente.' :
       suggestion.priceIssue === 'currency' ? 'Moeda não identificada no print.' :
         suggestion.priceIssue ? 'Confira qual preço é o atual no print.' :
           suggestion.assumedCurrency ? 'CAD sugerido. Altere se necessário.' :
@@ -528,17 +551,38 @@ function appendPhotoRow(suggestion, source, caption, checked = true) {
   $('guestPhotoRows').append(row);
   batchRows.set(row, { include, fields, imageUrl: source?.imageUrl || '' });
   updateBatchCurrency();
+  return inputs;
 }
 
-function startBatch() {
-  if (batchRows.size) return;
-  if (['title', 'store', 'price'].some(key => touched.has(key) && formFields[key].value)) {
+function startBatch(products = [], keepDraft = false) {
+  if (batchRows.size) return products;
+  if (keepDraft || formFields.url.value.trim() || ['title', 'store', 'price'].some(key => touched.has(key) && formFields[key].value)) {
     const initial = Object.fromEntries([...$('guestSingleFields').querySelectorAll('[name]')].map(field =>
       [field.name, field.type === 'checkbox' ? field.checked : field.value]));
-    appendPhotoRow(initial, photo, 'Rascunho anterior', false);
+    const draft = { ...initial, url: formFields.url.value.trim() };
+    if (applyDefaultStore.isInherited(formFields.store)) draft.store = '';
+    const key = WishPhotoReader.photoProductKey;
+    const matches = draft.title && products.filter(item => key(item.title) === key(draft.title));
+    if (matches?.length === 1) {
+      const match = matches[0];
+      const manual = Object.fromEntries(Object.entries(draft).filter(([field, value]) =>
+        field === 'url' || touched.has(field) || (['title', 'store', 'price'].includes(field) && value !== '')));
+      products = products.map(item => item === match ? { ...item, ...manual } : item);
+    } else {
+      appendPhotoRow({ ...draft, manual: keepDraft }, photo || { imageUrl: editDraft?.imageUrl }, 'Produto inicial', keepDraft);
+    }
   }
   setBatch(true);
+  return products;
 }
+
+$('guestAddManualProduct').onclick = () => {
+  if (!editDraft || editDraft.baseline || !$('guestPhotoLoading').hidden || $('guestSave').disabled) return;
+  startBatch([], true);
+  const fields = appendPhotoRow({ manual: true }, null, 'Novo produto');
+  $('guestPhotoStatus').textContent = batchRows.size + ' produtos para revisar.';
+  fields.title.focus();
+};
 
 async function openPhotos(files) {
   if (!$('guestPhotoLoading').hidden) return;
@@ -597,8 +641,8 @@ async function readPhoto(attempt = ++photoRevision) {
     if (!current()) return;
     suggestions = result.products || [];
     if (suggestions.length > 1 && !editDraft.baseline) {
-      startBatch();
-      suggestions.forEach((item, index) => appendPhotoRow(item, photo, 'Produto ' + (index + 1)));
+      const products = startBatch(suggestions);
+      products.forEach((item, index) => appendPhotoRow(item, photo, 'Produto ' + (index + 1)));
       status.textContent = batchRows.size + ' produtos para revisar.';
       $('guestReadPhoto').hidden = true;
       return;
@@ -742,10 +786,13 @@ function openEditor(baseline = null) {
   if (state !== 'list' || !personId || (baseline && !canManageItem(baseline))) return;
   closeEditor();
   editDraft = { baseline, ...(baseline ? readAttachment(baseline.id) : {}) };
+  $('guestDefaultStoreLabel').hidden = !!baseline;
+  $('guestAddManualProduct').hidden = !!baseline;
   $('guestEditorTitle').textContent = baseline ? 'Editar desejo' : 'Adicionar desejo';
   const fields = formFields;
   editDraft.originalImage = editDraft.imageUrl;
-  fields.url.value = editDraft.url || '';
+  fields.url.value = baseline ? productUrl(baseline, editDraft) : '';
+  WishProduct.updateLinkAction($('guestOpenLink'), fields.url.value);
   photoPreview(editDraft.imageUrl);
   if (baseline) {
     fields.title.value = baseline.title;
@@ -833,6 +880,14 @@ async function savePhotoBatch(guest) {
   for (const [row, draft] of batchRows) {
     if (!draft.include.checked) continue;
     const values = Object.fromEntries([...draft.fields.querySelectorAll('[name]')].map(field => [field.name, field]));
+    const rawUrl = values.url.value.trim();
+    const url = rawUrl ? WishProduct.imageUrl(rawUrl) : '';
+    if (url === null) {
+      values.url.setAttribute('aria-invalid', 'true');
+      $('guestEditError').textContent = 'Informe um link http ou https válido no produto marcado.';
+      values.url.focus();
+      return;
+    }
     const price = values.price.value === '' ? null : values.price.valueAsNumber;
     const units = values.quantity.valueAsNumber;
     const valid = Number.isSafeInteger(units) && units > 0 &&
@@ -844,7 +899,7 @@ async function savePhotoBatch(guest) {
     }
     selected.push({ row, draft, item: { id: crypto.randomUUID(), title: values.title.value.trim(),
       store: values.store.value.trim(), originalPrice: price, currency: values.currency.value || 'BRL',
-      quantity: units, taxQuebec: values.tax.checked, bought: false } });
+      quantity: units, taxQuebec: values.tax.checked, bought: false, ...(url ? { url } : {}) } });
   }
   if (!selected.length) {
     $('guestEditError').textContent = 'Selecione pelo menos um produto.';
@@ -911,22 +966,23 @@ editForm.onsubmit = async event => {
     quantity: units,
     taxQuebec: fields.tax.checked,
     bought: baseline?.bought === true,
+    ...(url || baseline?.url !== undefined || draft.url ? { url } : {}),
   };
   const attempt = editRevision;
   $('guestEditError').textContent = '';
   setBusy('guestSave', 'guestEditCancel', true);
   try {
     const key = attachmentKey(item.id);
-    if (url || draft.imageUrl) localStorage.setItem(key, JSON.stringify({ url, imageUrl: draft.imageUrl || '' }));
+    if (draft.imageUrl) localStorage.setItem(key, JSON.stringify({ imageUrl: draft.imageUrl }));
     try {
       await access.saveItem(guest, item, baseline);
     } catch (error) {
       const previous = draft.baseline ? { url: draft.url || '', imageUrl: draft.originalImage || '' } : null;
       if (previous?.url || previous?.imageUrl) localStorage.setItem(key, JSON.stringify(previous));
-      else if (url || draft.imageUrl) localStorage.removeItem(key);
+      else if (draft.imageUrl) localStorage.removeItem(key);
       throw error;
     }
-    if (!url && !draft.imageUrl) localStorage.removeItem(key);
+    if (!draft.imageUrl) localStorage.removeItem(key);
     if (attempt === editRevision) {
       closeEditor();
       renderList({ name: listName, items, gifts: giftItems });
@@ -1005,6 +1061,8 @@ async function requestAccess() {
 
 $('guestRequest').onclick = requestAccess;
 $('guestRetry').onclick = () => session ? void connect(session.auth.currentUser) : void start();
+
+$('guestHideBought').onchange = renderPersonalItems;
 
 $('guestSelectAll').onchange = ({ target }) => {
   selection.clear();

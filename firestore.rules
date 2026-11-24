@@ -88,7 +88,9 @@ service cloud.firestore {
     }
     function validWish(id, wish) {
       let fields = ['id', 'title', 'store', 'originalPrice', 'currency', 'quantity', 'taxQuebec', 'bought'];
-      return wish is map && wish.keys().hasAll(fields) && wish.keys().size() == fields.size() && wish.id == id
+      return wish is map && wish.keys().hasAll(fields) && wish.keys().hasOnly(fields.concat(['url'])) && wish.id == id
+        && wish.get('url', '') is string && wish.get('url', '').size() <= 4096
+        && (wish.get('url', '') == '' || wish.url.matches('^https?://[^/?#@\\s]+([/?#][^\\s]*)?$'))
         && wish.title is string && wish.title.size() > 0 && wish.title.size() <= 300
         && wish.store is string && wish.store.size() <= 150
         && wish.currency is string && wish.currency.matches('^[A-Z]{3}$')

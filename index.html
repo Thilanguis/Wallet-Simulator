@@ -526,9 +526,12 @@
           </div>
           <span id="wishTotalStatus" role="status" aria-atomic="true">Seleção · estimativa: CAD 0,00 · aproximadamente R$ 0,00</span>
         </div>
-        <details id="wishEditor" class="list-editor"><summary>＋ Adicionar desejo</summary>
+        <details id="wishEditor" class="list-editor"><summary>
+          <span class="wish-add-icon" aria-hidden="true">+</span> Adicionar desejo
+        </summary>
         <form id="wishForm">
-          <div class="wish-link-row"><label>Link do produto<input id="wishUrl" type="url" placeholder="Cole o link, se tiver" /></label><button id="wishRead" type="button">Atualizar prévia</button></div>
+          <h3 id="wishEditorEditTitle" hidden>Editar desejo</h3>
+          <div class="wish-link-row"><label>Link do produto<input id="wishUrl" type="url" maxlength="4096" placeholder="Cole o link, se tiver" /></label><button id="wishRead" type="button">Atualizar prévia</button><a id="wishOpenLink" target="_blank" rel="noopener noreferrer" hidden>Abrir link</a></div>
           <p id="wishMessage" class="hint" role="status"></p>
           <div class="wish-upload-row">
             <label>Fotos ou prints dos produtos<input id="wishUpload" type="file" accept="image/jpeg,image/png,image/webp,image/bmp" multiple /></label>
@@ -538,26 +541,29 @@
             <button id="wishAddPhotoRow" type="button" class="wish-share-button" hidden>Adicionar outra linha com esta foto</button>
             <button id="wishRemovePhoto" type="button" class="wish-share-button" hidden>Remover foto</button>
           </div>
-          <p class="hint">Também dá para colar um print ou arrastar fotos para o formulário.</p>
+          <p class="hint">Para importar uma lista de compras, escolha, cole ou arraste os prints e revise os itens encontrados.</p>
           <div id="wishPhotoLoading" class="wish-photo-loading" role="status" hidden>
             <span class="wish-photo-spinner" aria-hidden="true"><i></i></span>
             <span class="wish-photo-stage"><strong>Lendo imagens</strong><span id="wishPhotoProgress"></span></span>
           </div>
           <p id="wishPhotoMessage" class="hint" role="status"></p>
           <div id="wishImagePreview"></div>
-          <div class="wish-person-fields">
-            <label>Para quem?<select id="wishPerson"></select></label>
-            <div id="wishPersonNameField" hidden>
-              <label>Novo nome<input id="wishPersonName" maxlength="80" disabled /></label>
-              <button type="button" id="wishRegisterPerson" class="wish-share-button">Salvar pessoa</button>
+          <div class="wish-entry-options">
+            <div class="wish-person-fields">
+              <label>Para quem?<select id="wishPerson"></select></label>
+              <div id="wishPersonNameField" hidden>
+                <label>Novo nome<input id="wishPersonName" maxlength="80" disabled /></label>
+                <button type="button" id="wishRegisterPerson" class="wish-share-button">Salvar pessoa</button>
+              </div>
             </div>
+            <label class="wish-visibility">Quem pode ver?
+              <select id="wishVisibility">
+                <option value="wallet">Só no Wallet</option>
+                <option value="recipient">Mostrar na lista da pessoa</option>
+              </select>
+            </label>
+            <label id="wishDefaultStoreLabel">Loja padrão<input id="wishDefaultStore" maxlength="150" placeholder="Preenche os produtos sem loja" /></label>
           </div>
-          <label class="wish-visibility">Quem pode ver?
-            <select id="wishVisibility">
-              <option value="wallet">Só no Wallet</option>
-              <option value="recipient">Mostrar na lista da pessoa</option>
-            </select>
-          </label>
           <div id="wishSingleFields" class="form-grid">
             <label>Produto<input id="wishTitle" maxlength="300" required /></label>
             <label>Loja<input id="wishStore" maxlength="150" required /></label>
@@ -572,7 +578,7 @@
             <div id="wishBatchRows"></div>
           </div>
           <p id="wishSaveError" class="hint" role="alert"></p>
-          <div class="btn-row"><button type="submit" id="wishSave">Adicionar desejo</button><button type="button" id="wishCancel" class="subtle-btn" hidden>Cancelar edição</button></div>
+          <div class="btn-row"><button type="button" id="wishAddManualProduct" class="wish-share-button">＋ Adicionar outro produto</button><button type="submit" id="wishSave">Adicionar desejo</button><button type="button" id="wishCancel" class="subtle-btn" hidden>Cancelar edição</button></div>
         </form>
         </details>
         <div class="wish-list-heading">
@@ -586,17 +592,21 @@
               </div>
             </div>
           </div>
-          <div class="wish-group-actions">
-            <select id="wishSelectStore" aria-label="Filtrar por loja" hidden></select>
-            <label class="wish-purchase-all"><input type="checkbox" id="wishHideBought" /> Ocultar comprados</label>
-            <label id="wishSelectAllPurchaseLabel" class="wish-purchase-all" hidden>
-              <input type="checkbox" id="wishSelectAllPurchase" /> Selecionar todos
-            </label>
-            <button type="button" id="wishCircleOpen" class="wish-share-button" aria-haspopup="dialog" hidden>👤 Pessoas e listas</button>
-            <button type="button" id="wishApprovalNotice" class="wish-share-button" hidden></button>
-            <button type="button" id="wishManagePeople" class="wish-share-button" aria-label="Gerenciar amigas" title="Gerenciar amigas" aria-haspopup="dialog">
-              <span aria-hidden="true">👤</span><span id="wishFriendCount" aria-hidden="true">0</span>
-            </button>
+          <div class="wish-list-toolbar">
+            <div class="wish-list-filters" role="group" aria-label="Filtros e seleção">
+              <select id="wishSelectStore" aria-label="Filtrar por loja" hidden></select>
+              <label class="wish-purchase-all"><input type="checkbox" id="wishHideBought" /> Ocultar comprados</label>
+              <label id="wishSelectAllPurchaseLabel" class="wish-purchase-all" hidden>
+                <input type="checkbox" id="wishSelectAllPurchase" /> Selecionar todos
+              </label>
+            </div>
+            <div class="wish-list-people" role="group" aria-label="Pessoas">
+              <button type="button" id="wishCircleOpen" class="wish-share-button" aria-haspopup="dialog" hidden>👤 Pessoas e listas</button>
+              <button type="button" id="wishApprovalNotice" class="wish-share-button" hidden></button>
+              <button type="button" id="wishManagePeople" class="wish-share-button" aria-label="Gerenciar amigas" title="Gerenciar amigas" aria-haspopup="dialog">
+                <span>Amigas</span><span id="wishFriendCount" aria-hidden="true">0</span>
+              </button>
+            </div>
           </div>
         </div>
         <div id="wishPurchaseBar" hidden>

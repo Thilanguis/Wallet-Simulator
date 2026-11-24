@@ -16,7 +16,13 @@ function listItems(host, items) {
   const formatter = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
   host.replaceChildren(...items.map(item => {
     const row = element('li', null, 'wish-people-item');
-    const label = element('span', item.title, item.bought ? 'wish-people-bought' : '');
+    const url = WishProduct.imageUrl(item.url);
+    const label = element(url ? 'a' : 'span', item.title, item.bought ? 'wish-people-bought' : '');
+    if (url) {
+      label.href = url;
+      label.target = '_blank';
+      label.rel = 'noopener noreferrer';
+    }
     const details = [item.store, item.quantity > 1 ? '×' + item.quantity : '',
       Number.isFinite(item.originalPrice) ? item.currency + ' ' + formatter.format(item.originalPrice) : '',
       item.bought ? 'Comprado' : ''].filter(Boolean);

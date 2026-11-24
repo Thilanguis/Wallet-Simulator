@@ -657,57 +657,200 @@ test('uses the right prices across staggered product columns', async ({ page }) 
   ]);
 });
 
-test('reads compact checkout rows without taking crossed-out prices or modal headings', async ({ page }) => {
+const compactCheckouts = [
+  ['orange prices', '#ae4925', false, true, 105],
+  ['blue prices', '#165ca6', false, true, 105],
+  ['black prices', '#252525', false, true, 105],
+  ['dark theme', '#88b5ff', true, true, 105],
+  ['no seller labels', '#ae4925', false, false, 105],
+  ['right-aligned prices', '#ae4925', false, true, 650],
+];
+
+for (const [style, color, dark, seller, priceX] of compactCheckouts) {
+  test('reads compact checkout with ' + style + ' and skips crossed-out prices', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+    await page.locator('[data-panel=wishlistPanel]').click();
+    await page.locator('#wishEditor > summary').click();
+    const print = await page.evaluate(({ color, dark, seller, priceX }) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 906;
+      canvas.height = 1280;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = dark ? '#999' : '#666';
+      ctx.fillRect(0, 0, 906, 1280);
+      ctx.fillStyle = dark ? '#242328' : '#fff';
+      ctx.fillRect(0, 255, 906, 985);
+      ctx.font = '14px Arial';
+      ctx.fillStyle = '#555';
+      ctx.fillText('Order Details', 410, 280);
+      for (const [index, title, store, price, old] of [
+        [0, 'Cotton Crew Socks', 'Hearth', '8.28', '15.43'],
+        [1, 'Denim Wide Leg Jeans', 'Field House', '55.08', '74.43'],
+        [2, 'Warm Knit Sweater', 'North Loom', '23.97', '39.89'],
+      ]) {
+        const top = 312 + index * 114;
+        ctx.fillStyle = '#6e2229';
+        ctx.fillRect(105, top, 69, 12);
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 9px Arial';
+        ctx.fillText('BLACK FRIDAY', 108, top + 9);
+        ctx.fillStyle = dark ? '#eee' : '#222';
+        ctx.font = '13px Arial';
+        ctx.fillText(title, 180, top + 10);
+        if (seller) ctx.fillText('Sold by ' + store, 105, top + 31);
+        ctx.fillText('One size', 105, top + 50);
+        ctx.fillStyle = color;
+        ctx.font = 'bold 14px Arial';
+        ctx.fillText('CA$' + price, priceX, top + 75);
+        ctx.fillStyle = dark ? '#999' : '#666';
+        ctx.font = '12px Arial';
+        ctx.fillText('CA$' + old, priceX + 76, top + 75);
+        ctx.fillRect(priceX + 76, top + 71, 55, 1);
+      }
+      return canvas.toDataURL('image/jpeg', .78).split(',')[1];
+    }, { color, dark, seller, priceX });
+    await page.locator('#wishUpload').setInputFiles({
+      name: 'checkout-compacto.jpg', mimeType: 'image/jpeg', buffer: Buffer.from(print, 'base64'),
+    });
+    const rows = page.locator('#wishBatchRows .preview-row');
+    await expect(rows).toHaveCount(3, { timeout: 45000 });
+    for (const [index, [title, price]] of [['Cotton Crew Socks', '8.28'], ['Denim Wide Leg Jeans', '55.08'], ['Warm Knit Sweater', '23.97']].entries()) {
+      await expect(rows.nth(index).locator('[data-field=title]')).toHaveValue(new RegExp(title, 'i'));
+      await expect(rows.nth(index).locator('[data-field=price]')).toHaveValue(price);
+      await expect(rows.nth(index).locator('[data-field=currency]')).toHaveValue('CAD');
+    }
+  });
+}
+
+test('reads all products in a long scrolling checkout without repeating overlap', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
   await page.locator('[data-panel=wishlistPanel]').click();
   await page.locator('#wishEditor > summary').click();
-  const print = await page.evaluate(() => {
+  const titles = ['Linen shirt', 'Denim jeans', 'Cotton socks', 'Red loafers', 'Classic belt', 'Canvas tote',
+    'Soft scarf', 'Green sweater', 'Leather boots', 'Silk blouse', 'Running jacket', 'Satin skirt'];
+  const print = await page.evaluate((items) => {
     const canvas = document.createElement('canvas');
-    canvas.width = 906;
-    canvas.height = 1280;
+    canvas.width = 520;
+    canvas.height = 2800;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#666';
-    ctx.fillRect(0, 0, 906, 1280);
     ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 255, 906, 985);
-    ctx.font = '14px Arial';
-    ctx.fillStyle = '#555';
-    ctx.fillText('Order Details', 410, 280);
-    for (const [index, title, store, price, old] of [
-      [0, 'Cotton Crew Socks', 'Hearth', '8.28', '15.43'],
-      [1, 'Denim Wide Leg Jeans', 'Field House', '55.08', '74.43'],
-      [2, 'Warm Knit Sweater', 'North Loom', '23.97', '39.89'],
-    ]) {
-      const top = 312 + index * 114;
-      ctx.fillStyle = '#6e2229';
-      ctx.fillRect(105, top, 69, 12);
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 9px Arial';
-      ctx.fillText('BLACK FRIDAY', 108, top + 9);
-      ctx.fillStyle = '#222';
-      ctx.font = '13px Arial';
-      ctx.fillText(title, 180, top + 10);
-      ctx.fillText('Sold by ' + store, 105, top + 31);
-      ctx.fillText('One size', 105, top + 50);
-      ctx.fillStyle = '#ae4925';
-      ctx.font = 'bold 14px Arial';
-      ctx.fillText('CA$' + price, 105, top + 75);
-      ctx.fillStyle = '#666';
-      ctx.font = '12px Arial';
-      ctx.fillText('CA$' + old, 181, top + 75);
-      ctx.fillRect(181, top + 71, 55, 1);
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.font = 'bold 18px Arial';
+    for (const [index, title] of items.entries()) {
+      const top = 60 + index * 228;
+      ctx.fillStyle = '#212121';
+      ctx.fillText(title, 70, top);
+      ctx.fillStyle = '#2067a4';
+      ctx.fillText('CA$' + (index + 3) + '.25', 340, top);
+      ctx.fillStyle = '#ededed';
+      ctx.fillRect(20, top + 42, 480, 2);
     }
-    return canvas.toDataURL('image/jpeg', .78).split(',')[1];
-  });
+    return canvas.toDataURL('image/jpeg', .8).split(',')[1];
+  }, titles);
   await page.locator('#wishUpload').setInputFiles({
-    name: 'checkout-compacto.jpg', mimeType: 'image/jpeg', buffer: Buffer.from(print, 'base64'),
+    name: 'scroll.jpg', mimeType: 'image/jpeg', buffer: Buffer.from(print, 'base64'),
   });
   const rows = page.locator('#wishBatchRows .preview-row');
-  await expect(rows).toHaveCount(3, { timeout: 45000 });
-  for (const [index, [title, price]] of [['Cotton Crew Socks', '8.28'], ['Denim Wide Leg Jeans', '55.08'], ['Warm Knit Sweater', '23.97']].entries()) {
+  await expect(rows).toHaveCount(titles.length, { timeout: 45000 });
+  for (const [index, title] of titles.entries()) {
     await expect(rows.nth(index).locator('[data-field=title]')).toHaveValue(new RegExp(title, 'i'));
-    await expect(rows.nth(index).locator('[data-field=price]')).toHaveValue(price);
-    await expect(rows.nth(index).locator('[data-field=currency]')).toHaveValue('CAD');
+    await expect(rows.nth(index).locator('[data-field=price]')).toHaveValue((index + 3) + '.25');
   }
+});
+
+test('wallet keeps a product link when the store blocks the preview', async ({ page }) => {
+  const url = 'https://loja.example.invalid/bloqueado';
+  await page.route(url, route => route.fulfill({ status: 403, headers: { 'access-control-allow-origin': '*' } }));
+  await page.goto('/');
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  await page.locator('[data-panel=wishlistPanel]').click();
+  await page.locator('#wishEditor > summary').click();
+  await page.locator('#wishUrl').fill(url);
+  await expect(page.locator('#wishMessage')).toContainText('O link será salvo');
+  await page.locator('#wishTitle').fill('Produto com prévia bloqueada');
+  await page.locator('#wishSave').click();
+  await expect(page.getByRole('link', { name: 'Produto com prévia bloqueada' })).toHaveAttribute('href', url);
+});
+
+test('wallet saves each imported product link and restores it in the editor', async ({ page }) => {
+  const links = ['https://loja.example.invalid/linen-shirt', 'https://loja.example.invalid/denim-jeans', 'https://loja.example.invalid/cotton-crew-socks'];
+  await page.route('https://loja.example.invalid/**', route => route.fulfill({ status: 403, headers: { 'access-control-allow-origin': '*' } }));
+  await page.goto('/');
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  await page.locator('[data-panel=wishlistPanel]').click();
+  await page.locator('#wishEditor > summary').click();
+  const prints = await photos(page, [
+    ['Produto: Linen Shirt   R$ 10,00', 'Produto: Denim Jeans   R$ 16,00'],
+    ['Pandora', 'Cotton Crew Socks', 'R$ 8,00'],
+  ]);
+  await page.locator('#wishUpload').setInputFiles(prints);
+  const rows = page.locator('#wishBatchRows .preview-row');
+  await expect(rows).toHaveCount(3, { timeout: 45000 });
+  await expect(page.locator('#wishUrl')).toBeHidden();
+  for (const [index, url] of links.entries()) {
+    await rows.nth(index).getByLabel('Link do produto').fill(url);
+    await rows.nth(index).locator('[data-field=store]').fill('Loja Exemplo');
+    await expect(rows.nth(index).getByRole('link', { name: 'Abrir link' })).toHaveAttribute('href', url);
+  }
+  await rows.first().getByRole('button', { name: 'Atualizar prévia' }).click();
+  await expect(rows.first()).toContainText('O link será salvo com este item.');
+  const second = rows.nth(1).getByLabel('Link do produto');
+  await second.fill('javascript:alert(1)');
+  await page.locator('#wishSave').click();
+  await expect(second).toBeFocused();
+  await expect(second).toHaveAttribute('aria-invalid', 'true');
+  await second.fill(links[1]);
+  await expect(second).not.toHaveAttribute('aria-invalid');
+  await page.locator('#wishSave').click();
+  await expect(page.locator('#wishEditor')).not.toHaveAttribute('open', '');
+  for (const [index, title] of ['Linen Shirt', 'Denim Jeans', 'Cotton Crew Socks'].entries()) {
+    await expect(page.getByRole('link', { name: title })).toHaveAttribute('href', links[index]);
+    await page.getByRole('button', { name: 'Editar ' + title }).click();
+    await expect(page.locator('#wishUrl')).toHaveValue(links[index]);
+    await expect(page.locator('#wishOpenLink')).toHaveAttribute('href', links[index]);
+    await page.locator('#wishEditor').getByRole('button', { name: 'Fechar painel' }).click();
+  }
+  const newUrl = 'https://loja.example.invalid/novo-jeans';
+  await page.getByRole('button', { name: 'Editar Denim Jeans' }).click();
+  await page.locator('#wishUrl').fill(newUrl);
+  await page.locator('#wishSave').click();
+  await expect(page.getByRole('link', { name: 'Denim Jeans' })).toHaveAttribute('href', newUrl);
+  await expect(page.getByRole('link', { name: 'Linen Shirt' })).toHaveAttribute('href', links[0]);
+});
+
+test('wallet adds products manually and updates only stores inherited from the default', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  await page.locator('[data-panel=wishlistPanel]').click();
+  await page.locator('#wishEditor > summary').click();
+  const shop = page.getByLabel('Loja padrão');
+  await shop.fill('Loja inicial');
+  await page.locator('#wishTitle').fill('Produto inicial');
+  await expect(page.locator('#wishStore')).toHaveValue('Loja inicial');
+  const add = page.getByRole('button', { name: /Adicionar outro produto/ });
+  await add.click();
+  const rows = page.locator('#wishBatchRows .preview-row');
+  await expect(rows).toHaveCount(2);
+  await rows.nth(1).locator('[data-field=title]').fill('Produto de outra loja');
+  await rows.nth(1).locator('[data-field=store]').fill('Loja particular');
+  await shop.fill('Loja revisada');
+  await expect(rows.first().locator('[data-field=store]')).toHaveValue('Loja revisada');
+  await expect(rows.nth(1).locator('[data-field=store]')).toHaveValue('Loja particular');
+  await add.click();
+  await expect(rows.last().locator('[data-field=store]')).toHaveValue('Loja revisada');
+  await rows.last().locator('[data-field=title]').fill('Produto adicional');
+  const files = await photos(page, [['Pandora', 'Bracelet from photo', 'R$ 12,00']]);
+  await page.locator('#wishUpload').setInputFiles(files);
+  await expect(page.locator('#wishPhotoLoading')).toBeHidden({ timeout: 45000 });
+  await expect(rows).toHaveCount(4);
+  await expect(rows.last().locator('[data-field=store]')).toHaveValue('Pandora');
+  await shop.fill('Loja final');
+  await expect(rows.first().locator('[data-field=store]')).toHaveValue('Loja final');
+  await expect(rows.nth(1).locator('[data-field=store]')).toHaveValue('Loja particular');
+  await expect(rows.last().locator('[data-field=store]')).toHaveValue('Pandora');
+  await page.locator('#wishSave').click();
+  await expect(page.locator('#wishList [data-wish-id]')).toHaveCount(4);
 });

@@ -3492,12 +3492,38 @@ body:not(.firebase-required) #firebaseAuthPanel {
 #wishlistPanel .wish-row input, #wishlistPanel dialog input[type="checkbox"] { accent-color: #d984a0; }
 #wishlistPanel .wish-row-price { color: #ffe1a2; font-variant-numeric: tabular-nums; }
 #wishlistPanel .wish-thumbnail { border: 1px solid #a56a7b; border-radius: 8px; }
-#wishlistPanel .wish-share-button, #wishlistPanel #wishEditor > summary {
+#wishlistPanel .wish-share-button {
   border-color: var(--wish-edge);
   background: #35212e;
   color: var(--wish-rose);
 }
-#wishlistPanel :is(.wish-share-button, #wishManagePeople, #wishEditor > summary):hover { background: #55283e; }
+#wishlistPanel :is(.wish-share-button, #wishManagePeople):hover { background: #55283e; }
+#wishlistPanel #wishEditor { border: 0; background: transparent; }
+#wishlistPanel #wishEditor > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 6px 14px 6px 9px;
+  border: 1px solid #ae637e;
+  border-radius: 999px;
+  background: #613349;
+  color: #fff2f6;
+  font: 650 13px/1.35 system-ui;
+  list-style: none;
+}
+#wishEditor > summary::-webkit-details-marker { display: none; }
+#wishlistPanel #wishEditor > summary:hover { background: #723e56; }
+#wishlistPanel #wishEditor[open] > summary { background: #78425b; border-color: #e29ab2; }
+.wish-add-icon {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 50%;
+  background: #ffffff1a;
+  font: 600 17px/1 system-ui;
+}
 #wishlistPanel :is(.wish-share-button, #wishEditor > summary):focus-visible { outline: 2px solid var(--wish-rose); outline-offset: 3px; }
 #wishlistPanel .list-popover, #wishlistPanel .app-dialog {
   background: linear-gradient(145deg, #33202b, #1e171d 70%);
@@ -4056,3 +4082,82 @@ button, summary { transition: transform 140ms var(--motion-ease), background-col
   .motion-ripple { display: none; }
   .limit-progress::-webkit-progress-value { transition: none; }
 }
+
+/* Keep list-wide filters and account actions in their own groups. */
+#wishlistPanel .wish-list-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  margin-top: 0;
+  padding-bottom: 12px;
+}
+#wishlistPanel :is(.wish-list-toolbar, .wish-list-filters, .wish-list-people) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-width: 0;
+}
+#wishlistPanel .wish-list-toolbar { justify-content: space-between; gap: 10px 16px; }
+#wishlistPanel :is(.wish-list-toolbar, .wish-group-header) .wish-share-button {
+  min-height: 34px;
+  padding: 5px 10px;
+  margin: 0;
+  font: 650 12px/1.35 system-ui;
+  text-transform: none;
+  letter-spacing: normal;
+}
+#wishlistPanel #wishManagePeople { margin: 0; }
+#wishList .wish-group-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 16px;
+  padding-block: 10px;
+}
+#wishList .wish-group-identity { min-width: 0; }
+#wishList .wish-group-identity h3 { margin: 0; }
+#wishList .wish-group-total { display: block; margin-top: 3px; }
+#wishList .wish-group-actions { align-items: center; }
+#wishList .wish-row { gap: 6px 9px; padding-block: 6px; }
+#wishList .wish-row .wish-thumbnail { width: 36px; height: 36px; }
+@media (max-width: 620px) {
+  #wishList .wish-group-header { grid-template-columns: minmax(0, 1fr); }
+  #wishList .wish-group-header .wish-share-button { margin: 0; }
+  #wishlistPanel .wish-list-people { width: 100%; }
+}
+
+/* The same link controls appear on each product in both wish editors. */
+.wish-batch-link { grid-column: 1 / -1; min-width: 0; }
+#wishForm .wish-batch-link-actions, #guestEditForm .wish-batch-link-actions { margin: 0; gap: 8px; }
+.wish-batch-link-actions > label { flex: 1 1 12rem; }
+.wish-batch-link-actions > label > input { width: 100%; }
+.wish-link-row > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding-inline: 6px;
+  color: #ffc6d8;
+  font: 650 12px/1.4 system-ui;
+  text-underline-offset: 3px;
+}
+.wish-batch-link > .hint { margin: 5px 0 0; }
+.wish-batch-link > .hint:empty { display: none; }
+#wishEditorEditTitle { margin: 0 0 12px; color: #ffe0e9; font-size: 18px; }
+@media (max-width: 700px) {
+  #wishForm .form-grid > .wish-batch-link + label,
+  #wishForm .form-grid > .wish-batch-link + label + label { grid-column: 1 / -1; }
+}
+
+#wishForm .wish-entry-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 155px), 1fr));
+  align-items: start;
+  gap: 12px 16px;
+  padding-block: 10px 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid #86586c;
+}
+#wishForm .wish-entry-options .wish-person-fields { min-width: 0; margin: 0; }
+#wishForm .wish-entry-options .wish-person-fields > label { flex: 1 1 100%; }
+#wishForm .wish-entry-options :is(input, select) { width: 100%; }
+#wishForm .btn-row { gap: 8px; }

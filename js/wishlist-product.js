@@ -194,5 +194,112 @@
     const doc = new DOMParser().parseFromString(text, 'text/html');
     return read(doc, url.hostname, response.url || url.href);
   }
-  return { store, read, readLink, imageUrl, savedImageUrl, readPhotoText, normalizePhotoLine, photoLimit };
+  function bindDefaultStore(input, fields) {
+    const inherited = new WeakMap();
+    function apply(field) {
+      if (!field || (field.value.trim() && field.value !== inherited.get(field))) return;
+      const store = input.value.trim();
+      field.value = store;
+      inherited.set(field, store);
+    }
+    input.addEventListener('input', () => fields().forEach(apply));
+    apply.isInherited = field => inherited.get(field) === field.value;
+    return apply;
+  }
+
+  function updateLinkAction(anchor, value) {
+    const url = imageUrl(value.trim());
+    anchor.hidden = !url;
+    if (url) anchor.href = url;
+    else anchor.removeAttribute('href');
+    return url;
+  }
+
+  function batchLinkField(fields, { value = '', inputId = '' } = {}) {
+    const section = document.createElement('div');
+    section.className = 'wish-batch-link';
+    const actions = document.createElement('div');
+    actions.className = 'wish-link-row wish-batch-link-actions';
+    const label = document.createElement('label');
+    label.textContent = 'Link do produto';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.inputMode = 'url';
+    input.maxLength = 4096;
+    input.autocomplete = 'off';
+    input.placeholder = 'Cole o link deste item';
+    input.name = 'url';
+    input.dataset.field = 'url';
+    if (inputId) input.id = inputId;
+    input.value = value;
+    label.append(input);
+
+    const preview = document.createElement('button');
+    preview.type = 'button';
+    preview.className = 'wish-share-button';
+    preview.textContent = 'Atualizar prévia';
+    const open = document.createElement('a');
+    open.textContent = 'Abrir link';
+    open.target = '_blank';
+    open.rel = 'noopener noreferrer';
+    const status = document.createElement('p');
+    status.className = 'hint';
+    status.setAttribute('role', 'status');
+    const error = document.createElement('small');
+    error.className = 'wish-field-error';
+    if (inputId) error.id = inputId + '-error';
+    label.append(error);
+    let request;
+    function sync() {
+      preview.disabled = !updateLinkAction(open, input.value);
+    }
+    input.addEventListener('input', () => {
+      request?.abort();
+      request = undefined;
+      status.textContent = '';
+      if (!inputId) input.removeAttribute('aria-invalid');
+      sync();
+    });
+    preview.onclick = async () => {
+      const href = imageUrl(input.value.trim());
+      if (!href) return;
+      request?.abort();
+      const controller = new AbortController();
+      request = controller;
+      const deadline = setTimeout(() => controller.abort(), 8000);
+      const current = () => request === controller && input.isConnected && imageUrl(input.value.trim()) === href;
+      preview.disabled = true;
+      status.textContent = 'Lendo o link…';
+      try {
+        const result = await readLink(new URL(href), controller.signal);
+        if (!current()) return;
+        for (const key of ['title', 'store']) {
+          if (!fields[key].value.trim() && result[key]) {
+            fields[key].value = result[key];
+            fields[key].dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        }
+        const option = [...fields.currency.options].find(item => item.value === result.currency);
+        if (fields.price.value === '' && option && result.price != null) {
+          fields.price.value = result.price;
+          fields.currency.value = option.value;
+          fields.price.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        status.textContent = 'Prévia conferida. Revise os dados deste item.';
+      } catch {
+        if (current()) status.textContent = 'Prévia indisponível. O link será salvo com este item.';
+      } finally {
+        clearTimeout(deadline);
+        if (current()) {
+          request = undefined;
+          sync();
+        }
+      }
+    };
+    sync();
+    actions.append(label, preview, open);
+    section.append(actions, status);
+    return section;
+  }
+  return { store, read, readLink, imageUrl, savedImageUrl, readPhotoText, normalizePhotoLine, photoLimit, batchLinkField, updateLinkAction, bindDefaultStore };
 });

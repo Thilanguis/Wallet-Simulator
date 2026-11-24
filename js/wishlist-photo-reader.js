@@ -131,6 +131,18 @@
     const {width, height} = preview;
     if (width < 220 || height < 260) return null;
     const pixels = preview.getContext('2d').getImageData(0, 0, width, height).data;
+    function differentPixels(above, below) {
+      let changed = 0, sampled = 0;
+      for (let x = Math.floor(width * .10); x < width * .95; x += 4) {
+        const a = (above * width + x) * 4, b = (below * width + x) * 4;
+        const difference = Math.abs(pixels[a] - pixels[b]) + Math.abs(pixels[a+1] - pixels[b+1]) + Math.abs(pixels[a+2] - pixels[b+2]);
+        if (difference > 75) changed++;
+        sampled++;
+      }
+      return changed / sampled;
+    }
+    const acrossPage = y => differentPixels(y - 5, y + 10) > .74 &&
+      differentPixels(y - 14, y - 5) < .24;
     function brightRow(y) {
       let bright = 0;
       for (let x = Math.floor(width * .52); x < width * .95; x += 3) {
@@ -140,12 +152,30 @@
       return bright > width * .095;
     }
     for (let y = Math.round(height * .10); y < height * .5; y++) {
-      if (brightRow(y - 4) || !brightRow(y) || !brightRow(y + 5) || !brightRow(y + 12)) continue;
+      if (!acrossPage(y) || brightRow(y - 4) || !brightRow(y) || !brightRow(y + 5) || !brightRow(y + 12)) continue;
       let bottom = height;
       for (let end = height - 1; end > y + height * .4; end--) {
         if (brightRow(end)) { bottom = end + 1; break; }
       }
       if (bottom - y > height * .47) return { top: y / height, bottom: bottom / height };
+    }
+    // A dark or tinted panel is also a useful boundary when its surface
+    // has a sustained contrast with the page behind it.
+    const tones = Array.from({ length: height }, (_, y) => {
+      const samples = [];
+      for (let x = Math.floor(width * .52); x < width * .95; x += 5) {
+        const i = (y * width + x) * 4;
+        samples.push((pixels[i] + pixels[i+1] + pixels[i+2]) / 3);
+      }
+      return samples.sort((a, b) => a - b)[Math.floor(samples.length / 2)];
+    });
+    for (let y = Math.round(height * .10); y < height * .5; y++) {
+      const surface = tones[y + 5];
+      if (!acrossPage(y) || Math.abs(tones[y - 4] - surface) < 30 || Math.abs(tones[y + 12] - surface) > 12 ||
+          Math.abs(tones[y + 24] - surface) > 12) continue;
+      let end = height - 1;
+      while (end > y + .47 * height && Math.abs(tones[end] - surface) > 15) end--;
+      if (end - y > .47 * height) return { top: y / height, bottom: (end + 1) / height, dark: surface < 115 };
     }
     return null;
   }
@@ -254,11 +284,11 @@
     }
     const clean = right > width * .155 && heading.words?.length ? heading.words.filter(word =>
       crop.x + word.bbox.x0 / scale / photo.width > right / width - .002).map(word => word.text).join(' ') : heading.text;
-    return (clean || heading.text).replace(/^(?:black\s*friday|bl.ck\s*friday)\s*/i, '').replace(/^[^a-z0-9]+/i, '').trim();
+    return (clean || heading.text).replace(/^[^\p{L}\d]+/u, '').replace(/^bl.ck\s*friday\s+/iu, '').trim();
   }
 
-  async function recognizeCheckout(photo, recognize, current) {
-    if (photo.width < 650 || !current()) return [];
+  async function recognizeCheckout(photo, url, recognize, current) {
+    if (photo.width < 580 || !current()) return [];
     const bitmap = await decodeWishPhoto(photo.file);
     try {
       const sheet = checkoutWindow(bitmap);
@@ -267,6 +297,11 @@
       const crop = {x:.112, y:top, w:.87, h:sheet.bottom-top};
       const canvas = drawWishPhoto(bitmap, 3300, crop, 3);
       const scale = canvas.height / (photo.height * crop.h);
+      if (sheet.dark) {
+        const ctx = canvas.getContext('2d');
+        ctx.filter = 'invert(1)';
+        ctx.drawImage(canvas, 0, 0);
+      }
       const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
       canvas.width = canvas.height = 0;
       if (!blob || !current()) return [];
@@ -276,8 +311,66 @@
         const seller = line.text.match(/\b(?:sold by|vendido por|vendu par)\s+(.+)/iu);
         return seller ? [{index, name:seller[1].trim()}] : [];
       });
-      if (sellers.length < 2) return [];
       const ink = checkoutInk(bitmap);
+      const imageBox = box => ({
+        x0: (crop.x + box.x0 / scale / photo.width) * ink.width,
+        x1: (crop.x + box.x1 / scale / photo.width) * ink.width,
+        y0: (crop.y + box.y0 / scale / photo.height) * ink.height,
+        y1: (crop.y + box.y1 / scale / photo.height) * ink.height,
+      });
+      const blockOptions = {
+        allowNoSeller: true,
+        cleanHeading: part => checkoutTitle({ ...part, bbox: part.box }, ink, crop, scale, photo),
+        inspectPrice: box => WishPhotoInk.inspect(ink, imageBox(box)),
+      };
+      async function readBlocks() {
+        const reviewed = [];
+        for (const line of lines) {
+          if (!current()) return [];
+          const firstPrice = line.words?.find(word => /(?:CA[$S]|[$€£¥])[^\s]*[\dIOTS]/iu.test(word.text));
+          if (!firstPrice || WishProduct.readPhotoText(firstPrice.text, url, { keepUnconfirmedAmount: true }).price != null ||
+              blockOptions.inspectPrice(firstPrice.bbox).struck) {
+            reviewed.push(line);
+            continue;
+          }
+          const box = imageBox(firstPrice.bbox);
+          const x = Math.max(0, (box.x0 - 3) / ink.width), y = Math.max(0, (box.y0 - 4) / ink.height);
+          const w = Math.min(1 - x, (box.x1 + 5) / ink.width - x);
+          const h = Math.min(1 - y, (box.y1 + 5) / ink.height - y);
+          async function readStrip(offset = 0, whitelist) {
+            if (!current()) return '';
+            const sample = drawWishPhoto(bitmap, 1200, { x: x + w * offset, y, w: w * (1 - offset), h }, 5, 16);
+            const strip = await new Promise(resolve => sample.toBlob(resolve, 'image/png'));
+            sample.width = sample.height = 0;
+            if (!strip || !current()) return '';
+            const options = { tessedit_pageseg_mode: '7' };
+            if (whitelist) options.tessedit_char_whitelist = whitelist;
+            const read = await recognize(strip, undefined, options).catch(() => null);
+            return read?.text?.trim() || '';
+          }
+          const parsed = value => WishProduct.readPhotoText(value, url, { keepUnconfirmedAmount: true }).price;
+          let text = await readStrip();
+          const marker = firstPrice.text.match(/^(?:CA[$S]|US[$S]|R[$S]|[$€£¥])/iu)?.[0];
+          if (parsed(text) == null && marker) {
+            const readings = [];
+            for (const offset of [.4, .46, .52]) {
+              const digits = await readStrip(offset, '0123456789., ');
+              const decimal = digits.match(/^(\d{1,4})[.,]\s*(\d{2})$/);
+              if (decimal) readings.push(decimal[1] + '.' + decimal[2]);
+            }
+            const originalCents = firstPrice.text.match(/[.,](\d{2})$/)?.[1];
+            const candidates = readings.filter(value => !originalCents || value.endsWith('.' + originalCents));
+            const agreed = candidates.find((value, index) => candidates.indexOf(value) < index);
+            if (agreed) text = marker.replace(/S$/i, '$') + agreed;
+          }
+          if (parsed(text) != null) {
+            const words = line.words.map(word => word === firstPrice ? { ...word, text } : word);
+            reviewed.push({ ...line, text: words.map(word => word.text).join(' '), words });
+          } else reviewed.push(line);
+        }
+        return WishPhotoList.readBlocks({ lines: reviewed }, url, blockOptions);
+      }
+      if (sellers.length < 2 || sheet.dark) return await readBlocks();
       const items = [];
       for (const [position, seller] of sellers.entries()) {
         if (!current()) break;
@@ -344,14 +437,70 @@
         items.push({title: title.slice(0, 300), store: seller.name.slice(0, 150), price: price ?? null,
           currency: price != null ? 'CAD' : null, priceIssue: null});
       }
-      return items.length >= 2 && items.filter(item => item.price != null).length >= 2 ? items : [];
+      if (items.filter(item => item.price != null).length < 2) return await readBlocks();
+      const blocks = WishPhotoList.readBlocks(found, url, blockOptions);
+      const confirmed = new Map(blocks.filter(item => item.price != null).map(item => [photoProductKey(item.title), item]));
+      return items.map(item => {
+        const other = confirmed.get(photoProductKey(item.title));
+        return item.price == null && other ? other : item;
+      });
     } finally {
       bitmap.close?.();
     }
   }
 
+  function mergePhotoProduct(item, alternate) {
+    const matches = alternate.filter(other => photoProductKey(other.title) === photoProductKey(item.title));
+    const match = matches.length === 1 ? matches[0] : null;
+    if (!match) return item;
+    const conflict = item.priceIssue === 'ambiguous' || match.priceIssue === 'ambiguous' ||
+      (item.price != null && match.price != null && item.price !== match.price) ||
+      (item.currency && match.currency && item.currency !== match.currency);
+    if (conflict) return { ...item, price: null, currency: null, priceIssue: 'ambiguous' };
+    const price = item.price ?? match.price;
+    const currency = item.currency || match.currency;
+    if (price != null && [...(item.excludedPrices || []), ...(match.excludedPrices || [])]
+      .some(excluded => excluded.price === price && (!excluded.currency || !currency || excluded.currency === currency))) {
+      return { ...item, price: null, currency: null, priceIssue: 'ambiguous' };
+    }
+    return { ...item, store: item.store || match.store, price, currency,
+      priceIssue: price != null && !currency ? 'currency' : null };
+  }
+
+  async function readLongPhoto(photo, url, recognize, current) {
+    // Upscale a scrolling screenshot in overlapping strips so the middle
+    // does not lose small text when the full image is resized for OCR.
+    const count = Math.min(6, Math.ceil(photo.height / (photo.width * 1.65)));
+    const overlap = .18 / count;
+    const bitmap = await decodeWishPhoto(photo.file);
+    const rows = [];
+    try {
+      for (let index = 0; index < count && current(); index++) {
+        const y = Math.max(0, index / count - overlap);
+        const h = Math.min(1, (index + 1) / count + overlap) - y;
+        const canvas = drawWishPhoto(bitmap, 2400, { x: 0, y, w: 1, h }, 3);
+        const source = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        canvas.width = canvas.height = 0;
+        if (!source || !current()) continue;
+        const reading = await recognize(source, undefined, { tessedit_pageseg_mode: '11' }, { layout: true }).catch(() => null);
+        if (!reading || !current()) continue;
+        const inspectPrice = await wishPhotoPriceInspector(source).catch(() => null);
+        const products = WishPhotoList.read(reading, url, { inspectPrice });
+        const sameRow = (left, right) => photoProductKey(left.title) === photoProductKey(right.title) &&
+          left.price === right.price && left.currency === right.currency;
+        let shared = Math.min(rows.length, products.length);
+        while (shared && !products.slice(0, shared).every((item, i) => sameRow(rows[rows.length - shared + i], item))) shared--;
+        rows.push(...products.slice(shared));
+      }
+    } finally {
+      bitmap.close?.();
+    }
+    return rows;
+  }
+
   async function readWishPhoto(photo, url, recognize, isCurrent) {
-    const checkout = await recognizeCheckout(photo, recognize, isCurrent).catch(() => []);
+    const longPhoto = photo.height >= 1800 && photo.height >= photo.width * 3;
+    const checkout = longPhoto ? [] : await recognizeCheckout(photo, url, recognize, isCurrent).catch(() => []);
     if (checkout.length) return {products: checkout};
     const source = await wishPhotoOcrSource(photo).catch(() => photo.file);
     const first = await recognize(source, undefined, { tessedit_pageseg_mode: '3' }, { layout: true })
@@ -360,7 +509,9 @@
     async function readList(result) {
       if (!result || Number.isFinite(result.confidence) && result.confidence < 45) return [];
       if (result.lines?.length) inspector ||= wishPhotoPriceInspector(source).catch(() => null);
-      return WishPhotoList.read(result, url, { inspectPrice: await inspector });
+      const options = { inspectPrice: await inspector };
+      const products = WishPhotoList.read(result, url, options);
+      return products.length ? products : WishPhotoList.readBlocks(result, url, options);
     }
     const products = await readList(first);
     const parse = ({ text, confidence }) => {
@@ -370,7 +521,7 @@
     const primary = parse(first || {});
     const suggestion = { ...primary };
     if (!isCurrent()) return suggestion;
-    if (!products.length && primary.title && primary.store && primary.price != null && primary.currency && (first?.lines?.length || 0) < 5) return suggestion;
+    if (!longPhoto && !products.length && primary.title && primary.store && primary.price != null && primary.currency && (first?.lines?.length || 0) < 5) return suggestion;
 
     const alternatives = [];
     async function tryRegion(image, full = false) {
@@ -387,27 +538,20 @@
       }
     }
     const sparseProducts = await tryRegion(source, true) || [];
+    if (isCurrent() && longPhoto) {
+      const strips = await readLongPhoto(photo, url, recognize, isCurrent).catch(() => []);
+      const priced = rows => rows.filter(item => item.price != null).length;
+      const best = priced(sparseProducts) > priced(products) ? sparseProducts : products;
+      const keys = new Set(strips.map(item => photoProductKey(item.title)));
+      if (strips.length >= 2 && priced(strips) > priced(best) && best.every(item => keys.has(photoProductKey(item.title)))) {
+        return { products: strips.map(item => mergePhotoProduct(item, best)) };
+      }
+    }
     if (products.length || sparseProducts.length) {
       // The sparse pass often sees more rows in a wide table. Compare by
       // product name so contradictory values still require review.
       const [best, alternate] = sparseProducts.length >= products.length ? [sparseProducts, products] : [products, sparseProducts];
-      return { products: best.map(item => {
-        const matches = alternate.filter(other => photoProductKey(other.title) === photoProductKey(item.title));
-        const match = matches.length === 1 ? matches[0] : null;
-        if (!match) return item;
-        const conflict = item.priceIssue === 'ambiguous' || match.priceIssue === 'ambiguous' ||
-          (item.price != null && match.price != null && item.price !== match.price) ||
-          (item.currency && match.currency && item.currency !== match.currency);
-        if (conflict) return { ...item, price: null, currency: null, priceIssue: 'ambiguous' };
-        const price = item.price ?? match.price;
-        const currency = item.currency || match.currency;
-        if (price != null && [...(item.excludedPrices || []), ...(match.excludedPrices || [])]
-          .some(excluded => excluded.price === price && (!excluded.currency || !currency || excluded.currency === currency))) {
-          return { ...item, price: null, currency: null, priceIssue: 'ambiguous' };
-        }
-        return { ...item, store: item.store || match.store, price, currency,
-          priceIssue: price != null && !currency ? 'currency' : null };
-      }) };
+      return { products: best.map(item => mergePhotoProduct(item, alternate)) };
     }
     if (isCurrent() && (!primary.title || (primary.price == null && !primary.priceIssue)) &&
         !alternatives.some(result => result.title && result.price != null)) {

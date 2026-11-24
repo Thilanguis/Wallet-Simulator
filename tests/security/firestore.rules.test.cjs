@@ -387,7 +387,11 @@ test('only selected approved accounts can read a personal list and a revoked sha
   await assertFails(getDoc(listDoc(guest, person)));
   assert.deepEqual((await assertSucceeds(getDoc(giftDoc(guest, person)))).data().items, walletGift.items);
   await assertFails(updateDoc(giftDoc(guest, person), { 'items.gift.bought': true, editedId: 'gift' }));
-  await assertSucceeds(setDoc(personalDoc(guest, owner), { items: { one: wish('one') }, editedId: 'one' }));
+  const productUrl = 'https://loja.example.invalid/item?id=42';
+  await assertSucceeds(setDoc(personalDoc(guest, owner), { items: { one: wish('one', { url: productUrl }) }, editedId: 'one' }));
+  for (const url of ['javascript:alert(1)', 'https://user:pass@loja.example.invalid/item']) {
+    await assertFails(updateDoc(personalDoc(guest, owner), { 'items.one.url': url, editedId: 'one' }));
+  }
   await assertFails(getDoc(personalDoc(luana, owner)));
   await assertFails(getDoc(personalDoc(admin, owner)));
   await assertFails(setDoc(grant(luana, 'primary-luana'), { owner, recipient: 'primary-luana' }));
@@ -395,7 +399,7 @@ test('only selected approved accounts can read a personal list and a revoked sha
   const { query, where } = require('firebase/firestore');
   const received = await assertSucceeds(getDocs(query(collection(luana, root + '/wishlistGrants'), where('recipient', '==', 'primary-luana'))));
   assert.equal(received.size, 1);
-  await assertSucceeds(getDoc(personalDoc(luana, owner)));
+  assert.equal((await assertSucceeds(getDoc(personalDoc(luana, owner)))).data().items.one.url, productUrl);
   await assertFails(getDoc(personalDoc(admin, owner)));
   await assertFails(getDoc(personalDoc(visitor, owner)));
   await assertFails(updateDoc(personalDoc(luana, owner), { 'items.one.bought': true, editedId: 'one' }));

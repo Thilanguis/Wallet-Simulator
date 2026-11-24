@@ -173,6 +173,10 @@ document.addEventListener('DOMContentLoaded', () => {
     request?.abort();
     clearTimeout(autoRead);
     $('wishForm').reset();
+    syncWishLink();
+    $('wishEditorEditTitle').hidden = true;
+    $('wishDefaultStoreLabel').hidden = false;
+    $('wishAddManualProduct').hidden = false;
     setPhotoBatch(false);
     setSinglePhoto(null);
     updatePeople(rows(), defaultPerson);
@@ -1234,7 +1238,10 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       actions.append(share);
       actions.append(manage);
-      header.append(heading, groupTotal, actions);
+      const identity = document.createElement('div');
+      identity.className = 'wish-group-identity';
+      identity.append(heading, groupTotal);
+      header.append(identity, actions);
       section.append(header);
       const bulk = managing ? wishBulkActions(person, items) : null;
       if (bulk) section.append(bulk.toolbar);
@@ -1305,6 +1312,10 @@ document.addEventListener('DOMContentLoaded', () => {
           editItem = item;
           $('wishEditor').open = true;
           $('wishUrl').value = item.url || '';
+          syncWishLink();
+          $('wishEditorEditTitle').hidden = false;
+          $('wishDefaultStoreLabel').hidden = true;
+          $('wishAddManualProduct').hidden = true;
           showDraftImage(item.imageUrl);
           $('wishTitle').value = item.title;
           $('wishStore').value = item.store;
@@ -1382,6 +1393,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const fieldInput = (field) => row.querySelector('[data-field=' + field + ']');
       const get = (field) => fieldInput(field).value.trim();
       const title = get('title'), store = get('store');
+      const rawUrl = get('url'), url = rawUrl ? WishProduct.imageUrl(rawUrl) : '';
       const rawPrice = get('price');
       const originalPrice = rawPrice === '' ? null : /^\d+(?:[.,]\d{1,2})?$/.test(rawPrice) ? Number(rawPrice.replace(',', '.')) : NaN;
       const currency = get('currency') || (originalPrice === null ? 'BRL' : '');
@@ -1390,6 +1402,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const quantity = Number(rawQuantity);
       const quantityValid = /^\d+$/.test(rawQuantity) && validQuantity(quantity);
       const errors = {
+        url: url === null ? 'Informe um link http ou https válido.' : '',
         title: title ? '' : 'Informe o nome do produto.',
         store: store ? '' : 'Informe a loja.',
         price: validLinePrice(originalPrice, quantityValid ? quantity : 1) ? '' : 'Informe um preço unitário válido.',
@@ -1402,7 +1415,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (error) invalidFields.push(input);
       }
       if (Object.values(errors).some(Boolean)) continue;
-      const { photo, url = '' } = photoRows.get(row);
+      const { photo } = photoRows.get(row);
       additions.push({ id: crypto.randomUUID(), url, title, store, person, personId, originalPrice, currency, quantity, taxQuebec, visibleToRecipient: $('wishVisibility').value === 'recipient', imageUrl: photo.imageUrl, price: originalPrice == null ? null : WishFx.convert(originalPrice, currency), bought: false, updatedAt: Date.now() });
     }
     if (invalidFields.length) {
@@ -1431,7 +1444,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
       const draft = formValues();
-      if (!draft.url && !draft.imageUrl?.startsWith('data:')) throw new Error('Informe o link ou escolha uma foto do produto.');
       const { title, store, person, originalPrice, currency, quantity } = draft;
       if (!title || !store || !person || person.length > 80) throw new Error('Confira produto, loja e pessoa.');
       if (!validQuantity(quantity)) throw new Error('Informe uma quantidade inteira a partir de 1.');
@@ -1586,19 +1598,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     $('wishBatchRows').replaceChildren();
   }
-  function createPhotoRow(file, suggestion, { first = true, url = '' } = {}) {
+  const applyDefaultStore = WishProduct.bindDefaultStore($('wishDefaultStore'), () =>
+    photoBatch ? [...$('wishBatchRows').querySelectorAll('[data-field=store]')] : [$('wishStore')]);
+  function createPhotoRow(file, suggestion, { first = true, url = '', draftOnly = false } = {}) {
     const i = ++photoRowId;
     const esc = escapeHTML;
     const row = document.createElement('div');
     row.className = 'preview-row';
-    photoRows.set(row, { photo: suggestion, file, url });
+    photoRows.set(row, { photo: suggestion, file, draftOnly });
     const currencies = [...$('wishCurrency').options].map(option => option.value).filter(Boolean);
     const field = (label, key, attributes) => '<label>' + label + '<input data-field="' + key + '" ' + attributes + '><small class="wish-field-error" id="wishBatchError-' + i + '-' + key + '"></small></label>';
-    row.innerHTML = '<label class="row-title"><input type="checkbox" ' + (suggestion.imageUrl ? 'checked' : 'disabled') + '> <span>' + esc(file.name) + '</span></label>';
+    row.innerHTML = '<label class="row-title"><input type="checkbox" ' + (suggestion.imageUrl ? 'checked' : draftOnly ? '' : 'disabled') + '> <span>' + esc(file.name) + '</span></label>';
     const image = thumbnail(suggestion.imageUrl);
-    if (image) {
-      image.alt = 'Prévia de ' + file.name;
-      row.append(image);
+    if (image || draftOnly) {
+      if (image) {
+        image.alt = 'Prévia de ' + file.name;
+        row.append(image);
+      }
       row.insertAdjacentHTML('beforeend', '<div class="form-grid">' +
         field('Produto', 'title', 'maxlength="300"') +
         field('Loja', 'store', 'maxlength="150"') +
@@ -1607,6 +1623,9 @@ document.addEventListener('DOMContentLoaded', () => {
         field('Quantidade', 'quantity', 'inputmode="numeric" value="1"') +
         '<label class="wish-tax-option"><input type="checkbox" data-field="taxQuebec"> Taxas do Québec (GST 5% + QST 9,975%)</label></div>' +
         '<p class="hint" data-photo-status role="status"></p>');
+      row.querySelector('.form-grid').prepend(WishProduct.batchLinkField(batchPhotoFields(row), {
+        value: url, inputId: 'wishBatchUrl-' + i,
+      }));
       const retry = document.createElement('button');
       retry.type = 'button';
       retry.className = 'wish-share-button';
@@ -1614,8 +1633,8 @@ document.addEventListener('DOMContentLoaded', () => {
       retry.disabled = photoBusy;
       retry.textContent = 'Tentar ler texto novamente';
       retry.onclick = () => void retryRecognizePhoto(suggestion, row);
-      row.append(retry);
-      if (first) {
+      if (image) row.append(retry);
+      if (first && image) {
         const add = document.createElement('button');
         add.type = 'button';
         add.className = 'wish-share-button';
@@ -1631,7 +1650,7 @@ document.addEventListener('DOMContentLoaded', () => {
       warning.textContent = suggestion.warning;
       row.append(warning);
     }
-    if (!suggestion.imageUrl) {
+    if (!suggestion.imageUrl && !draftOnly) {
       const retry = document.createElement('button');
       retry.type = 'button';
       retry.className = 'wish-share-button';
@@ -1652,7 +1671,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function fillBatchPhotoFields(row, result) {
-    applyPhotoSuggestion(batchPhotoFields(row), result);
+    const fields = batchPhotoFields(row);
+    applyPhotoSuggestion(fields, result);
+    applyDefaultStore(fields.store);
     row.querySelector('[data-photo-status]').textContent = photoWarning(result);
   }
   function expandPhotoRows(row, products) {
@@ -1660,7 +1681,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const fields = batchPhotoFields(row);
     const draftKey = photoProductKey(fields.title.value);
     const matches = products.filter(item => draftKey && photoProductKey(item.title) === draftKey);
-    const hasInput = draft.url || photoFields.some(key => touchedPhotoFields.has(fields[key]) || (key !== 'currency' && fields[key].value.trim())) ||
+    const hasInput = row.querySelector('[data-field=url]').value.trim() || photoFields.some(key => touchedPhotoFields.has(fields[key]) || (key !== 'currency' && fields[key].value.trim())) ||
       row.querySelector('[data-field=quantity]').value !== '1' || row.querySelector('[data-field=taxQuebec]').checked;
     const selected = row.querySelector('.row-title input').checked;
     const reused = matches.length === 1 ? matches[0] : !hasInput ? products[0] : null;
@@ -1698,23 +1719,24 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (result.products) expandPhotoRows(row, result.products);
     else fillBatchPhotoFields(row, result);
   }
-  function reviewSinglePhotoAsBatch(photo) {
-    const rawUrl = $('wishUrl').value.trim();
-    let url = '';
-    try { if (rawUrl) url = link(rawUrl).href; } catch {}
+  function reviewSinglePhotoAsBatch(photo, { draftOnly = false } = {}) {
+    const url = $('wishUrl').value.trim();
     setPhotoBatch(true);
-    const row = createPhotoRow(photo.file, photo, { url });
+    const row = createPhotoRow(photo.file || { name: 'Rascunho anterior' }, photo, {
+      url, draftOnly, first: !draftOnly,
+    });
     $('wishBatchRows').append(row);
     const fields = batchPhotoFields(row);
     for (const key of photoFields) {
       if (key === 'currency' && !singleFields.currency.value) {
         fields.currency.add(new Option('Escolha a moeda', ''));
       }
-      fields[key].value = singleFields[key].value;
+      fields[key].value = key === 'store' && applyDefaultStore.isInherited(singleFields.store) ? '' : singleFields[key].value;
       if (touchedPhotoFields.has(singleFields[key])) touchedPhotoFields.add(fields[key]);
     }
     row.querySelector('[data-field=quantity]').value = $('wishQuantity').value;
     row.querySelector('[data-field=taxQuebec]').checked = $('wishTaxQuebec').checked;
+    applyDefaultStore(fields.store);
     setSinglePhoto(null);
     return row;
   }
@@ -1726,8 +1748,24 @@ document.addEventListener('DOMContentLoaded', () => {
     photoRows.get(newRow).productKey = '';
     newRow.querySelector('[data-photo-status]').textContent = 'Preencha os dados do produto desta foto.';
     showPhotoBatchReview();
-    batchPhotoFields(newRow).title.focus();
+    const fields = batchPhotoFields(newRow);
+    applyDefaultStore(fields.store);
+    fields.title.focus();
   }
+  $('wishAddManualProduct').onclick = () => {
+    if (editing || photoBusy || photoPreparing) return;
+    if (!photoBatch) {
+      const draft = reviewSinglePhotoAsBatch(singlePhoto || { imageUrl: draftImage }, { draftOnly: true });
+      draft.querySelector('.row-title input').checked = true;
+    }
+    const row = createPhotoRow({ name: 'Novo produto' }, {}, { draftOnly: true });
+    row.querySelector('.row-title input').checked = true;
+    $('wishBatchRows').append(row);
+    const fields = batchPhotoFields(row);
+    applyDefaultStore(fields.store);
+    showPhotoBatchReview();
+    fields.title.focus();
+  };
   $('wishAddPhotoRow').onclick = () => {
     if (!singlePhoto || photoBusy || editing) return;
     addManualPhotoRow(reviewSinglePhotoAsBatch(singlePhoto));
@@ -1744,6 +1782,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     applyPhotoSuggestion(singleFields, result);
+    applyDefaultStore(singleFields.store);
     conversion();
     void WishFx.refresh();
     $('wishPhotoMessage').textContent = 'Foto pronta. ' + photoWarning(result);
@@ -1818,7 +1857,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $('wishSave').disabled = photoPreparing;
     $('wishPhotoProgress').textContent = progress;
     $('wishPhotoLoading').hidden = !busy;
-    for (const id of ['wishUpload', 'wishBrowseFiles', 'wishRetryPhoto', 'wishAddPhotoRow']) $(id).disabled = busy;
+    for (const id of ['wishUpload', 'wishBrowseFiles', 'wishRetryPhoto', 'wishAddPhotoRow', 'wishAddManualProduct']) $(id).disabled = busy;
     for (const button of $('wishBatchRows').querySelectorAll('[data-retry-photo], [data-add-photo-row]')) button.disabled = busy;
   }
   async function importWishPhotos(files, clearInput = () => {}) {
@@ -1843,14 +1882,24 @@ document.addEventListener('DOMContentLoaded', () => {
         picked.push(await prepareWishPhoto(file));
         if (token !== photoRevision) return;
       }
-      if (photoBatch) {
+      const keepRows = photoBatch && [...$('wishBatchRows').children].some(row =>
+        photoRows.get(row).draftOnly || row.querySelector('[data-field=url]')?.value.trim());
+      if (photoBatch && !keepRows) {
+        const defaultStore = $('wishDefaultStore').value;
         reset();
+        $('wishDefaultStore').value = defaultStore;
         token = ++photoRevision;
         setPhotoBusy(true, count, true);
       }
-      if (files.length > 1) {
-        setSinglePhoto(null);
-        setPhotoBatch(true);
+      if (files.length > 1 || keepRows) {
+        if (!keepRows && $('wishUrl').value.trim()) {
+          const draft = reviewSinglePhotoAsBatch(singlePhoto || {}, { draftOnly: true });
+          draft.querySelector('.row-title input').checked = false;
+          draft.querySelector('[data-photo-status]').textContent = 'Seu rascunho foi mantido. Marque esta linha se quiser salvá-lo.';
+        } else if (!keepRows) {
+          setSinglePhoto(null);
+          setPhotoBatch(true);
+        }
         const items = files.map((file, index) => {
           const row = createPhotoRow(file, picked[index]);
           $('wishBatchRows').append(row);
@@ -1908,12 +1957,16 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       message(refreshImage ? (product.imageUrl ? 'Foto encontrada. Salve para exibir na lista.' : 'A loja não informou uma foto para este produto.') : 'Prévia pronta. Confira antes de adicionar.');
     } catch {
-      if (token === revision) message(editing ? 'A loja não permitiu atualizar a prévia.' : 'A loja não permitiu a leitura. Preencha produto e valor.');
+      if (token === revision) message('Prévia indisponível. Preencha os dados manualmente. O link será salvo com o desejo.');
     } finally {
       clearTimeout(timeout);
     }
   };
+  function syncWishLink() {
+    WishProduct.updateLinkAction($('wishOpenLink'), $('wishUrl').value);
+  }
   $('wishUrl').addEventListener('input', () => {
+    syncWishLink();
     revision++;
     request?.abort();
     if (!draftImage?.startsWith('data:')) showDraftImage(null);
@@ -1982,6 +2035,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     $('wishUrl').value = sharedLink;
+    syncWishLink();
     if (title && !/https?:\/\//i.test(title)) $('wishTitle').value = title.slice(0, 300);
     void $('wishRead').onclick();
   }

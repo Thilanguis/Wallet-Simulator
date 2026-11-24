@@ -27,7 +27,10 @@
       </header>
       <main id="wishlistPanel" class="section" aria-labelledby="guestPanelTitle">
         <div class="list-title-row"><h2 id="guestPanelTitle">Lista de Desejos</h2></div>
-        <button id="guestAdd" class="guest-button wish-share-button" type="button" hidden><span aria-hidden="true">＋&nbsp;</span>Adicionar desejo</button>
+        <div id="guestHeadingActions" class="guest-heading-actions" hidden>
+          <button id="guestPeople" class="guest-button guest-button-quiet wish-share-button" type="button" aria-haspopup="dialog"><span aria-hidden="true">👤&nbsp;</span>Pessoas e listas</button>
+          <button id="guestAdd" class="guest-button wish-share-button" type="button"><span aria-hidden="true">＋&nbsp;</span>Adicionar desejo</button>
+        </div>
         <section id="guestAccess" class="guest-card" aria-labelledby="guestAccessTitle">
           <h2 id="guestAccessTitle">Conferindo seu acesso</h2>
           <p id="guestAccessStatus" class="guest-hint" role="status"></p>
@@ -56,21 +59,24 @@
               <h3 id="guestWishTitle">Seus desejos</h3>
               <p id="guestWishCount" class="guest-hint" role="status"></p>
             </div>
-            <div class="guest-list-controls">
-              <button id="guestPeople" class="guest-button guest-button-quiet wish-share-button" type="button" aria-haspopup="dialog"><span aria-hidden="true">👤&nbsp;</span>Pessoas e listas</button>
-              <label id="guestSelectAllLabel" class="guest-all"><input type="checkbox" id="guestSelectAll" /> Selecionar todos</label>
-            </div>
+            <label class="guest-all"><input type="checkbox" id="guestHideBought" /> Ocultar comprados</label>
           </div>
-          <div id="guestShareActions" class="guest-actions">
-            <button id="guestCopy" class="guest-button wish-share-button" type="button" disabled>Copiar seleção</button>
-            <button id="guestShare" class="guest-button guest-button-quiet wish-share-button" type="button" disabled hidden>Compartilhar</button>
+          <div id="guestShareActions" class="guest-selection-bar">
+            <label id="guestSelectAllLabel" class="guest-all"><input type="checkbox" id="guestSelectAll" /> Selecionar todos</label>
+            <div class="guest-selection-actions">
+              <button id="guestCopy" class="guest-button wish-share-button" type="button" disabled>Copiar seleção</button>
+              <button id="guestShare" class="guest-button guest-button-quiet wish-share-button" type="button" disabled hidden>Compartilhar seleção</button>
+            </div>
           </div>
           <p id="guestShareFeedback" class="guest-hint guest-feedback" role="status"></p>
           <textarea id="guestShareText" aria-label="Texto da seleção para copiar" rows="5" readonly hidden></textarea>
           <div id="guestWishItems"></div>
         </section>
-        <section id="guestGifts" class="wish-group" aria-labelledby="guestGiftsTitle" hidden>
-          <div class="wish-group-header"><h3 id="guestGiftsTitle">Presentes da Luana</h3></div>
+        <section id="guestGifts" class="wish-group guest-gifts-card" aria-labelledby="guestGiftsTitle" hidden>
+          <div class="wish-group-header">
+            <h3 id="guestGiftsTitle">Presentes da Luana</h3>
+            <span class="guest-gifts-note">Somente visualização</span>
+          </div>
           <ul id="guestGiftItems" class="wish-people-items"></ul>
         </section>
       </main>
@@ -82,10 +88,11 @@
           <button id="guestEditorClose" class="guest-button guest-button-quiet" type="button" aria-label="Fechar formulário" autofocus>×</button>
         </header>
         <div class="guest-edit-fields">
-          <div class="guest-field-wide">
-            <div class="guest-link-row">
+          <div id="guestSingleLink" class="guest-field-wide">
+            <div class="guest-link-row wish-link-row">
               <label>Link do produto<input name="url" type="url" maxlength="4096" placeholder="Cole o link, se tiver" /></label>
               <button id="guestReadLink" class="guest-button guest-button-quiet" type="button">Atualizar prévia</button>
+              <a id="guestOpenLink" target="_blank" rel="noopener noreferrer" hidden>Abrir link</a>
             </div>
             <p id="guestLinkStatus" class="guest-hint" role="status"></p>
           </div>
@@ -102,12 +109,13 @@
           </div>
             <p id="guestPhotoStatus" class="guest-hint" role="status"></p>
             <label id="guestPhotoProducts" hidden>Produto encontrado no print<select id="guestPhotoChoice"></select></label>
-            <small>Você também pode colar ou arrastar um print.</small>
-            <small>Anexos salvos neste navegador. Só você os vê na sua lista.</small>
+            <small>Para importar uma lista de compras, escolha, cole ou arraste os prints e revise os itens encontrados.</small>
+            <small>Fotos salvas neste navegador. Só você as vê na sua lista.</small>
           </div>
-          <fieldset id="guestSingleFields" class="guest-field-wide guest-edit-fields">
-          <label class="guest-field-wide">Produto<input name="title" maxlength="300" required /></label>
-          <label class="guest-field-wide">Loja<input name="store" maxlength="150" placeholder="Opcional" /></label>
+          <label id="guestDefaultStoreLabel" class="guest-field-wide wish-default-store">Loja padrão<input id="guestDefaultStore" maxlength="150" placeholder="Preenche os produtos sem loja" /></label>
+          <fieldset id="guestSingleFields" class="guest-field-wide guest-edit-fields wish-product-fields">
+          <label>Produto<input name="title" maxlength="300" required /></label>
+          <label>Loja<input name="store" maxlength="150" placeholder="Opcional" /></label>
           <label>Preço unitário<input name="price" type="number" inputmode="decimal" min="0" step="any" /></label>
           <label>Moeda<select name="currency"><option value="">Escolha a moeda</option><option>BRL</option><option>CAD</option><option>USD</option><option>EUR</option><option>GBP</option><option>AUD</option><option>JPY</option><option>CNY</option><option>CHF</option></select></label>
           <label>Quantidade<input name="quantity" type="number" inputmode="numeric" min="1" step="1" value="1" required /></label>
@@ -129,6 +137,7 @@
         </section>
         <p id="guestEditError" class="guest-hint guest-feedback" role="alert"></p>
         <div class="guest-actions">
+          <button id="guestAddManualProduct" class="guest-button guest-button-quiet wish-share-button" type="button">＋ Adicionar outro produto</button>
           <button id="guestSave" class="guest-button" type="submit">Salvar desejo</button>
           <button id="guestEditCancel" class="guest-button guest-button-quiet" type="button">Cancelar</button>
         </div>

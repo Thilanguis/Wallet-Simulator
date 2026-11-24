@@ -6,7 +6,7 @@ const listPath = [...walletPath, 'wishlistLists'];
 const personalPath = [...walletPath, 'wishlistPersonal'];
 const giftsPath = [...walletPath, 'wishlistGifts'];
 const directoryNamesPath = [...walletPath, 'wishlistDirectory'];
-const itemFields = ['id', 'title', 'store', 'originalPrice', 'currency', 'quantity', 'taxQuebec', 'bought'];
+const itemFields = ['id', 'title', 'store', 'originalPrice', 'currency', 'quantity', 'taxQuebec', 'bought', 'url'];
 const firestore = () => import('https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js');
 
 function accountView(data) {
@@ -86,6 +86,7 @@ export async function openWishlistAccess({ db, user }) {
         quantity: item.quantity,
         taxQuebec: !!item.taxQuebec,
         bought: previous?.bought === true,
+        ...(item.url !== undefined ? { url: item.url } : {}),
       };
       if (previous && itemFields.every(key => previous[key] === changed[key])) return previous;
       tx.set(ref, { items: { ...items, [item.id]: changed }, editedId: item.id });

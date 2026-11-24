@@ -54,7 +54,7 @@ async function mockGuest(page) {
                 else { receiveIncoming = next; next([{owner:'primary-luana', recipient:'account-helena'}]); }
                 return () => {};
               },
-              watchPersonal(owner, next) { next([{title:'Desejo da Luana', store:'Loja A'}]); return () => {}; },
+              watchPersonal(owner, next) { next([{title:'Desejo da Luana', store:'Loja A', url:'https://loja.example.invalid/item-luana'}]); return () => {}; },
               grant(recipient) { receiveOutgoing([{owner:'account-helena', recipient}]); },
               revoke() { receiveOutgoing([]); },
             } };
@@ -169,7 +169,14 @@ test('guest sees Wallet gifts separately and manages personal sharing with regis
   await page.evaluate(() => window.guestFixture.role({ role: 'guest', personId: 'helena' }));
   const gifts = page.getByRole('region', { name: 'Presentes da Luana' });
   await expect(gifts.getByText('Presente separado')).toBeVisible();
+  await expect(gifts.getByText('Somente visualização')).toBeVisible();
   await expect(gifts.getByRole('button')).toHaveCount(0);
+  await expect(gifts.getByRole('checkbox')).toHaveCount(0);
+  await page.getByRole('checkbox', { name: 'Ocultar comprados' }).check();
+  await expect(page.getByText('Bolsa de tecido')).toHaveCount(0);
+  await expect(gifts.getByText('Presente separado')).toBeVisible();
+  await page.getByRole('checkbox', { name: 'Selecionar todos' }).check();
+  await expect(page.getByRole('button', { name: 'Copiar seleção' })).toBeEnabled();
   await expect(page.locator('#guestWishItems').getByText('Presente separado')).toHaveCount(0);
   await page.getByRole('button', { name: 'Pessoas e listas' }).click();
   const sharing = page.getByRole('dialog', { name: 'Pessoas e listas' });
@@ -177,12 +184,16 @@ test('guest sees Wallet gifts separately and manages personal sharing with regis
   await sharing.getByRole('button', { name: 'Compartilhar', exact: true }).click();
   await expect(sharing.getByRole('button', { name: 'Revogar acesso de Gabriel' })).toBeVisible();
   await sharing.getByRole('button', { name: 'Luana', exact: true }).click();
-  await expect(sharing.getByText('Desejo da Luana')).toBeVisible();
+  await expect(sharing.getByRole('link', { name: 'Desejo da Luana' })).toHaveAttribute('href', 'https://loja.example.invalid/item-luana');
   await expect(sharing.getByRole('button', { name: /Editar|Excluir|Marcar como comprado/ })).toHaveCount(0);
   await page.evaluate(() => window.guestFixture.removeIncoming());
   await expect(sharing.getByText('Desejo da Luana')).toHaveCount(0);
   await sharing.getByRole('button', { name: 'Revogar acesso de Gabriel' }).click();
   await expect(sharing.getByText('Sua lista é privada.')).toBeVisible();
+  await sharing.getByRole('button', { name: 'Fechar pessoas e listas' }).click();
+  await expect(gifts.getByText('Presente separado')).toBeVisible();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(gifts.getByText('Presente separado')).toBeVisible();
 });
 
 test('purchase can be cancelled or confirmed and people dialog has a back button', async ({ page }) => {
@@ -212,4 +223,115 @@ test('purchase can be cancelled or confirmed and people dialog has a back button
   expect(await people.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
   await people.getByRole('button', { name: 'Voltar à lista' }).click();
   await expect(people).toBeHidden();
+});
+
+test('guest saves a product link even when its preview is blocked', async ({ page }) => {
+  await mockGuest(page);
+  const url = 'https://loja.example.invalid/bloqueado';
+  await page.route(url, route => route.fulfill({ status: 403, headers: { 'access-control-allow-origin': '*' } }));
+  await page.goto('/wishlist-guest.html');
+  await page.getByRole('button', { name: 'Entrar com Google' }).click();
+  await page.evaluate(() => window.guestFixture.role({ role: 'guest', personId: 'helena' }));
+  await page.getByRole('button', { name: 'Adicionar desejo' }).click();
+  await page.getByLabel('Link do produto').fill(url);
+  await expect(page.locator('#guestLinkStatus')).toContainText('O link será salvo');
+  await page.getByLabel('Produto', { exact: true }).fill('Produto com prévia bloqueada');
+  await page.getByRole('button', { name: 'Salvar desejo' }).click();
+  await expect(page.getByRole('link', { name: 'Abrir produto' })).toHaveAttribute('href', url);
+  const saved = await page.evaluate(() => window.guestFixture.calls.find(call => call.item?.url)?.item);
+  expect(saved?.url).toBe(url);
+});
+
+test('guest can assign and edit independent product links from one print', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockGuest(page);
+  await page.route('https://loja.example.invalid/**', route => route.fulfill({ status: 403, headers: { 'access-control-allow-origin': '*' } }));
+  await page.goto('/wishlist-guest.html');
+  await page.getByRole('button', { name: 'Entrar com Google' }).click();
+  await page.evaluate(() => window.guestFixture.role({ role: 'guest', personId: 'helena' }));
+  await page.getByRole('button', { name: 'Adicionar desejo' }).click();
+  const editor = page.getByRole('dialog', { name: 'Adicionar desejo' });
+  const initialUrl = 'https://loja.example.invalid/rascunho-jeans';
+  await editor.getByLabel('Link do produto').fill(initialUrl);
+  await editor.getByLabel('Produto', { exact: true }).fill('Denim Jeans');
+  const contents = await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 840;
+    canvas.height = 500;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, 840, 500);
+    ctx.fillStyle = '#151515';
+    ctx.font = 'bold 33px Arial';
+    ctx.fillText('Produto: Linen Shirt         CA$10.00', 50, 90);
+    ctx.fillText('Produto: Denim Jeans      CA$16.00', 50, 210);
+    return canvas.toDataURL().split(',')[1];
+  });
+  await editor.locator('#guestUpload').setInputFiles({
+    name: 'lista.png', mimeType: 'image/png', buffer: Buffer.from(contents, 'base64'),
+  });
+  const rows = editor.locator('.guest-photo-row');
+  await expect(rows).toHaveCount(2, { timeout: 45000 });
+  await expect(editor.locator('#guestSingleLink')).toBeHidden();
+  await expect(rows.first().getByLabel('Link do produto')).toHaveValue('');
+  await expect(rows.nth(1).getByLabel('Link do produto')).toHaveValue(initialUrl);
+  const links = ['https://loja.example.invalid/linen', 'https://loja.example.invalid/jeans'];
+  for (const [index, url] of links.entries()) {
+    const row = rows.nth(index);
+    await row.getByLabel('Link do produto').fill(url);
+    await expect(row.getByRole('link', { name: 'Abrir link' })).toHaveAttribute('href', url);
+  }
+  await rows.first().getByRole('button', { name: 'Atualizar prévia' }).click();
+  await expect(rows.first()).toContainText('O link será salvo com este item.');
+  const second = rows.nth(1).getByLabel('Link do produto');
+  await second.fill('javascript:alert(1)');
+  await editor.getByRole('button', { name: 'Salvar selecionados' }).click();
+  await expect(second).toBeFocused();
+  await second.fill(links[1]);
+  await editor.getByRole('button', { name: 'Salvar selecionados' }).click();
+  const names = ['Linen Shirt', 'Denim Jeans'];
+  const savedRows = page.locator('#guestWishItems .wish-row');
+  for (const [index, name] of names.entries()) {
+    await expect(savedRows.filter({ hasText: name }).getByRole('link', { name: 'Abrir produto' })).toHaveAttribute('href', links[index]);
+    await page.getByRole('button', { name: 'Editar: ' + name }).click();
+    const edit = page.getByRole('dialog', { name: 'Editar desejo' });
+    await expect(edit.getByLabel('Link do produto')).toHaveValue(links[index]);
+    await expect(edit.getByRole('link', { name: 'Abrir link' })).toHaveAttribute('href', links[index]);
+    await edit.getByRole('button', { name: 'Cancelar' }).click();
+  }
+  await page.getByRole('button', { name: 'Editar: Denim Jeans' }).click();
+  const edit = page.getByRole('dialog', { name: 'Editar desejo' });
+  const newUrl = 'https://loja.example.invalid/novo-jeans';
+  await edit.getByLabel('Link do produto').fill(newUrl);
+  await edit.getByRole('button', { name: 'Salvar desejo' }).click();
+  await expect(savedRows.filter({ hasText: 'Denim Jeans' }).getByRole('link', { name: 'Abrir produto' })).toHaveAttribute('href', newUrl);
+  await expect(savedRows.filter({ hasText: 'Linen Shirt' }).getByRole('link', { name: 'Abrir produto' })).toHaveAttribute('href', links[0]);
+});
+
+test('guest adds product rows without photos and can change the default store independently', async ({ page }) => {
+  await mockGuest(page);
+  await page.goto('/wishlist-guest.html');
+  await page.getByRole('button', { name: 'Entrar com Google' }).click();
+  await page.evaluate(() => window.guestFixture.role({ role: 'guest', personId: 'helena' }));
+  await page.getByRole('button', { name: 'Adicionar desejo' }).click();
+  const form = page.getByRole('dialog', { name: 'Adicionar desejo' });
+  const shop = form.getByLabel('Loja padrão');
+  await shop.fill('Loja inicial');
+  await form.getByLabel('Produto', { exact: true }).fill('Produto inicial');
+  const add = form.getByRole('button', { name: /Adicionar outro produto/ });
+  await add.click();
+  const rows = form.locator('.guest-photo-row');
+  await expect(rows).toHaveCount(2);
+  await rows.nth(1).getByLabel('Produto', { exact: true }).fill('Produto de outra loja');
+  await rows.nth(1).getByLabel('Loja', { exact: true }).fill('Loja particular');
+  await shop.fill('Loja revisada');
+  await expect(rows.first().getByLabel('Loja', { exact: true })).toHaveValue('Loja revisada');
+  await expect(rows.nth(1).getByLabel('Loja', { exact: true })).toHaveValue('Loja particular');
+  await add.click();
+  await expect(rows.last().getByLabel('Loja', { exact: true })).toHaveValue('Loja revisada');
+  await rows.last().getByLabel('Produto', { exact: true }).fill('Produto adicional');
+  await form.getByRole('button', { name: 'Salvar selecionados' }).click();
+  await expect(page.getByText('Produto adicional')).toBeVisible();
+  const stores = await page.evaluate(() => window.guestFixture.calls.map(call => call.item?.store));
+  expect(stores.filter(Boolean)).toEqual(['Loja revisada', 'Loja particular', 'Loja revisada']);
 });
