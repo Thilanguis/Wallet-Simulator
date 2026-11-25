@@ -106,12 +106,20 @@
     const listeners = new Set();
     let dirty = false,
       queued = false;
+    function cache(candidate) {
+      try {
+        write(storage, key, candidate);
+      } catch (error) {
+        // Firebase remains authoritative when this browser's cache is full.
+        if (!remoteBacked || error.name !== 'QuotaExceededError') throw error;
+      }
+    }
     function commit(next) {
       if (!writable) throw new Error('Aguarde a conexão com a carteira antes de alterar dados.');
       const disk = read(storage, key, null);
       if (!remoteBacked && disk && disk.revision !== state.revision) throw new Error('Outra aba alterou os dados. Exporte o backup e recarregue antes de continuar.');
       const candidate = { ...structuredClone(next), revision: state.revision + 1 };
-      write(storage, key, candidate);
+      cache(candidate);
       state = candidate;
       dirty = false;
       for (const listener of listeners) listener(structuredClone(state));
@@ -159,7 +167,7 @@
       },
       acceptRemote(next) {
         const candidate = { ...structuredClone(next), revision: state.revision + 1 };
-        write(storage, key, candidate);
+        cache(candidate);
         state = candidate;
         dirty = false;
       },

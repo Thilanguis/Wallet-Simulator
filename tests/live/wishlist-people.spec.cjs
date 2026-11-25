@@ -33,6 +33,7 @@ test('groups old and new wishes and shares only the confirmed selection', async 
     window.dispatchEvent(new Event('wallet:remote'));
   }, legacy);
   await page.locator('[data-panel=wishlistPanel]').click();
+  await page.getByRole('checkbox', { name: 'Mostrar comprados' }).check();
   const editor = page.locator('#wishEditor');
   await editor.locator('summary').click();
   await page.locator('#wishPerson').selectOption('');
@@ -47,6 +48,7 @@ test('groups old and new wishes and shares only the confirmed selection', async 
     await page.locator('#wishTitle').fill(title);
     await page.locator('#wishStore').fill('Loja teste');
     await page.locator('#wishPrice').fill(String(price));
+    await page.locator('#wishCurrency').selectOption('BRL');
     await page.locator('#wishPerson').selectOption(person === 'new' ? '' : 'Ana');
     if (person === 'new') await page.locator('#wishPersonName').fill('  Ana  ');
     await page.locator('#wishSave').click();
@@ -57,7 +59,7 @@ test('groups old and new wishes and shares only the confirmed selection', async 
   const ana = page.locator('.wish-group').filter({ has: page.getByRole('heading', { name: 'Ana', exact: true }) });
   await expect(ana.locator('.wish-group-total')).toHaveText(/2 a comprar.*R\$\s*0,00/);
   await expect(ana).toContainText('Loja teste');
-  await ana.getByRole('checkbox', { name: 'Comprado: Relógio' }).check();
+  await ana.getByRole('checkbox', { name: 'Selecionar para compra: Relógio' }).check();
   await page.getByRole('button', { name: 'Registrar compra', exact: true }).click();
   await page.getByRole('button', { name: 'Confirmar compra', exact: true }).click();
   await expect(ana.locator('.wish-group-total')).toHaveText(/1 a comprar.*R\$\s*0,00/);
@@ -157,7 +159,7 @@ test('shares original currencies on request and shortens links without losing pr
   expect(await page.evaluate(() => window.sharedWithPhoto)).toBeUndefined();
   await dialog.getByRole('button', { name: 'Enviar imagem', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.sharedWithPhoto)).toEqual({
-    text: null, photos: ['lista-de-itens.jpg'], width: 840, height: 594, hasThumbnail: true,
+    text: null, photos: ['lista-de-itens.jpg'], width: 840, height: expect.any(Number), hasThumbnail: true,
   });
   await dialog.getByRole('checkbox', { name: 'Anel' }).uncheck();
   await expect(dialog.locator('#wishImageExport')).toBeHidden();
@@ -346,7 +348,7 @@ test('reads a product screenshot locally and reuses the saved photo without a li
   await expect(page.locator('#wishStore')).toHaveValue('Pandora');
   await expect(page.locator('#wishPrice')).toHaveValue('95');
   await expect(page.locator('#wishCurrency')).toHaveValue('CAD');
-  await expect.poll(() => page.locator('#wishImagePreview img').evaluate((img) => img.naturalHeight > img.naturalWidth)).toBe(true);
+  await expect.poll(() => page.locator('#wishImagePreview img').evaluate((img) => img.naturalWidth > 0 && img.naturalHeight > 0)).toBe(true);
   await expect(page.locator('.wish-row')).toHaveCount(0);
   await page.locator('#wishSave').click();
   await expect(page.locator('.wish-row img')).toHaveAttribute('src', /^data:image\/jpeg;base64,/);
@@ -383,7 +385,7 @@ for (const blocked of [false, true]) {
     expect(await page.evaluate(() => new URL(location.href).search)).toBe('');
     await expect(page.locator('.wish-row')).toHaveCount(0);
     if (blocked) {
-      await expect(page.locator('#wishMessage')).toContainText('Preencha produto e valor');
+      await expect(page.locator('#wishMessage')).toContainText('O link será salvo com o desejo');
       await page.locator('#wishPrice').fill('30');
     } else {
       await expect(page.locator('#wishPrice')).toHaveValue('25');

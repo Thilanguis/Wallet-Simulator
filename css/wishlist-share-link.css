@@ -1,0 +1,8 @@
+.wishlist-link-dialog { max-width: min(440px, calc(100% - 30px)); box-sizing: border-box; padding: 18px; border: 1px solid #74565f; border-radius: 14px; background: #221b20; color: #f4ddd9; font: 14px/1.5 system-ui, sans-serif; }
+.wishlist-link-dialog::backdrop { background: #0d080bd9; }
+.wishlist-link-dialog h2 { margin: 0; font-size: 19px; color: #f6ddd9; }
+.wishlist-link-dialog :is(p, label) { color: #d4bec5; }
+.wishlist-link-dialog input { display: block; box-sizing: border-box; width: 100%; border: 1px solid #70505b; background: #171218; color: inherit; border-radius: 7px; padding: 8px; font: inherit; }
+.wishlist-link-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.wishlist-link-actions button:not([hidden]) { width: auto; padding: 7px 12px; border: 1px solid #754b5c; border-radius: 6px; background: #48303a; color: #ffe1e9; font: 650 13px/1.4 system-ui, sans-serif; }
+.wishlist-link-actions button[data-revoke] { background: #492b31; color: #ffbdc5; }

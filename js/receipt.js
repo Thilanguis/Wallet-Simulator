@@ -23,12 +23,13 @@
       warnings.push('Data não reconhecida; preencha manualmente.');
     }
     const candidates = [];
+    const moneyForReceipt = line => F.moneyTokens(line, { canadian: true });
     for (const [index, line] of lines.entries()) {
       if (/subtotal|sub-total|frete|desconto|troco|parcelas|limite|saldo|imposto|taxa/i.test(line) && !/total (?:pago|final)|valor (?:pago|final)/i.test(line)) continue;
-      let money = F.moneyTokens(line);
+      let money = moneyForReceipt(line);
       let context = line;
       if (!money.length && /total|pago|pagamento/i.test(line) && lines[index + 1]) {
-        money = F.moneyTokens(lines[index + 1]);
+        money = moneyForReceipt(lines[index + 1]);
         context += ' ' + lines[index + 1];
       }
       let score = /valor (?:efetivamente )?pago|total pago|valor final|total final|paid|amount paid/i.test(context) ? 100 : /total|pagamento aprovado/i.test(context) ? 70 : /valor|amount/i.test(context) ? 40 : 10;
@@ -42,6 +43,7 @@
     candidates.sort((a, b) => b.score - a.score);
     const best = candidates[0];
     const ambiguous = !best || best.score < 70 || candidates.some((c) => c !== best && c.score === best.score && (c.amount !== best.amount || c.currency !== best.currency));
+    if (best?.currency === 'CAD' && /^\$|^d[oó]lares?/i.test(best.raw)) warnings.push('CAD sugerido a partir do símbolo $. Confira a moeda.');
     if (ambiguous) warnings.push('Valor incerto: não há um único total pago claramente identificado.');
     if (confidence !== null && confidence < 75) warnings.push('OCR com baixa confiança (' + Math.round(confidence) + '%).');
     if (!best) warnings.push('Valor não reconhecido; digite o valor pago.');

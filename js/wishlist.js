@@ -37,12 +37,14 @@ document.addEventListener('DOMContentLoaded', () => {
   function conversion() {
     const currency = $('wishCurrency').value;
     const quantity = $('wishQuantity').valueAsNumber;
-    const unitPrice = $('wishPrice').valueAsNumber;
+    const unitPrice = WishProduct.parsePrice($('wishPrice').value);
+    const shownBrl = WishProduct.priceInReais(unitPrice, currency);
+    $('wishUnitBrl').textContent = shownBrl ? 'Valor unitário em reais · ' + shownBrl : '';
     const item = { originalPrice: unitPrice, quantity, taxQuebec: $('wishTaxQuebec').checked };
     const base = validQuantity(quantity) && Number.isFinite(unitPrice) ? originalSubtotal(item) : null;
     const value = base == null ? null : taxableSubtotal(item);
     const estimate = value == null || !currency ? null : WishFx.convert(value, currency);
-    const date = WishFx.current()?.dates[currency];
+    const date = WishFx.current()?.dates?.[currency];
     const taxes = base != null && item.taxQuebec ? ' · GST/QST ' + originalPriceLabel(quebecTax(item), currency) : '';
     $('wishConversion').textContent = base == null || !currency ? '' :
       (quantity > 1 ? quantity + ' unidades · ' : '') + originalPriceLabel(base, currency) + taxes +
@@ -79,15 +81,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const adding = $('wishPerson').value === newPerson;
     $('wishPersonNameField').hidden = !adding;
     $('wishPersonName').disabled = !adding;
-    $('wishPersonName').required = adding;
+    $('wishPersonName').required = adding && !photoBatch;
   }
   function updatePeople(items, selection = $('wishPerson').value) {
     const select = $('wishPerson');
     const registered = roster();
-    const previousId = select.selectedOptions[0]?.dataset.personId;
-    if (selection && selection === select.value && previousId) {
-      selection = registered.find((person) => person.id === previousId)?.name || selection;
-    }
     const names = people(items, registered);
     const options = [...names.values()].sort((a, b) => a.localeCompare(b, 'pt-BR')).map((name) => {
       const option = new Option(personLabel(name), name);
@@ -95,14 +93,26 @@ document.addEventListener('DOMContentLoaded', () => {
       if (person) option.dataset.personId = person.id;
       return option;
     });
-    select.replaceChildren(...options, new Option('＋ Cadastrar pessoa', newPerson));
-    select.value = selection ? names.get(personKey(selection)) || defaultPerson : newPerson;
+    options.push(new Option('＋ Cadastrar pessoa', newPerson));
+    function rebuild(field, value) {
+      const previousId = field.selectedOptions[0]?.dataset.personId;
+      if (value && value === field.value && previousId) {
+        value = registered.find((person) => person.id === previousId)?.name || value;
+      }
+      field.replaceChildren(...options.map((option) => option.cloneNode(true)));
+      field.value = value ? names.get(personKey(value)) || defaultPerson : newPerson;
+    }
+    rebuild(select, selection);
+    for (const field of $('wishBatchRows').querySelectorAll('[data-field=person]')) rebuild(field, field.value);
     personFields();
   }
   $('wishPerson').addEventListener('change', () => {
     personFields();
+    applyBatchPerson();
     if ($('wishPerson').value === newPerson) $('wishPersonName').focus();
   });
+  $('wishPersonName').addEventListener('input', applyBatchPerson);
+  $('wishApplyBatchPerson').onclick = applyBatchPerson;
   const link = (value) => {
     const url = new URL(value);
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error('Use um link http ou https válido.');
@@ -116,6 +126,24 @@ document.addEventListener('DOMContentLoaded', () => {
     if (registered) AppStorage.setItem('wishlistPeople', JSON.stringify(registered));
     if (items) AppStorage.setItem('wishlist', JSON.stringify(items));
     AppStorage.flush();
+    render();
+  }
+  async function confirmWishSave(items, registered, changed) {
+    const wallet = WalletStore.snapshot();
+    wallet.simulator.wishlist = JSON.stringify(items);
+    if (registered) wallet.simulator.wishlistPeople = JSON.stringify(registered);
+    const sync = window.SharedWallet;
+    if (sync) sync.assertWalletFits(WalletCloud.pack(wallet));
+    WalletStore.commitBoth(wallet.finance, wallet.simulator);
+    if (sync) {
+      await sync.flush();
+      const confirmed = JSON.parse(sync.state().base?.simulator?.wishlist || '[]');
+      const byId = new Map(confirmed.map(item => [item.id, item]));
+      if (!changed.every(item => Object.entries(item).every(([key, value]) => byId.get(item.id)?.[key] === value))) {
+        const reason = $('cloudStatusBar').classList.contains('is-error') ? $('cloudStatusText').textContent : '';
+        throw new Error('O Firebase ainda não confirmou o salvamento. ' + reason);
+      }
+    }
     render();
   }
   function checkedName(value) {
@@ -139,6 +167,7 @@ document.addEventListener('DOMContentLoaded', () => {
       save(null, registered);
       updatePeople(rows(), selectedName);
       $('wishPersonName').value = '';
+      applyBatchPerson();
       message('Pessoa selecionada.');
     } catch (error) {
       message(error.message);
@@ -163,7 +192,10 @@ document.addEventListener('DOMContentLoaded', () => {
     $('wishImagePreview').replaceChildren(...(image ? [image] : []));
     $('wishRemovePhoto').hidden = !draftImage?.startsWith('data:');
   }
+  let wishFormGeneration = 0, draftWishId;
   function reset() {
+    wishFormGeneration++;
+    draftWishId = undefined;
     editing = null;
     editBaseline = null;
     editItem = null;
@@ -785,11 +817,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const purchaseSelection = new Set();
   const selectAllPurchase = $('wishSelectAllPurchase');
   const selectStore = $('wishSelectStore');
-  const hideBought = $('wishHideBought');
-  function visibleWishes(items) {
+  const showBought = $('wishShowBought');
+  function wishesInStore(items) {
     const store = selectStore.value;
-    return items.filter((item) => (!hideBought.checked || !item.bought) &&
-      (!store || personKey(normalizeName(item.store || '')) === store));
+    return store ? items.filter((item) => personKey(normalizeName(item.store || '')) === store) : items;
+  }
+  function visibleWishes(items) {
+    return wishesInStore(items).filter((item) => showBought.checked || !item.bought);
   }
   const purchaseGroups = [];
   const purchaseDialog = $('wishPurchaseDialog');
@@ -846,6 +880,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const total = $('wishTotal');
     const original = $('wishOriginalTotal');
     const status = $('wishTotalStatus');
+    const selecting = selected.length > 0;
     const { totals, missing } = selectionEstimateAmounts(pending, selected);
     const labels = (amounts, missing) => {
       const foreign = new Map(amounts);
@@ -854,7 +889,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     const announcement = 'Seleção · estimativa: ' + labels(totals, missing).join(' · ');
     if (status.textContent !== announcement) status.textContent = announcement;
-    total.parentElement.classList.toggle('is-selection', selected.length > 0);
+    total.parentElement.classList.toggle('is-selection', selecting);
     const counters = [{
       element: total,
       totals,
@@ -897,8 +932,9 @@ document.addEventListener('DOMContentLoaded', () => {
       check.checked = checked > 0 && checked === ids.length;
       check.indeterminate = checked > 0 && checked < ids.length;
     }
+    const checkedIds = new Set(selected.map(item => String(item.id)));
     for (const check of $('wishList').querySelectorAll('[data-purchase-wish]')) {
-      check.checked = purchaseSelection.has(check.dataset.purchaseWish);
+      check.checked = checkedIds.has(check.dataset.purchaseWish);
     }
     updatePurchaseEstimates(pending, selected, animate);
   }
@@ -919,64 +955,79 @@ document.addEventListener('DOMContentLoaded', () => {
     updatePurchaseBar(items);
     if (!purchaseSelection.size) return;
     const registered = roster();
-    const groups = new Map();
     const names = people(items, registered);
-    for (const item of items) {
-      if (!purchaseSelection.has(item.id)) continue;
-      const person = names.get(personKey(personOf(item, registered)));
-      if (!groups.has(person)) groups.set(person, []);
-      groups.get(person).push(item);
-    }
-    purchaseDraft = [...groups].sort(([a], [b]) => Number(b === defaultPerson) - Number(a === defaultPerson));
+    const stores = groupByStore(items.filter((item) => purchaseSelection.has(item.id)));
+    purchaseDraft = [...stores.values()].map(({ name, items: products }) => {
+      const groups = new Map();
+      for (const item of products) {
+        const person = names.get(personKey(personOf(item, registered)));
+        if (!groups.has(person)) groups.set(person, []);
+        groups.get(person).push(item);
+      }
+      return {
+        store: name,
+        groups: [...groups].sort(([a], [b]) => Number(b === defaultPerson) - Number(a === defaultPerson)),
+      };
+    });
     purchaseForm.reset();
     purchaseDate.max = purchaseToday();
     purchaseDate.value = purchaseDate.max;
     $('wishPurchaseError').textContent = '';
-    purchaseItems.replaceChildren(...purchaseDraft.map(([person, wishes]) => {
-      const group = document.createElement('section');
-      group.className = 'wish-purchase-group';
-      const heading = document.createElement('h3');
+    purchaseItems.replaceChildren(...purchaseDraft.map(({ store, groups }) => {
+      const shop = document.createElement('section');
+      shop.className = 'wish-purchase-shop';
+      const shopHeading = document.createElement('h3');
       const subtotal = document.createElement('output');
-      heading.append(personLabel(person), subtotal);
-      group.append(heading);
-      for (const item of wishes) {
-        const label = document.createElement('label');
-        const title = document.createElement('span');
-        const amount = document.createElement('input');
-        amount.dataset.purchaseAmount = '';
-        amount.inputMode = 'decimal';
-        amount.required = true;
-        amount.setAttribute('aria-label', 'Valor pago em reais por ' + item.title);
-        const price = taxableSubtotal(item);
-        const currency = item.currency || 'BRL';
-        const estimatedBRL = price == null ? null : WishFx.convert(price, currency);
-        if (estimatedBRL != null) amount.value = estimatedBRL.toFixed(2).replace('.', ',');
-        title.textContent = titleWithQuantity(item);
-        if (price != null && currency !== 'BRL') {
-          const original = document.createElement('small');
-          original.className = 'hint';
-          original.textContent = originalPriceLabel(price, currency);
-          title.append(original);
-        }
-        amount.placeholder = 'Informe em R$';
-        label.append(title, amount);
-        group.append(label);
-      }
-      if (personKey(person) !== personKey(defaultPerson)) {
-        const label = document.createElement('label');
-        const contribution = document.createElement('input');
-        contribution.dataset.purchaseContribution = '';
-        contribution.inputMode = 'decimal';
-        contribution.placeholder = 'R$ 0,00';
-        contribution.setAttribute('aria-label', 'Contribuição de ' + person);
-        label.append('Contribuição (opcional)', contribution);
-        group.append(label);
-      }
-      return group;
+      subtotal.dataset.purchaseShopTotal = '';
+      shopHeading.append(store || 'Loja não informada', subtotal);
+      shop.append(shopHeading, ...groups.map(([person, wishes]) => purchasePersonFields(person, wishes, store)));
+      return shop;
     }));
     updatePurchaseTotals();
     purchaseDialog.showModal();
   };
+  function purchasePersonFields(person, wishes, store) {
+    const group = document.createElement('section');
+    group.className = 'wish-purchase-group';
+    const heading = document.createElement('h4');
+    const subtotal = document.createElement('output');
+    heading.append(personLabel(person), subtotal);
+    group.append(heading);
+    for (const item of wishes) {
+      const label = document.createElement('label');
+      const title = document.createElement('span');
+      const amount = document.createElement('input');
+      amount.dataset.purchaseAmount = '';
+      amount.inputMode = 'decimal';
+      amount.required = true;
+      amount.setAttribute('aria-label', 'Valor pago em reais por ' + item.title);
+      const price = taxableSubtotal(item);
+      const currency = item.currency || 'BRL';
+      const estimatedBRL = price == null ? null : WishFx.convert(price, currency);
+      if (estimatedBRL != null) amount.value = estimatedBRL.toFixed(2).replace('.', ',');
+      title.textContent = titleWithQuantity(item);
+      if (price != null && currency !== 'BRL') {
+        const original = document.createElement('small');
+        original.className = 'hint';
+        original.textContent = originalPriceLabel(price, currency);
+        title.append(original);
+      }
+      amount.placeholder = 'Informe em R$';
+      label.append(title, amount);
+      group.append(label);
+    }
+    if (personKey(person) !== personKey(defaultPerson)) {
+      const label = document.createElement('label');
+      const contribution = document.createElement('input');
+      contribution.dataset.purchaseContribution = '';
+      contribution.inputMode = 'decimal';
+      contribution.placeholder = 'R$ 0,00';
+      contribution.setAttribute('aria-label', 'Contribuição de ' + personLabel(person) + (purchaseDraft.length > 1 ? ' · ' + (store || 'Loja não informada') : ''));
+      label.append('Contribuição (opcional)', contribution);
+      group.append(label);
+    }
+    return group;
+  }
   function purchaseAmounts(strict = false) {
     const read = (input, optional = false) => {
       if (optional && !input?.value.trim()) return 0;
@@ -989,29 +1040,44 @@ document.addEventListener('DOMContentLoaded', () => {
         return null;
       }
     };
-    return purchaseDraft.map(([person, wishes], index) => {
-      const group = purchaseItems.children[index];
-      const amounts = [...group.querySelectorAll('[data-purchase-amount]')].map((input) => read(input));
+    return purchaseDraft.map(({ store, groups }, index) => {
+      const shop = purchaseItems.children[index];
+      const fields = shop.querySelectorAll('.wish-purchase-group');
+      const parts = groups.map(([person, wishes], groupIndex) => {
+        const group = fields[groupIndex];
+        const amounts = [...group.querySelectorAll('[data-purchase-amount]')].map((input) => read(input));
+        return {
+          person,
+          wishes,
+          amounts,
+          subtotal: amounts.includes(null) ? null : amounts.reduce((sum, value) => sum + value, 0),
+          contribution: read(group.querySelector('[data-purchase-contribution]'), true),
+        };
+      });
       return {
-        person,
-        wishes,
-        amounts,
-        subtotal: amounts.includes(null) ? null : amounts.reduce((sum, value) => sum + value, 0),
-        contribution: read(group.querySelector('[data-purchase-contribution]'), true),
+        store,
+        groups: parts,
+        subtotal: parts.some((group) => group.subtotal === null) ? null : parts.reduce((sum, group) => sum + group.subtotal, 0),
+        contribution: parts.reduce((sum, group) => sum + group.contribution, 0),
       };
     });
   }
   function updatePurchaseTotals() {
-    const groups = purchaseAmounts();
-    const total = groups.reduce((sum, group) => sum + group.subtotal, 0);
-    const contributions = groups.reduce((sum, group) => sum + group.contribution, 0);
-    const complete = groups.every((group) => group.subtotal !== null);
-    groups.forEach((group, index) => {
-      purchaseItems.children[index].querySelector('output').textContent = group.subtotal === null ? '—' : Finance.format(group.subtotal);
+    const shops = purchaseAmounts();
+    const total = shops.reduce((sum, shop) => sum + shop.subtotal, 0);
+    const contributions = shops.reduce((sum, shop) => sum + shop.contribution, 0);
+    const complete = shops.every((shop) => shop.subtotal !== null);
+    const subtotalLabel = (amount) => amount === null ? '—' : Finance.format(amount);
+    shops.forEach((shop, index) => {
+      const section = purchaseItems.children[index];
+      section.querySelector('[data-purchase-shop-total]').textContent = subtotalLabel(shop.subtotal);
+      section.querySelectorAll('.wish-purchase-group output').forEach((output, groupIndex) => {
+        output.textContent = subtotalLabel(shop.groups[groupIndex].subtotal);
+      });
     });
     $('wishPurchaseTotal').textContent = complete ? Finance.format(total) : '—';
     $('wishPurchaseNetRow').hidden = !contributions;
-    $('wishPurchaseNet').textContent = complete && contributions <= total ? Finance.format(total - contributions) : '—';
+    $('wishPurchaseNet').textContent = complete && shops.every((shop) => shop.contribution <= shop.subtotal) ? Finance.format(total - contributions) : '—';
   }
   purchaseForm.addEventListener('input', () => {
     $('wishPurchaseError').textContent = '';
@@ -1024,11 +1090,15 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const date = purchaseDate.value;
       if (!Finance.validDate(date) || date > purchaseToday()) throw new Error('Informe a data em que a compra foi realizada.');
-      const groups = purchaseAmounts(true);
-      const total = groups.reduce((sum, group) => sum + group.subtotal, 0);
-      const contributions = groups.reduce((sum, group) => sum + group.contribution, 0);
-      if (!Number.isSafeInteger(total) || total <= 0) throw new Error('Informe um total de compra válido e maior que zero.');
-      if (contributions > total) throw new Error('As contribuições excedem o total da compra.');
+      const shops = purchaseAmounts(true);
+      const total = shops.reduce((sum, shop) => sum + shop.subtotal, 0);
+      if (!shops.length || !Number.isSafeInteger(total) || total < 0) throw new Error('Confira o total da compra.');
+      for (const shop of shops) {
+        if (shop.contribution > shop.subtotal) {
+          throw new Error('As contribuições excedem o total de “' + (shop.store || 'Loja não informada') + '”.');
+        }
+      }
+      const groups = shops.flatMap((shop) => shop.groups);
       const snapshot = WalletStore.snapshot();
       const list = JSON.parse(snapshot.simulator.wishlist || '[]');
       const current = new Map(list.map((item) => [item.id, item]));
@@ -1044,37 +1114,42 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
       const oneLine = (text) => text.replace(/\s+/g, ' ').trim();
-      function formatNote(includeStores) {
-        const lines = groups.map(({ person, wishes, amounts, subtotal, contribution }) =>
-          oneLine(person) + ' · ' + Finance.format(subtotal) + (contribution ? ' · contribuição ' + Finance.format(contribution) : '') + '\n' +
-          wishes.map((item, index) => {
-            const store = includeStores ? oneLine(item.store || '') : '';
-            return '  • ' + oneLine(titleWithQuantity(item)) + (store ? ' · Loja: ' + store : '') + ' · ' + Finance.format(amounts[index]);
-          }).join('\n'),
+      let finance = snapshot.finance;
+      const links = new Map();
+      const updatedAt = Date.now();
+      for (const shop of shops) {
+        const { store, groups, subtotal: amount, contribution } = shop;
+        const id = crypto.randomUUID();
+        const purchaseItems = PurchaseItems.snapshot(groups);
+        const paidWishes = groups.flatMap((group) => group.wishes.filter((_, index) => group.amounts[index] > 0));
+        const cadReference = FinanceCad.fromWishes(paidWishes, amount);
+        const lines = groups.map((group) =>
+          oneLine(group.person) + ' · ' + Finance.format(group.subtotal) +
+          (group.contribution ? ' · contribuição ' + Finance.format(group.contribution) : '') + '\n' +
+          group.wishes.map((item, index) => '  • ' + oneLine(titleWithQuantity(item)) + ' · ' + Finance.format(group.amounts[index])).join('\n'),
         );
-        if (contributions) lines.push('Contribuições: ' + Finance.format(contributions) + '\nPago pela Dominadora: ' + Finance.format(total - contributions));
-        return lines.join('\n');
+        const payment = contribution ? 'Contribuições: ' + Finance.format(contribution) + '\nPago pela Dominadora: ' + Finance.format(amount - contribution) : '';
+        const note = [lines.join('\n'), payment].filter(Boolean).join('\n');
+        finance = Finance.update(finance, { type: 'add', entry: {
+          id, date, description: store || 'Loja não informada', store, category: 'Lista de Compras',
+          amount, currency: 'BRL', status: 'paid', source: 'wishlist', note,
+          purchaseItems,
+          ...(cadReference ? { cadReference: { ...cadReference, recordedAt: new Date(updatedAt).toISOString() } } : {}),
+        } });
+        for (const part of purchaseItems) {
+          links.set(part.wishId, { bought: true, purchaseNoteId: id, purchasePaidBrl: part.amount, purchasePaidCad: part.cadAmount, updatedAt });
+        }
       }
-      const noteWithStores = formatNote(true);
-      const note = noteWithStores.length <= 4000 ? noteWithStores : formatNote(false);
-      const id = crypto.randomUUID();
-      const purchasedParts = PurchaseItems.snapshot(groups);
-      const finance = Finance.update(snapshot.finance, { type: 'add', entry: {
-        id, date, description: 'Compra da Luana', category: 'Lista de Compras',
-        amount: total, currency: 'BRL', status: 'paid', source: 'wishlist', note,
-        purchaseItems: purchasedParts,
-        ...(FinanceCad.fromWishes(groups.flatMap(group => group.wishes), total) ? {cadReference:{...FinanceCad.fromWishes(groups.flatMap(group => group.wishes), total),recordedAt:new Date().toISOString()}} : {}),
-      } });
       snapshot.simulator.wishlist = JSON.stringify(list.map((item) =>
-        ids.has(item.id) ? { ...item, bought: true, purchaseNoteId: id, purchasePaidBrl: purchasedParts.find(p=>p.wishId===item.id)?.amount, purchasePaidCad: purchasedParts.find(p=>p.wishId===item.id)?.cadAmount, updatedAt: Date.now() } : item,
+        links.has(item.id) ? { ...item, ...links.get(item.id) } : item,
       ));
       WalletStore.commitBoth(finance, snapshot.simulator);
       purchaseSelection.clear();
       purchaseDialog.close();
-      $('wishPurchaseFeedback').textContent = 'Compra registrada na Lista de Compras · ' + Finance.format(total);
+      $('wishPurchaseFeedback').textContent = (total ? 'Compra registrada na Lista de Compras' : 'Brindes registrados na Lista de Compras') + ' · ' + Finance.format(total);
       UIFeedback.wishes([...ids]);
       window.dispatchEvent(new Event('wishlist:purchase'));
-      const stores = [...new Set(groups.flatMap(group => group.wishes.map(item => item.store || 'Sem loja')))];
+      const stores = shops.map((shop) => shop.store || 'Loja não informada');
       const units = groups.reduce((sum, group) => sum + group.wishes.reduce((n, item) => n + quantityOf(item), 0), 0);
       UIFeedback.success('Compra registrada', (stores.length === 1 ? stores[0] : stores.length + ' lojas') + ' · ' + units + (units === 1 ? ' item · ' : ' itens · ') + Finance.format(total));
     } catch (error) {
@@ -1152,7 +1227,23 @@ document.addEventListener('DOMContentLoaded', () => {
       },
     };
   }
+  const wishSnapshot = () => JSON.stringify([
+    AppStorage.getItem('wishlist'),
+    AppStorage.getItem('wishlistPeople'),
+    WalletStore.finance().entries.filter(entry => entry.source === 'wishlist').map(entry => [entry.id, entry.status]),
+  ]);
+  let lastWishSnapshot;
+  function renderWishSummary(list) {
+    const scoped = wishesInStore(list);
+    const unbought = scoped.filter((item) => !item.bought);
+    const { missing } = estimate(unbought);
+    const boughtCount = countUnits(scoped.filter((item) => item.bought));
+    $('wishSummary').textContent = (scoped.length
+      ? countUnits(unbought) + ' a comprar · ' + boughtCount + ' comprado(s)'
+      : list.length ? 'Nenhum item com esses filtros.' : 'Sua lista está vazia.') + (missing ? ' · ' + missing + ' sem cotação' : '');
+  }
   function render() {
+    lastWishSnapshot = wishSnapshot();
     const list = rows(),
       host = $('wishList');
     host.replaceChildren();
@@ -1172,12 +1263,7 @@ document.addEventListener('DOMContentLoaded', () => {
     selectStore.value = stores.has(selectedStore) ? selectedStore : '';
     selectStore.hidden = selectStore.options.length === 1;
     const visible = visibleWishes(list);
-    const unbought = visible.filter((item) => !item.bought);
-    const { missing } = estimate(unbought);
-    const boughtCount = countUnits(visible.filter((item) => item.bought));
-    $('wishSummary').textContent = (visible.length
-      ? countUnits(unbought) + ' a comprar · ' + boughtCount + ' comprado(s)'
-      : list.length ? 'Nenhum item com esses filtros.' : 'Sua lista está vazia.') + (missing ? ' · ' + missing + ' sem cotação' : '');
+    renderWishSummary(list);
     renderQuotes(list);
     const groups = new Map();
     const registered = roster();
@@ -1265,7 +1351,7 @@ document.addEventListener('DOMContentLoaded', () => {
         else {
           check.checked = item.bought;
           if (!item.bought) check.dataset.purchaseWish = item.id;
-          check.setAttribute('aria-label', 'Comprado: ' + item.title);
+          check.setAttribute('aria-label', (item.bought ? 'Comprado: ' : 'Selecionar para compra: ') + item.title);
           check.disabled = item.bought && activePurchases.has(item.purchaseNoteId);
           if (check.disabled) check.title = 'Para corrigir a compra, abra a nota em Notas e Gastos Reais.';
           check.onchange = () => {
@@ -1299,7 +1385,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (item.bought) anchor.classList.add('is-bought');
         const price = document.createElement('span');
         price.className = 'wish-row-price';
-        if (item.taxQuebec) price.title = 'Preço sem impostos: ' + originalPriceLabel(originalSubtotal(item), item.currency || 'BRL') + ' · GST/QST: ' + originalPriceLabel(quebecTax(item), item.currency || 'BRL');
+        if (item.taxQuebec && originalSubtotal(item) != null) price.title = 'Preço sem impostos: ' + originalPriceLabel(originalSubtotal(item), item.currency || 'BRL') + ' · GST/QST: ' + originalPriceLabel(quebecTax(item), item.currency || 'BRL');
         price.textContent = priceLabel(item);
         const edit = document.createElement('button');
         edit.type = 'button';
@@ -1322,14 +1408,14 @@ document.addEventListener('DOMContentLoaded', () => {
           $('wishPrice').value = item.originalPrice ?? item.price ?? '';
           $('wishQuantity').value = quantityOf(item);
           $('wishTaxQuebec').checked = item.taxQuebec === true;
-          $('wishVisibility').value = item.visibleToRecipient ? 'recipient' : 'wallet';
           selectCurrency(item.currency || 'BRL');
           updatePeople(rows(), personOf(item));
           editBaseline = formValues(false);
           conversion();
           $('wishCancel').hidden = false;
           $('wishSave').textContent = 'Salvar desejo';
-          $('wishTitle').focus();
+          $('wishTitle').focus({ preventScroll: true });
+          $('wishEditor').scrollIntoView({ block: 'start' });
         };
         const remove = document.createElement('button');
         remove.type = 'button';
@@ -1358,11 +1444,10 @@ document.addEventListener('DOMContentLoaded', () => {
       title: $('wishTitle').value.trim(),
       store: $('wishStore').value.trim(),
       person,
-      originalPrice: $('wishPrice').value === '' ? null : Number($('wishPrice').value),
+      originalPrice: WishProduct.parsePrice($('wishPrice').value),
       quantity: $('wishQuantity').valueAsNumber,
       currency: $('wishCurrency').value || ($('wishPrice').value === '' ? 'BRL' : ''),
       taxQuebec: $('wishTaxQuebec').checked,
-      visibleToRecipient: $('wishVisibility').value === 'recipient',
       imageUrl: draftImage || undefined,
     };
   }
@@ -1378,14 +1463,28 @@ document.addEventListener('DOMContentLoaded', () => {
       input.removeAttribute('aria-describedby');
     }
   }
+  function batchPersonName(select) {
+    const input = select.closest('.wish-batch-person').querySelector('[data-field=personName]');
+    input.parentElement.hidden = select.value !== newPerson;
+    input.disabled = input.parentElement.hidden;
+    batchFieldError(input, '');
+    return input;
+  }
+  function setBatchPerson(select) {
+    select.value = $('wishPerson').value;
+    batchPersonName(select).value = select.value === newPerson ? $('wishPersonName').value : '';
+  }
+  function applyBatchPerson() {
+    if (!photoBatch) return;
+    for (const select of $('wishBatchRows').querySelectorAll('[data-field=person]')) setBatchPerson(select);
+  }
   const validLinePrice = (price, quantity) => price === null ||
     (Number.isFinite(price) && price >= 0 && Number.isSafeInteger(Math.round(price * 100) * quantity));
-  function savePhotoBatch() {
+  async function savePhotoBatch(generation) {
     const list = rows();
     const registered = roster();
-    const enteredName = checkedName($('wishPerson').value || $('wishPersonName').value);
-    const person = personFromInput(enteredName, people(list, registered));
-    const personId = personKey(person) === personKey(defaultPerson) ? undefined : registerPerson(person, registered).id;
+    const registeredCount = registered.length;
+    const names = people(list, registered);
     const additions = [];
     const invalidFields = [];
     for (const row of $('wishBatchRows').children) {
@@ -1393,9 +1492,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const fieldInput = (field) => row.querySelector('[data-field=' + field + ']');
       const get = (field) => fieldInput(field).value.trim();
       const title = get('title'), store = get('store');
+      const enteredName = get('person') || normalizeName(get('personName'));
       const rawUrl = get('url'), url = rawUrl ? WishProduct.imageUrl(rawUrl) : '';
       const rawPrice = get('price');
-      const originalPrice = rawPrice === '' ? null : /^\d+(?:[.,]\d{1,2})?$/.test(rawPrice) ? Number(rawPrice.replace(',', '.')) : NaN;
+      const originalPrice = WishProduct.parsePrice(rawPrice);
       const currency = get('currency') || (originalPrice === null ? 'BRL' : '');
       const rawQuantity = get('quantity');
       const taxQuebec = fieldInput('taxQuebec').checked;
@@ -1405,6 +1505,7 @@ document.addEventListener('DOMContentLoaded', () => {
         url: url === null ? 'Informe um link http ou https válido.' : '',
         title: title ? '' : 'Informe o nome do produto.',
         store: store ? '' : 'Informe a loja.',
+        personName: enteredName && enteredName.length <= 80 ? '' : 'Informe um nome de até 80 caracteres.',
         price: validLinePrice(originalPrice, quantityValid ? quantity : 1) ? '' : 'Informe um preço unitário válido.',
         currency: currency ? '' : 'Escolha a moeda do preço.',
         quantity: quantityValid ? '' : 'Informe uma quantidade inteira a partir de 1.',
@@ -1415,32 +1516,38 @@ document.addEventListener('DOMContentLoaded', () => {
         if (error) invalidFields.push(input);
       }
       if (Object.values(errors).some(Boolean)) continue;
-      const { photo } = photoRows.get(row);
-      additions.push({ id: crypto.randomUUID(), url, title, store, person, personId, originalPrice, currency, quantity, taxQuebec, visibleToRecipient: $('wishVisibility').value === 'recipient', imageUrl: photo.imageUrl, price: originalPrice == null ? null : WishFx.convert(originalPrice, currency), bought: false, updatedAt: Date.now() });
+      const data = photoRows.get(row);
+      const { photo } = data;
+      data.saveId ||= crypto.randomUUID();
+      const selectedPerson = personFromInput(enteredName, names);
+      const friend = personKey(selectedPerson) === personKey(defaultPerson) ? undefined : registerPerson(selectedPerson, registered);
+      additions.push({ id: data.saveId, url, title, store, person: friend?.name || selectedPerson, personId: friend?.id, originalPrice, currency, quantity, taxQuebec, imageUrl: photo.imageUrl, price: originalPrice == null ? null : WishFx.convert(originalPrice, currency), bought: false, updatedAt: Date.now() });
     }
     if (invalidFields.length) {
       invalidFields[0].focus();
       throw new Error('Corrija os campos marcados ou desmarque os produtos que quer deixar de fora.');
     }
     if (!additions.length) throw new Error('Selecione pelo menos um produto.');
-    const next = [...list, ...additions];
-    save(next, personId ? registered : undefined);
+    const ids = new Set(additions.map(item => item.id));
+    await confirmWishSave([...list.filter(item => !ids.has(item.id)), ...additions], registered.length !== registeredCount ? registered : undefined, additions);
+    if (generation !== wishFormGeneration) return;
     reset();
     $('wishEditor').open = false;
     message(additions.length + ' produtos adicionados.');
     UIFeedback.wishes(additions.map(item => item.id), false);
     UIFeedback.success('Desejos adicionados', additions.length + ' produtos na sua lista.');
   }
-  $('wishForm').onsubmit = (event) => {
+  $('wishForm').onsubmit = async (event) => {
     event.preventDefault();
     const release = UIFeedback.busy($('wishSave'), 'Salvando…');
     if (!release) return;
     $('wishSaveError').textContent = '';
+    const generation = wishFormGeneration;
     try {
       if (!WalletStore.isWritable()) throw new Error('Aguarde a conexão com a carteira para salvar o desejo.');
       if (photoPreparing) throw new Error('Aguarde a prévia da foto antes de salvar.');
       if (photoBatch) {
-        savePhotoBatch();
+        await savePhotoBatch(generation);
         return;
       }
       const draft = formValues();
@@ -1456,7 +1563,7 @@ document.addEventListener('DOMContentLoaded', () => {
         previous = list.find((x) => x.id === editing);
       if (editing && !previous) throw new Error('Este desejo foi removido no outro aparelho.');
       const changes = {};
-      const fields = [['url', 'imageUrl'], ['title'], ['store'], ['person'], ['originalPrice', 'currency', 'taxQuebec'], ['quantity'], ['visibleToRecipient']];
+      const fields = [['url', 'imageUrl'], ['title'], ['store'], ['person'], ['originalPrice', 'currency', 'taxQuebec'], ['quantity']];
       for (const group of fields) {
         if (editBaseline && group.every((key) => draft[key] === editBaseline[key])) continue;
         const changedRemotely = group[0] === 'person'
@@ -1476,19 +1583,26 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
       if ('originalPrice' in changes) changes.price = originalPrice == null ? null : WishFx.convert(originalPrice, currency);
-      const next = { bought: false, ...previous, ...changes, id: editing || crypto.randomUUID(), updatedAt: Date.now() };
-      const nextRows = editing ? list.map((x) => (x.id === editing ? next : x)) : [...list, next];
-      save(nextRows, registered);
       const updated = !!editing;
+      draftWishId ||= crypto.randomUUID();
+      const id = editing || draftWishId;
+      const next = { bought: false, ...previous, ...changes, id, updatedAt: Date.now() };
+      const nextRows = list.some(item => item.id === id) ? list.map(item => item.id === id ? next : item) : [...list, next];
+      await confirmWishSave(nextRows, registered, [next]);
+      if (generation !== wishFormGeneration) return;
       reset();
       $('wishEditor').open = false;
       UIFeedback.wishes([next.id], false);
       UIFeedback.success(updated ? 'Desejo atualizado' : 'Desejo adicionado', next.title);
     } catch (error) {
+      if (generation !== wishFormGeneration) return;
       $('wishSaveError').textContent = error?.name === 'QuotaExceededError'
         ? 'O navegador atingiu o limite real de armazenamento. Tente adicionar este produto por link, sem foto embutida.'
         : error.message;
-    } finally { release(); }
+    } finally {
+      release();
+      updateWishSaveAvailability();
+    }
   };
   $('wishRemovePhoto').onclick = () => {
     photoRevision++;
@@ -1513,7 +1627,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   const { prepareWishPhoto, recognizeWishPhoto, photoProductKey } = WishPhotoReader;
-  const photoFields = ['title', 'store', 'price', 'currency'];
+  const photoFields = ['title', 'store', 'price', 'currency', 'quantity'];
   const singleFields = Object.fromEntries(photoFields.map(key => [key, $('wish' + key[0].toUpperCase() + key.slice(1))]));
   const touchedPhotoFields = new WeakSet();
   $('wishForm').addEventListener('input', markPhotoField);
@@ -1532,6 +1646,7 @@ document.addEventListener('DOMContentLoaded', () => {
     for (const key of ['title', 'store']) {
       if (!fields[key].value.trim() && !touchedPhotoFields.has(fields[key]) && suggestion[key]) fields[key].value = suggestion[key];
     }
+    if (validQuantity(suggestion.quantity) && !touchedPhotoFields.has(fields.quantity)) fields.quantity.value = suggestion.quantity;
     const { price, currency } = fields;
     if (suggestion.price == null || touchedPhotoFields.has(price)) return;
     const editedCurrency = touchedPhotoFields.has(currency);
@@ -1585,10 +1700,15 @@ document.addEventListener('DOMContentLoaded', () => {
   function setPhotoBatch(active) {
     photoBatch = !!active;
     $('wishBatch').hidden = !active;
+    $('wishPersonLabel').textContent = active ? 'Para quem no lote?' : 'Para quem?';
+    $('wishApplyBatchPerson').hidden = !active;
+    personFields();
+    $('wishBatchTaxLabel').hidden = !active;
     $('wishSingleFields').hidden = active;
     $('wishUrl').closest('.wish-link-row').hidden = active;
     $('wishImagePreview').hidden = active;
     $('wishConversion').hidden = active;
+    $('wishUnitBrl').hidden = active;
     for (const id of ['wishTitle', 'wishStore', 'wishPrice', 'wishCurrency', 'wishQuantity', 'wishUrl']) $(id).disabled = active;
     if (active) {
       $('wishRemovePhoto').hidden = true;
@@ -1600,6 +1720,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   const applyDefaultStore = WishProduct.bindDefaultStore($('wishDefaultStore'), () =>
     photoBatch ? [...$('wishBatchRows').querySelectorAll('[data-field=store]')] : [$('wishStore')]);
+  const applyBatchTax = WishProduct.bindBatchTax($('wishBatchTax'), () =>
+    $('wishBatchRows').querySelectorAll('[data-field=taxQuebec]'));
   function createPhotoRow(file, suggestion, { first = true, url = '', draftOnly = false } = {}) {
     const i = ++photoRowId;
     const esc = escapeHTML;
@@ -1621,8 +1743,21 @@ document.addEventListener('DOMContentLoaded', () => {
         field('Preço unitário', 'price', 'inputmode="decimal"') +
         '<label>Moeda<select data-field="currency">' + currencies.map(value => '<option>' + esc(value) + '</option>').join('') + '</select><small class="wish-field-error" id="wishBatchError-' + i + '-currency"></small></label>' +
         field('Quantidade', 'quantity', 'inputmode="numeric" value="1"') +
+        '<div class="wish-batch-person"><label>Para quem?<select data-field="person"></select></label>' +
+        field('Nome da pessoa', 'personName', 'maxlength="80"') + '</div>' +
+        '<output class="wish-brl-preview" data-unit-brl></output>' +
         '<label class="wish-tax-option"><input type="checkbox" data-field="taxQuebec"> Taxas do Québec (GST 5% + QST 9,975%)</label></div>' +
         '<p class="hint" data-photo-status role="status"></p>');
+      const recipient = row.querySelector('[data-field=person]');
+      recipient.replaceChildren(...[...$('wishPerson').options].map((option) => option.cloneNode(true)));
+      setBatchPerson(recipient);
+      recipient.addEventListener('change', () => {
+        const name = batchPersonName(recipient);
+        if (!name.disabled) name.focus();
+      });
+      applyBatchTax(row.querySelector('[data-field=taxQuebec]'));
+      row.addEventListener('input', () => updateBatchBrl(row));
+      row.addEventListener('change', () => updateBatchBrl(row));
       row.querySelector('.form-grid').prepend(WishProduct.batchLinkField(batchPhotoFields(row), {
         value: url, inputId: 'wishBatchUrl-' + i,
       }));
@@ -1670,10 +1805,17 @@ document.addEventListener('DOMContentLoaded', () => {
     return Object.fromEntries(photoFields.map(key => [key, row.querySelector('[data-field=' + key + ']')]));
   }
 
+  function updateBatchBrl(row) {
+    const output = row.querySelector('[data-unit-brl]');
+    if (!output) return;
+    const value = WishProduct.priceInReais(WishProduct.parsePrice(row.querySelector('[data-field=price]').value), row.querySelector('[data-field=currency]').value);
+    output.textContent = value ? 'Valor unitário em reais · ' + value : '';
+  }
   function fillBatchPhotoFields(row, result) {
     const fields = batchPhotoFields(row);
     applyPhotoSuggestion(fields, result);
     applyDefaultStore(fields.store);
+    updateBatchBrl(row);
     row.querySelector('[data-photo-status]').textContent = photoWarning(result);
   }
   function expandPhotoRows(row, products) {
@@ -1681,8 +1823,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const fields = batchPhotoFields(row);
     const draftKey = photoProductKey(fields.title.value);
     const matches = products.filter(item => draftKey && photoProductKey(item.title) === draftKey);
-    const hasInput = row.querySelector('[data-field=url]').value.trim() || photoFields.some(key => touchedPhotoFields.has(fields[key]) || (key !== 'currency' && fields[key].value.trim())) ||
-      row.querySelector('[data-field=quantity]').value !== '1' || row.querySelector('[data-field=taxQuebec]').checked;
+    const hasProductInput = photoFields.some(key => {
+      if (touchedPhotoFields.has(fields[key])) return true;
+      if (key === 'store') return Boolean(applyDefaultStore.originalValue(fields.store).trim());
+      if (key === 'quantity') return fields.quantity.value !== '1';
+      return key !== 'currency' && Boolean(fields[key].value.trim());
+    });
+    const hasInput = row.querySelector('[data-field=url]').value.trim() || hasProductInput ||
+      row.querySelector('[data-field=taxQuebec]').checked !== ($('wishBatchTax').value === 'apply');
     const selected = row.querySelector('.row-title input').checked;
     const reused = matches.length === 1 ? matches[0] : !hasInput ? products[0] : null;
     let insertAfter = row;
@@ -1731,13 +1879,13 @@ document.addEventListener('DOMContentLoaded', () => {
       if (key === 'currency' && !singleFields.currency.value) {
         fields.currency.add(new Option('Escolha a moeda', ''));
       }
-      fields[key].value = key === 'store' && applyDefaultStore.isInherited(singleFields.store) ? '' : singleFields[key].value;
+      fields[key].value = key === 'store' ? applyDefaultStore.originalValue(singleFields.store) : singleFields[key].value;
       if (touchedPhotoFields.has(singleFields[key])) touchedPhotoFields.add(fields[key]);
     }
-    row.querySelector('[data-field=quantity]').value = $('wishQuantity').value;
     row.querySelector('[data-field=taxQuebec]').checked = $('wishTaxQuebec').checked;
     applyDefaultStore(fields.store);
     setSinglePhoto(null);
+    updateBatchBrl(row);
     return row;
   }
   function addManualPhotoRow(row) {
@@ -1851,10 +1999,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const photos = transferredPhotos(event.dataTransfer);
     if (photos.length) void importWishPhotos(photos);
   });
+  function updateWishSaveAvailability() {
+    const button = $('wishSave');
+    if (button.getAttribute('aria-busy') === 'true') return;
+    button.disabled = photoPreparing || !WalletStore.isWritable();
+  }
+  window.addEventListener('cloud:state', updateWishSaveAvailability);
   function setPhotoBusy(busy, progress = '', preparing = false) {
     photoBusy = busy;
     photoPreparing = busy && preparing;
-    $('wishSave').disabled = photoPreparing;
+    updateWishSaveAvailability();
     $('wishPhotoProgress').textContent = progress;
     $('wishPhotoLoading').hidden = !busy;
     for (const id of ['wishUpload', 'wishBrowseFiles', 'wishRetryPhoto', 'wishAddPhotoRow', 'wishAddManualProduct']) $(id).disabled = busy;
@@ -1882,12 +2036,22 @@ document.addEventListener('DOMContentLoaded', () => {
         picked.push(await prepareWishPhoto(file));
         if (token !== photoRevision) return;
       }
-      const keepRows = photoBatch && [...$('wishBatchRows').children].some(row =>
-        photoRows.get(row).draftOnly || row.querySelector('[data-field=url]')?.value.trim());
+      const batchPerson = $('wishPerson').value;
+      const batchNewName = $('wishPersonName').value;
+      const keepRows = photoBatch && [...$('wishBatchRows').children].some(row => {
+        const recipient = row.querySelector('[data-field=person]');
+        return photoRows.get(row).draftOnly || row.querySelector('[data-field=url]')?.value.trim() ||
+          (recipient && (recipient.value !== batchPerson ||
+            (recipient.value === newPerson && row.querySelector('[data-field=personName]').value !== batchNewName)));
+      });
       if (photoBatch && !keepRows) {
         const defaultStore = $('wishDefaultStore').value;
+        const batchTax = $('wishBatchTax').value;
         reset();
         $('wishDefaultStore').value = defaultStore;
+        $('wishBatchTax').value = batchTax;
+        $('wishPersonName').value = batchNewName;
+        updatePeople(rows(), batchPerson);
         token = ++photoRevision;
         setPhotoBusy(true, count, true);
       }
@@ -1987,14 +2151,27 @@ document.addEventListener('DOMContentLoaded', () => {
   $('wishTaxQuebec').addEventListener('change', conversion);
   $('wishCurrency').addEventListener('change', conversion);
   window.addEventListener('wishlist:rates', () => {
+    for (const row of $('wishBatchRows').children) updateBatchBrl(row);
     conversion();
-    render();
+    const all = rows();
+    const visible = visibleWishes(all);
+    const byId = new Map(visible.map(item => [String(item.id), item]));
+    for (const row of $('wishList').querySelectorAll('[data-wish-id]')) {
+      const item = byId.get(row.dataset.wishId);
+      if (item) row.querySelector('.wish-row-price').textContent = priceLabel(item);
+    }
+    renderQuotes(all);
+    renderWishSummary(all);
+    updatePurchaseBar(visible);
   });
   window.addEventListener('wallet:remote', conversion);
-  window.addEventListener('wallet:remote', render);
-  window.addEventListener('finance:changed', render);
+  function renderChangedWishes() {
+    if (lastWishSnapshot !== wishSnapshot()) render();
+  }
+  window.addEventListener('wallet:remote', renderChangedWishes);
+  window.addEventListener('finance:changed', renderChangedWishes);
   selectStore.addEventListener('change', render);
-  hideBought.addEventListener('change', render);
+  showBought.addEventListener('change', render);
   window.addEventListener('wishlist:purchase-undone', (event) => {
     selectStore.value = '';
     purchaseSelection.clear();

@@ -2,7 +2,7 @@ const {test,expect}=require('../firebase-fixture.cjs');
 for(const width of [1440,393])test(`popover review ${width}: stable triggers and remaining wishlist totals`,async({page})=>{
  await page.setViewportSize({width,height:1000});await page.goto('/');await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');await expect(page.locator('#abrirContrato')).toHaveCount(0);
  await page.locator('[data-panel=wishlistPanel]').click();const summary=page.locator('#wishEditor > summary'), before=await summary.boundingBox();await summary.click();await expect(page.locator('#wishForm')).toBeVisible();const after=await summary.boundingBox();expect(Math.abs(after.y-before.y)).toBeLessThan(2);expect(Math.abs(after.width-before.width)).toBeLessThan(2);
- await page.locator('#wishUrl').fill('https://example.invalid/item');await page.locator('#wishTitle').fill('Desejo teste');await page.locator('#wishStore').fill('Loja teste');await page.locator('#wishPrice').fill('25');await page.locator('#wishSave').click();
+ await page.locator('#wishUrl').fill('https://example.invalid/item');await page.locator('#wishTitle').fill('Desejo teste');await page.locator('#wishStore').fill('Loja teste');await page.locator('#wishPrice').fill('25');await page.locator('#wishCurrency').selectOption('BRL');await page.locator('#wishSave').click();
  await expect(page.locator('#wishTotal')).toHaveText(/R\$\s*0,00/);
  await page.locator('.wish-row input').check();
  await expect(page.locator('#wishPurchaseCount')).toHaveText('1 item na compra');

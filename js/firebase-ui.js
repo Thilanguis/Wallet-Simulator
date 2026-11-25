@@ -15,10 +15,36 @@ document.addEventListener('DOMContentLoaded', () => {
     importAttempted = false,
     activated = false,
     accessSession = null;
+  const unsentKey = 'findom.firebase.unsent.v4';
+  let recoveryDatabase;
+  function largeRecovery(key, value) {
+    recoveryDatabase ||= new Promise((resolve, reject) => {
+      const request = indexedDB.open('findom-wallet-recovery', 1);
+      request.onupgradeneeded = () => request.result.createObjectStore('copies');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    return recoveryDatabase.then(db => new Promise((resolve, reject) => {
+      const transaction = db.transaction('copies', value === undefined ? 'readonly' : 'readwrite');
+      const copies = transaction.objectStore('copies');
+      const request = value === undefined ? copies.get(key) : copies.put(value, key);
+      transaction.oncomplete = () => resolve(request.result);
+      transaction.onabort = () => reject(transaction.error);
+    }));
+  }
   function preserve(wallet) {
-    if (!localStorage.getItem(recoveryKey)) localStorage.setItem(recoveryKey, JSON.stringify(wallet));
-    else if (engine?.state().pending) localStorage.setItem('findom.firebase.unsent.v4', JSON.stringify(wallet));
-    $('exportCloudRecovery').hidden = false;
+    const pending = engine?.state().pending;
+    const key = pending ? unsentKey : recoveryKey;
+    if (!pending && localStorage.getItem(recoveryKey)) return;
+    const serialized = JSON.stringify(wallet);
+    try {
+      localStorage.setItem(key, serialized);
+      $('exportCloudRecovery').hidden = false;
+      if (pending) void largeRecovery(key, serialized).catch(() => {});
+    } catch (error) {
+      if (error.name !== 'QuotaExceededError') return storageFailure(error);
+      void largeRecovery(key, serialized).then(() => { $('exportCloudRecovery').hidden = false; }, storageFailure);
+    }
   }
   function validate(wallet) {
     Finance.validateState(wallet.finance);
@@ -38,7 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
   function message(error) {
-    if (error?.code === 'permission-denied') return 'Esta conta não tem acesso à carteira, ou as regras do Firebase precisam ser conferidas.';
+    if (error?.code === 'permission-denied') return 'O Firebase recusou o acesso à carteira. Confira a conta Google ou tente novamente.';
     if (error?.code === 'auth/popup-blocked') return 'O navegador bloqueou a janela do Google. Permita a abertura e tente novamente.';
     if (error?.code === 'auth/unauthorized-domain') return 'Este endereço ainda não está autorizado no login Google do Firebase.';
     if (error?.code === 'auth/operation-not-allowed') return 'O login Google precisa ser habilitado neste projeto Firebase.';
@@ -70,6 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $('cloudStatusBar').classList.toggle('is-error', mode === 'error');
     $('reconnectCloud').hidden = mode !== 'error';
     $('retryFirebaseConnection').hidden = !currentUser || mode !== 'error';
+    $('wishRetrySync').hidden = mode !== 'error' || next.error?.code !== 'wallet/write-denied';
     document.body.classList.toggle('cloud-readonly', !WalletStore.isWritable());
     if (mode === 'error' && next.error?.code === 'permission-denied') {
       document.body.classList.add('firebase-required');
@@ -110,52 +137,10 @@ document.addEventListener('DOMContentLoaded', () => {
       preserve(localBeforeLoad);
     }
   }
-  async function offerGuestAccess(user, attempt) {
-    if (!user.emailVerified || !navigator.onLine) return;
+  async function setupPersonalSharing(transport, signal) {
+    if (!transport.personalProfile) return;
+    const circle = $('wishCircleOpen');
     try {
-      const { openWishlistAccess } = await import('./wishlist-access.js');
-      const access = await openWishlistAccess({ db: session.db, user });
-      if (attempt === generation && access.enabled && ['request', 'pending', 'guest', 'blocked'].includes(access.role)) {
-        location.replace(new URL('./wishlist-guest.html', location.href).href);
-      }
-    } catch {
-      // Preserve the wallet's connection error if this installation has no guest access.
-    }
-  }
-
-  async function setupAccess(transport, user, signal) {
-    const panel = $('wishAccessSettings');
-    const status = $('wishAccessStatus');
-    const active = Boolean(transport.accessRole);
-    panel.hidden = false;
-    $('wishAccessPending').hidden = active;
-    $('wishAccessHelp').hidden = !active;
-    signal.addEventListener('abort', () => {
-      panel.open = false;
-      panel.hidden = true;
-      status.textContent = '';
-    }, { once: true });
-    if (!active) {
-      status.textContent = 'Primeiro publique as novas regras do Firestore. Depois, em usuarios/gabriel-local/config/acesso, preencha adminEmail com o e-mail Google de Gabriel que já consta na lista de acesso.';
-      return;
-    }
-    try {
-      if (transport.trackAccess) {
-        const { openWishlistAccess } = await import('./wishlist-access.js');
-        const access = await openWishlistAccess({ db: session.db, user });
-        if (signal.aborted) return;
-        if (access.role !== 'coadmin') {
-          void connect(user);
-          return;
-        }
-        const stop = access.watchAccount(profile => {
-          if (!signal.aborted && profile.role !== 'coadmin') void connect(user);
-        }, error => {
-          if (!signal.aborted && error.code === 'permission-denied') void connect(user);
-        });
-        signal.addEventListener('abort', stop, { once: true });
-      }
-      const circle = $('wishCircleOpen');
       const { openWishlistSharing } = await import('./wishlist-sharing.js');
       const { showWishlistPeople } = await import('./wishlist-people.js');
       if (signal.aborted) return;
@@ -163,14 +148,13 @@ document.addEventListener('DOMContentLoaded', () => {
       circle.addEventListener('click', () => void showWishlistPeople(async () => ({
         profile: transport.personalProfile,
         api: await openWishlistSharing(session.db, transport.personalProfile),
-      }), { signal, personalLink: './wishlist-guest.html?pessoal' }), { signal });
+      }), { signal, personalLink: './wishlist-personal.html' }), { signal });
       signal.addEventListener('abort', () => { circle.hidden = true; }, { once: true });
-      const { mountWishlistAccess } = await import('./wishlist-access-admin.js');
-      await mountWishlistAccess({ db: session.db, role: transport.accessRole, existingAccounts: transport.existingAccounts, signal });
     } catch (error) {
-      if (!signal.aborted) status.textContent = message(error);
+      if (!signal.aborted) console.error(error);
     }
   }
+
   async function connect(user) {
     const attempt = ++generation;
     accessSession?.abort();
@@ -231,12 +215,11 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       window.SharedWallet = engine;
       engine.connect();
-      void setupAccess(transport, user, accessSession.signal);
+      void setupPersonalSharing(transport, accessSession.signal);
     } catch (error) {
       if (attempt === generation) {
         WalletStore.setWritable(false);
         state({ mode: 'error', error });
-        if (error?.code === 'permission-denied') void offerGuestAccess(user, attempt);
       }
     }
   }
@@ -278,13 +261,19 @@ document.addEventListener('DOMContentLoaded', () => {
     await engine?.flush();
     await session.signOut();
   };
-  $('reconnectCloud').onclick = $('retryFirebaseConnection').onclick = () => {
+  $('reconnectCloud').onclick = $('retryFirebaseConnection').onclick = $('wishRetrySync').onclick = () => {
     if (currentUser) void connect(currentUser);
     else if (!session) location.reload();
   };
   $('exportCloudRecovery').hidden = !localStorage.getItem(recoveryKey);
-  $('exportCloudRecovery').onclick = () => {
-    const saved = localStorage.getItem('findom.firebase.unsent.v4') || localStorage.getItem(recoveryKey);
+  if ($('exportCloudRecovery').hidden && window.indexedDB) {
+    void Promise.all([largeRecovery(unsentKey), largeRecovery(recoveryKey)]).then(copies => {
+      if (copies.some(Boolean)) $('exportCloudRecovery').hidden = false;
+    }).catch(() => {});
+  }
+  $('exportCloudRecovery').onclick = async () => {
+    const [unsent, initial] = await Promise.all([largeRecovery(unsentKey), largeRecovery(recoveryKey)]).catch(() => []);
+    const saved = unsent || localStorage.getItem(unsentKey) || localStorage.getItem(recoveryKey) || initial;
     if (!saved) return;
     const url = URL.createObjectURL(new Blob([JSON.stringify({ format: 'findom-wallet-backup', version: 2, wallet: JSON.parse(saved) })], { type: 'application/json' }));
     const link = document.createElement('a');
@@ -294,7 +283,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   const safe =
-    '#firebaseAuthPanel, #cloudSettings, #firebaseAccountActions, #cloudStatusBar, [data-panel], [data-jump], #exportBackup, #enviarHistoricoWhatsApp, #copySummary, #shareText, #printContract, #filterDate, #aplicarFiltro, #limparFiltro, #financeFrom, #financeTo, #financeCategory, #financeStore, #financeStatus, #clearFinanceFilters';
+    '#firebaseAuthPanel, #cloudSettings, #firebaseAccountActions, #cloudStatusBar, #wishRetrySync, [data-panel], [data-jump], #exportBackup, #enviarHistoricoWhatsApp, #copySummary, #shareText, #printContract, #filterDate, #aplicarFiltro, #limparFiltro, #financeFrom, #financeTo, #financeCategory, #financeStore, #financeStatus, #clearFinanceFilters';
   for (const name of ['click', 'change', 'input', 'submit', 'drop', 'dragstart', 'keydown'])
     document.addEventListener(
       name,
@@ -312,7 +301,7 @@ document.addEventListener('DOMContentLoaded', () => {
     engine?.suspend(new Error('Sem conexão com o Firebase. A sessão foi pausada; novas operações aguardam a reconexão.'));
   });
   function resumeConnection() {
-    if (currentUser && navigator.onLine && connectionError && connectionError.code !== 'permission-denied') void connect(currentUser);
+    if (currentUser && navigator.onLine && connectionError && !['permission-denied', 'wallet/write-denied'].includes(connectionError.code)) void connect(currentUser);
   }
   window.addEventListener('online', resumeConnection);
   window.addEventListener('pageshow', resumeConnection);

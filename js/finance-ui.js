@@ -136,12 +136,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const shop = F.norm(store);
     return F.filtered(state.entries, criteria).filter((entry) => {
       if (person && !FinancePeople.allocation(entry, peopleRoster()).some(p => p.person === person && p.amount > 0)) return false;
-      if (shop && !F.norm(entry.store || '').includes(shop)) {
+      const items = entry.purchaseItems || [];
+      if (shop && !F.norm(entry.store || '').includes(shop) && !items.some((item) => F.norm(item.store || '').includes(shop))) {
         const noteStores = entry.source === 'wishlist' ? [...(entry.note || '').matchAll(/ · Loja: ([^\r\n]+?) · R\$/g)] : [];
         if (!noteStores.some(([, name]) => F.norm(name).includes(shop))) return false;
       }
       if (!terms.length) return true;
-      const text = F.norm([FinancePeople.allocation(entry, peopleRoster()).map(p => p.person).join(' '), entry.description, entry.store, entry.category, entry.note, entry.date, entry.date?.split('-').reverse().join('/'), F.format(entry.amount, entry.currency)].join(' '));
+      const text = F.norm([FinancePeople.allocation(entry, peopleRoster()).map(p => p.person).join(' '), entry.description, entry.store, entry.category, entry.note, items.map((item) => [item.title, item.store].join(' ')).join(' '), entry.date, entry.date?.split('-').reverse().join('/'), F.format(entry.amount, entry.currency)].join(' '));
       return terms.every((term) => text.includes(term));
     });
   }
@@ -162,16 +163,38 @@ document.addEventListener('DOMContentLoaded', () => {
     if (entry.purchaseItems || entry.source === 'wishlist') {
       try {
         const items = PurchaseItems.read(entry, JSON.parse(AppStorage.getItem('wishlist') || '[]'), F);
-        const groups = new Map();
-        for (const item of items) {const person=FinancePeople.canonical(item.person);if(!groups.has(person))groups.set(person,[]);groups.get(person).push(item);}
+        const stores = PurchaseItems.byStore(items);
         const cad = p => !FinanceCad.isEnabled() ? '' : '<button type="button" class="note-cad note-cad-detail" data-cad-entry="'+esc(entry.id)+'" data-cad-item="'+esc(p.id)+'" aria-label="Ver detalhes do valor em CAD">'+(p.cadAmount==null?'CAD —':(p.cadEstimated?'≈ ':'')+('CAD '+(p.cadAmount/100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})))+'</button> ';
-        const html = [...groups].map(([person,parts]) => {
-          const stores = new Map(), storeNames = new Map();for(const item of parts){const key=F.norm(item.store||'');if(!storeNames.has(key))storeNames.set(key,item.store||'');const name=storeNames.get(key);if(!stores.has(name))stores.set(name,[]);stores.get(name).push(item);}
-          return '<div class="note-purchase-person"><div class="note-purchase-person-heading"><strong>'+esc(person)+'</strong><strong>'+F.format(parts.reduce((n,p)=>n+p.amount,0))+'</strong></div>'+[...stores].map(([store,products])=>'<div class="note-purchase-store"><strong>'+esc(store || 'Sem loja informada')+'</strong><ul>'+products.map(p=>'<li><span>'+esc(p.title)+(p.quantity>1?' ×'+p.quantity:'')+'</span><span class="purchase-product-price">'+cad(p)+F.format(p.amount)+' <button type="button" class="note-icon" data-purchase-edit="'+esc(entry.id)+'" data-purchase-item="'+esc(p.id)+'" aria-label="Editar produto '+esc(p.title)+'">✎</button></span></li>').join('')+'</ul></div>').join('')+'</div>';
-        }).join('');
+        const product = (p) => '<li><span>' + esc(p.title) + (p.quantity > 1 ? ' ×' + p.quantity : '') +
+          '</span><span class="purchase-product-price">' + cad(p) + F.format(p.amount) +
+          ' <button type="button" class="note-icon" data-purchase-edit="' + esc(entry.id) + '" data-purchase-item="' + esc(p.id) +
+          '" aria-label="Editar produto ' + esc(p.title) + '">✎</button></span></li>';
+        const totalOf = (parts) => F.format(parts.reduce((sum, p) => sum + p.amount, 0));
+        const people = (parts) => {
+          const groups = new Map();
+          for (const item of parts) {
+            const person = FinancePeople.canonical(item.person);
+            if (!groups.has(person)) groups.set(person, []);
+            groups.get(person).push(item);
+          }
+          return [...groups].map(([person, products]) =>
+            '<div class="note-purchase-person"><div class="note-purchase-person-heading"><strong>' + esc(person) +
+            '</strong><strong class="note-purchase-value">' + totalOf(products) +
+            '</strong></div><ul>' + products.map(product).join('') + '</ul></div>',
+          ).join('');
+        };
+        const html = stores.length === 1 ? people(items) : stores.map(({ name, items: parts }) =>
+          '<section class="note-purchase-shop"><div class="note-purchase-shop-heading"><strong>' + esc(name || 'Loja não informada') +
+          '</strong><strong class="note-purchase-value">' + totalOf(parts) + '</strong></div>' + people(parts) + '</section>',
+        ).join('');
         const contributionFooter = /Contribuições:\s*(R\$\s*[\d.]+,\d{2})\s*\nPago pela (?:Dominadora|Luana):\s*(R\$\s*[\d.]+,\d{2})/.exec(entry.note || '');
         const payment = contributionFooter ? '<div class="note-purchase-payment"><span>Contribuições · '+esc(contributionFooter[1])+'</span><strong>Pago pela Luana · '+esc(contributionFooter[2])+'</strong></div>' : '';
-        return {store:entry.store||'',html:'<div class="note-purchase-breakdown">'+html+payment+'</div>'+(entry.purchaseOriginalNote?'<span class="note-entry-observation">'+esc(entry.purchaseOriginalNote)+'</span>':'')};
+        const store = entry.source === 'wishlist' && stores.length === 1 ? stores[0].name : '';
+        return {
+          store: store || entry.store || '',
+          html: '<div class="note-purchase-breakdown">' + html + payment + '</div>' +
+            (entry.purchaseOriginalNote ? '<span class="note-entry-observation">' + esc(entry.purchaseOriginalNote) + '</span>' : ''),
+        };
       } catch { /* Keep the original text available if old detail cannot be reconciled. */ }
     }
 
@@ -403,28 +426,116 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const peopleRoster = () => [...JSON.parse(AppStorage.getItem('wishlistPeople') || '[]'), ...state.entries.flatMap(e => (e.personAllocations || []).map(p => p.person))];
   let allocationDirty = false;
+  function entryMoneyRate() {
+    if ($('entryCurrency').value !== 'BRL') return null;
+    try {
+      const real = F.cents($('entryAmount').value || '0');
+      const cad = F.cents($('entryCadOriginal').value || '0', 'CAD');
+      return real > 0 && cad > 0 ? real / cad : null;
+    } catch {
+      return null;
+    }
+  }
+  function synchronizePeople() {
+    const rate = entryMoneyRate();
+    const brl = $('entryCurrency').value === 'BRL';
+    for (const row of $('entryPeopleRows').children) {
+      const cad = row.querySelector('[data-cad]');
+      const real = row.querySelector('[data-amount]');
+      cad.closest('label').hidden = !brl;
+      const fromCad = row.dataset.source === 'CAD';
+      const source = fromCad ? cad : real;
+      const target = fromCad ? real : cad;
+      if (!brl) continue;
+      try {
+        target.value = source.value.trim() && rate ? decimal(Math.round(F.cents(source.value, fromCad ? 'CAD' : 'BRL') * (fromCad ? rate : 1 / rate))) : '';
+      } catch {
+        target.value = '';
+      }
+    }
+  }
   function readPersonAllocations() {
-    return [...$('entryPeopleRows').children].map(row => ({person: FinancePeople.canonical(row.querySelector('[data-person]').value), amount: F.cents(row.querySelector('[data-amount]').value || '0', $('entryCurrency').value)})).filter(p => p.person || p.amount);
+    const currency = $('entryCurrency').value;
+    return [...$('entryPeopleRows').children].flatMap(row => {
+      const person = FinancePeople.canonical(row.querySelector('[data-person]').value);
+      const value = row.querySelector('[data-amount]').value.trim();
+      const cadOnly = currency === 'BRL' && row.dataset.source === 'CAD' && row.querySelector('[data-cad]').value.trim() && !value;
+      if (cadOnly) throw new Error('Confira o total em BRL e CAD para converter a divisão.');
+      if (!person && !value) return [];
+      const amount = F.cents(value || '0', currency);
+      if (!person || amount <= 0) throw new Error('Informe a pessoa e um valor positivo na divisão.');
+      return [{ person, amount }];
+    });
   }
   function updatePeopleRemainder() {
-    try {const amount=F.cents($('entryAmount').value || '0', $('entryCurrency').value);const used=readPersonAllocations().reduce((n,p)=>n+p.amount,0);$('entryPeopleRemainder').textContent='Luana · '+F.format(amount-used,$('entryCurrency').value);$('entryPeopleRemainder').classList.toggle('error',used>amount);} catch {$('entryPeopleRemainder').textContent='Confira os valores da divisão.';}
+    const output = $('entryPeopleRemainder');
+    const currency = $('entryCurrency').value;
+    try {
+      const amount = F.cents($('entryAmount').value || '0', currency);
+      const used = readPersonAllocations().reduce((n, part) => n + part.amount, 0);
+      output.textContent = 'Luana · ' + F.format(amount - used, currency);
+      output.classList.toggle('error', used > amount);
+    } catch (error) {
+      output.textContent = error.message;
+      output.classList.add('error');
+    }
   }
-  function addPersonRow(person='',amount=0) {
-    const row=document.createElement('div');row.className='people-allocation-row';
-    row.innerHTML='<input data-person list="entryPeopleNames" maxlength="80" aria-label="Pessoa da divisão" placeholder="Nome"><input data-amount inputmode="decimal" aria-label="Valor da pessoa" placeholder="0,00"><button type="button" class="wish-tool" aria-label="Remover pessoa da divisão">×</button>';
-    row.querySelector('[data-person]').value=person;row.querySelector('[data-amount]').value=amount?decimal(amount):'';
-    row.oninput=()=>{allocationDirty=true;updatePeopleRemainder();};row.querySelector('button').onclick=()=>{row.remove();allocationDirty=true;updatePeopleRemainder();};$('entryPeopleRows').append(row);
+  function addPersonRow(person = '', amount = 0) {
+    const row = document.createElement('div');
+    row.className = 'people-allocation-row';
+    row.innerHTML = '<label>Pessoa<input data-person list="entryPeopleNames" maxlength="80" aria-label="Pessoa da divisão" placeholder="Nome"></label>' +
+      '<label>Valor em ' + $('entryCurrency').value + '<input data-amount inputmode="decimal" aria-label="Valor da pessoa" placeholder="0,00"></label>' +
+      '<label>Valor em CAD<input data-cad inputmode="decimal" aria-label="Valor da pessoa em CAD" placeholder="0,00"></label>' +
+      '<button type="button" class="wish-tool" aria-label="Remover pessoa da divisão">×</button>';
+    row.querySelector('[data-person]').value = person;
+    row.querySelector('[data-amount]').value = amount ? decimal(amount) : '';
+    row.oninput = ({ target }) => {
+      allocationDirty = true;
+      if (target.matches('[data-cad], [data-amount]')) row.dataset.source = target.hasAttribute('data-cad') ? 'CAD' : $('entryCurrency').value;
+      synchronizePeople();
+      updatePeopleRemainder();
+    };
+    row.querySelector('button').onclick = () => {
+      row.remove();
+      allocationDirty = true;
+      updatePeopleRemainder();
+    };
+    $('entryPeopleRows').append(row);
+    synchronizePeople();
   }
   function fillPersonAllocations(entry) {
-    $('entryPeopleRows').replaceChildren();allocationDirty=false;
-    $('entryPeopleNames').innerHTML=FinancePeople.names(peopleRoster()).filter(n=>n!=='Luana').map(n=>'<option value="'+esc(n)+'"></option>').join('');
-    if(entry)for(const p of FinancePeople.allocation(entry,peopleRoster()))if(p.person!=='Luana')addPersonRow(p.person,p.amount);
-    $('entryPeople').open=false;updatePeopleRemainder();
+    const host = $('entryPeopleRows');
+    host.replaceChildren();
+    allocationDirty = false;
+    $('entryPeopleNames').innerHTML = FinancePeople.names(peopleRoster()).filter(n => n !== 'Luana').map(n => '<option value="' + esc(n) + '"></option>').join('');
+    if (entry) for (const part of FinancePeople.allocation(entry, peopleRoster())) {
+      if (part.person !== 'Luana' && part.amount > 0) addPersonRow(part.person, part.amount);
+    }
+    $('entryPeople').open = false;
+    updatePeopleRemainder();
   }
-  $('entryPeopleAdd').onclick=()=>{addPersonRow();allocationDirty=true;};
-  $('entryPeopleAuto').onclick=()=>{try {const entry={category:$('entryCategory').value,description:$('entryDescription').value,store:$('entryStore').value,note:$('entryNote').value,amount:F.cents($('entryAmount').value || '0',$('entryCurrency').value)};fillPersonAllocations(entry);allocationDirty=true;$('entryPeople').open=true;}catch(error){AppDialog.alert(error.message);}};
-  $('entryAmount').addEventListener('input',updatePeopleRemainder);
-  $('entryCurrency').addEventListener('change',updatePeopleRemainder);
+  $('entryPeopleAdd').onclick = () => { addPersonRow(); allocationDirty = true; };
+  $('entryPeopleAuto').onclick = () => {
+    try {
+      const currency = $('entryCurrency').value;
+      const entry = { category: $('entryCategory').value, description: $('entryDescription').value, store: $('entryStore').value,
+        note: $('entryNote').value, amount: F.cents($('entryAmount').value || '0', currency) };
+      fillPersonAllocations(entry);
+      allocationDirty = true;
+      $('entryPeople').open = true;
+    } catch (error) { AppDialog.alert(error.message); }
+  };
+  function syncEntryUnits() {
+    const usd = $('entryCurrency').value === 'USD';
+    $('entryLegacyCurrency').hidden = !usd;
+    $('entryCadOriginal').closest('label').hidden = usd;
+    $('entryAmountLabel').textContent = usd ? 'Valor original (USD)' : 'Valor em reais (BRL)';
+  }
+  $('entryCurrency').addEventListener('change', () => {
+    syncEntryUnits();
+    synchronizePeople();
+    updatePeopleRemainder();
+  });
   $('financePeopleToggle').onclick = () => {
     const open = $('financePeopleTotals').hidden;
     $('financePeopleTotals').hidden = !open;
@@ -486,7 +597,10 @@ document.addEventListener('DOMContentLoaded', () => {
     editing = null;
     receiptSuggestion = null;
     $('entryForm').reset();
-    conversionRevision++; clearTimeout(conversionTimeout); conversionPending = Promise.resolve();
+    conversionRevision++;
+    conversionPending = Promise.resolve();
+    conversionError = '';
+    syncEntryUnits();
     $('entryCadOriginal').dataset.estimated = 'true';
     $('entryCadHint').textContent = '';
     fillPersonAllocations(null);
@@ -499,6 +613,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $('cancelEdit').hidden = true;
   }
   function fill(entry, edit = false) {
+    const canadianReceipt = !edit && entry.currency === 'CAD';
     for (const [field, key] of [
       ['Category', 'category'],
       ['Store', 'store'],
@@ -508,10 +623,12 @@ document.addEventListener('DOMContentLoaded', () => {
       ['Status', 'status'],
       ['Note', 'note'],
     ])
-      $('entry' + field).value = (key === 'status' && entry[key] === 'pending' ? 'paid' : entry[key]) || '';
-    $('entryAmount').value = entry.amount ? decimal(entry.amount) : '';
-    $('entryCadOriginal').value = entry.cadReference ? decimal(entry.cadReference.amount) : '';
-    $('entryCadOriginal').dataset.estimated = String(entry.cadReference?.kind !== 'original');
+      $('entry' + field).value = key === 'currency' && canadianReceipt ? 'BRL' : (key === 'status' && entry[key] === 'pending' ? 'paid' : entry[key]) || '';
+    $('entryAmount').value = entry.amount && !canadianReceipt ? decimal(entry.amount) : '';
+    const cadReference = entry.cadReference || FinanceCad.original(entry);
+    $('entryCadOriginal').value = canadianReceipt ? decimal(entry.amount) : cadReference ? decimal(cadReference.amount) : '';
+    $('entryCadOriginal').dataset.estimated = String(cadReference?.kind !== 'original');
+    syncEntryUnits();
     fillPersonAllocations(entry);
     editing = edit ? entry.id : null;
     updateDuplicateHint();
@@ -520,34 +637,61 @@ document.addEventListener('DOMContentLoaded', () => {
     $('cancelEdit').hidden = false;
     $('entryOrigin').textContent = entry.originalMoney?.length ? 'Valores originais preservados: ' + entry.originalMoney.map((m) => F.format(m.amount, m.currency)).join(' = ') : '';
     if (!editPopup) { $('financeAdd').open = true; $('entryForm').scrollIntoView({ block: 'nearest' }); }
+    if (canadianReceipt) convertEntry('CAD');
   }
-  let conversionRevision = 0, conversionTimeout, conversionPending = Promise.resolve();
+  let conversionRevision = 0, conversionPending = Promise.resolve(), conversionError = '';
   function convertEntry(from) {
-    $('entryCadOriginal').dataset.estimated = String(from !== 'CAD');
     const revision = ++conversionRevision;
-    clearTimeout(conversionTimeout);
-    conversionPending = new Promise(resolve => {
-      conversionTimeout = setTimeout(async () => {
-        try {
-          if ($('entryCurrency').value !== 'BRL') return;
-          const input = from === 'CAD' ? $('entryCadOriginal') : $('entryAmount');
-          const amount = F.cents(input.value || '0');
-          const result = await FinanceCad.convertPair(amount, from, $('entryDate').value);
-          if (revision !== conversionRevision) return;
-          $(from === 'CAD' ? 'entryAmount' : 'entryCadOriginal').value = decimal(result.amount);
-          updateDuplicateHint();
-          $('entryCadOriginal').dataset.estimated = String(from !== 'CAD');
-          $('entryCadHint').textContent = '1 CAD ≈ ' + F.format(Math.round(result.rate*100)) + ' · ' + result.rateDate.split('-').reverse().join('/');
+    conversionError = '';
+    if ($('entryCurrency').value !== 'BRL') return;
+    const cad = $('entryCadOriginal'), real = $('entryAmount'), hint = $('entryCadHint');
+    const source = from === 'CAD' ? cad : real;
+    const target = from === 'CAD' ? real : cad;
+    const originalCad = cad.dataset.estimated === 'false' ? cad.value.trim() : '';
+    const entry = editing ? state.entries.find(item => item.id === editing) : null;
+    const date = $('entryDate').value || (entry && FinanceCad.dateFor(entry, state.entries)?.date) || (entry ? '' : today());
+    if (from === 'CAD') cad.dataset.estimated = 'false';
+    synchronizePeople();
+    updatePeopleRemainder();
+    if (!source.value.trim()) {
+      hint.textContent = '';
+      target.value = '';
+      synchronizePeople();
+      updatePeopleRemainder();
+      conversionPending = Promise.resolve();
+      return;
+    }
+    conversionPending = (async () => {
+      try {
+        const amount = F.cents(source.value, from);
+        const result = await FinanceCad.convertPair(amount, from, date);
+        if (revision !== conversionRevision) return;
+        target.value = decimal(result.amount);
+        cad.dataset.estimated = String(from !== 'CAD');
+        hint.textContent = '1 CAD ≈ ' + F.format(Math.round(result.rate * 100)) + ' · ' + result.rateDate.split('-').reverse().join('/');
+        updateDuplicateHint();
+      } catch {
+        if (revision !== conversionRevision) return;
+        if (from === 'CAD') {
+          if (date) target.value = '';
+          if (!target.value.trim()) conversionError = 'Sem cotação para o CAD. Informe o valor em reais para salvar.';
+        } else if (originalCad) {
+          cad.dataset.estimated = 'false';
+          cad.value = originalCad;
+        } else cad.value = '';
+        hint.textContent = conversionError || 'Cotação indisponível. Você pode informar os dois valores.';
+      } finally {
+        if (revision === conversionRevision) {
+          synchronizePeople();
           updatePeopleRemainder();
-        } catch(error) {if(revision===conversionRevision) $('entryCadHint').textContent = error.message;}
-        finally {resolve();}
-      }, 350);
-    });
+        }
+      }
+    })();
   }
   $('entryAmount').closest('label').after($('entryCadOriginal').closest('label'));
-  $('entryAmount').addEventListener('input',()=>convertEntry('BRL'));
-  $('entryCadOriginal').addEventListener('input',()=>convertEntry('CAD'));
-  $('entryDate').addEventListener('change',()=>convertEntry($('entryCadOriginal').dataset.estimated==='false'?'CAD':'BRL'));
+  $('entryAmount').addEventListener('input', () => { convertEntry('BRL'); updatePeopleRemainder(); });
+  $('entryCadOriginal').addEventListener('input', () => convertEntry('CAD'));
+  $('entryDate').addEventListener('change', () => convertEntry($('entryCadOriginal').dataset.estimated === 'false' ? 'CAD' : 'BRL'));
   $('entryForm').onsubmit = async (event) => {
     event.preventDefault();
     $('entryFeedback').hidden = true;
@@ -556,6 +700,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const editedId = editing;
     try {
       await conversionPending;
+      if (conversionError) throw new Error(conversionError);
       const candidate = F.validate({
         category: $('entryCategory').value,
         store: $('entryStore').value,
@@ -570,7 +715,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const previous = editing ? state.entries.find(e => e.id === editing) : null;
       const cadText = $('entryCadOriginal').value.trim();
       if(candidate.currency==='BRL'){
-        if(cadText && $('entryCadOriginal').dataset.estimated !== 'true')candidate.cadReference={amount:F.cents(cadText),kind:'original',source:previous?.source==='wishlist'?'wishlist':'manual',basisAmount:candidate.amount,methodVersion:2,recordedAt:new Date().toISOString()};
+        if(cadText && $('entryCadOriginal').dataset.estimated !== 'true')candidate.cadReference={amount:F.cents(cadText, 'CAD'),kind:'original',source:previous?.source==='wishlist'?'wishlist':'manual',basisAmount:candidate.amount,methodVersion:2,recordedAt:new Date().toISOString()};
         else candidate.cadReference=(await FinanceCad.referenceFor({...previous,...candidate,cadReference:undefined},state.entries).catch(()=>null)) || undefined;
       }
       if (editing) {
@@ -582,7 +727,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const duplicate = F.duplicates(state.entries, candidate);
         if (duplicate.length && !(await AppDialog.confirm('Há registro com a mesma loja, data, valor e moeda. Esta é outra compra?'))) return;
         if (receiptSuggestion && !(await AppDialog.confirm('Confirmar dados conferidos do comprovante e registrar ' + F.format(candidate.amount, candidate.currency) + '?'))) return;
-        save(F.update(state, { type: 'add', entry: { ...candidate, ...(receiptSuggestion ? { source: 'receipt', originalMoney: [{ currency: candidate.currency, amount: candidate.amount }] } : {}) } }));
+        save(F.update(state, { type: 'add', entry: { ...candidate, ...(receiptSuggestion ? { source: 'receipt', originalMoney: [candidate.cadReference?.kind === 'original' ? { currency: 'CAD', amount: candidate.cadReference.amount } : { currency: candidate.currency, amount: candidate.amount }] } : {}) } }));
       }
       resetForm();
       message('Lançamento salvo. Totais atualizados.');
@@ -635,15 +780,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const row = $('entryPeopleRows').lastElementChild;
         row.querySelector('[data-person]').value = values.person;
         row.querySelector('[data-amount]').value = values.amount;
+        row.querySelector('[data-cad]').value = values.cad;
+        row.dataset.source = values.source || '';
       }
       allocationDirty = peopleDraftBeforeEdit.dirty;
       $('entryPeople').open = peopleDraftBeforeEdit.open;
+      syncEntryUnits();
+      synchronizePeople();
       updatePeopleRemainder();
       peopleDraftBeforeEdit = null;
     }
   }
   function openInlineEditor(entry, opener) {
-    peopleDraftBeforeEdit = { dirty: allocationDirty, open: $('entryPeople').open, rows: [...$('entryPeopleRows').children].map(row => ({person: row.querySelector('[data-person]').value, amount: row.querySelector('[data-amount]').value})) };
+    peopleDraftBeforeEdit = { dirty: allocationDirty, open: $('entryPeople').open, rows: [...$('entryPeopleRows').children].map(row => ({person: row.querySelector('[data-person]').value, amount: row.querySelector('[data-amount]').value, cad: row.querySelector('[data-cad]').value, source: row.dataset.source})) };
     draftBeforeEdit = Array.from($('entryForm').querySelectorAll('input,select,textarea')).filter(el => el.id).map((el) => [el.id, el.value]);
     editPopup = document.createElement('dialog');
     editPopup.className = 'note-edit-dialog';
@@ -696,7 +845,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const wishesBefore = snapshot.simulator.wishlist;
         const updatedAt = Date.now();
         snapshot.simulator.wishlist = JSON.stringify(wishes.map((item) =>
-          item.purchaseNoteId === id ? { ...item, bought: false, purchaseNoteId: undefined, updatedAt } : item,
+          item.purchaseNoteId === id ? { ...item, bought: false, purchaseNoteId: undefined, purchasePaidBrl: undefined, purchasePaidCad: undefined, updatedAt } : item,
         ));
         const next = F.update(snapshot.finance, { type: 'delete', id });
         WalletStore.commitBoth(next, snapshot.simulator);
@@ -1035,7 +1184,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <label>Descrição<input data-field="description" maxlength="1000" value="${esc(entry.description)}"></label>
         <label>Loja<input data-field="store" maxlength="200" value="${esc(entry.store)}"></label>
         <label>Valor<input data-field="amount" inputmode="decimal" value="${entry.amount ? decimal(entry.amount) : ''}"></label>
-        <label>Moeda<select data-field="currency">${['BRL', 'USD'].map((c) => `<option ${c === entry.currency ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
+        <label>Moeda<select data-field="currency">${['BRL', 'CAD', 'USD'].map((c) => `<option ${c === entry.currency ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
         <label>Data<input data-field="date" type="date" value="${esc(entry.date)}"></label>
         <label>Categoria<select data-field="category">${F.categories.map((c) => `<option ${c === entry.category ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
         <label>Situação<select data-field="status">${Object.entries(statusLabels).map(([key, label]) => `<option value="${key}">${esc(label)}</option>`).join('')}</select></label>
@@ -1058,6 +1207,13 @@ document.addEventListener('DOMContentLoaded', () => {
           entry.amount = F.cents(entry.amount, entry.currency);
           entry.source = 'receipt';
           entry.originalMoney = [{ currency: entry.currency, amount: entry.amount }];
+          if (entry.currency === 'CAD') {
+            const original = entry.amount;
+            const converted = await FinanceCad.convertPair(original, 'CAD', entry.date || today());
+            entry.currency = 'BRL';
+            entry.amount = converted.amount;
+            entry.cadReference = { amount: original, kind: 'original', source: 'manual', basisAmount: converted.amount, methodVersion: 2 };
+          }
           candidates.push(F.validate(entry));
         } catch (error) {
           throw new Error('Comprovante ' + (i + 1) + ' · ' + error.message);

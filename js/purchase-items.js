@@ -10,7 +10,17 @@
     return base + (wish.taxQuebec ? Math.round(base * 0.14975) : 0);
   }
   function snapshot(groups) {
-    return groups.flatMap((g) => g.wishes.map((w, i) => ({ id: crypto.randomUUID(), wishId: w.id, title: w.title, store: w.store || '', person: g.person, quantity: w.quantity || 1, amount: g.amounts[i], cadAmount: cad(w), cadEstimated: false })));
+    return groups.flatMap((g) => g.wishes.map((w, i) => ({ id: crypto.randomUUID(), wishId: w.id, title: w.title, store: w.store || '', person: g.person, quantity: w.quantity || 1, amount: g.amounts[i], cadAmount: g.amounts[i] === 0 ? 0 : cad(w), cadEstimated: false })));
+  }
+  function byStore(items) {
+    const stores = new Map();
+    for (const item of items) {
+      const name = (item.store || '').trim().replace(/\s+/g, ' ').normalize('NFC');
+      const key = name.toLocaleLowerCase('pt-BR');
+      if (!stores.has(key)) stores.set(key, { name, items: [] });
+      stores.get(key).items.push(item);
+    }
+    return [...stores.values()];
   }
   function read(entry, wishes, F) {
     if (entry.purchaseItems) return structuredClone(entry.purchaseItems);
@@ -45,7 +55,7 @@
         id: entry.id + ':item:' + result.length,
         ...(w ? { wishId: w.id } : {}),
         title: w ? w.title : title,
-        store,
+        store: store || w?.store || '',
         person,
         quantity: w?.quantity || 1,
         amount,
@@ -75,5 +85,5 @@
     }
     return lines.join('\n');
   }
-  return { cad, snapshot, read, note };
+  return { cad, snapshot, byStore, read, note };
 });

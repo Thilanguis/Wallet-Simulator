@@ -8,7 +8,7 @@ window.PurchaseEditor = {
       business = (e) => JSON.stringify((({ cadReference, updatedAt, ...rest }) => rest)(e)),
       baseline = business(entry),
       parts = PurchaseItems.read(entry, wishes, F),
-      pending = new Set();
+      pending = new Set(), invalid = new Set();
     const dialog = document.createElement('dialog');
     dialog.className = 'note-edit-dialog purchase-items-editor';
     dialog.innerHTML =
@@ -33,25 +33,35 @@ window.PurchaseEditor = {
         wrap.textContent = label;
         const input = document.createElement('input');
         input.dataset.key = key;
+        if (['amount', 'cadAmount'].includes(key)) input.inputMode = 'decimal';
         input.value = ['amount', 'cadAmount'].includes(key) ? (p[key] == null ? '' : decimal(p[key])) : p[key];
         wrap.append(input);
         row.append(wrap);
         input.onchange = () => {
           try {
             if (['amount', 'cadAmount'].includes(key)) {
-              p[key] = input.value.trim() ? F.cents(input.value) : null;
+              p[key] = input.value.trim() ? F.cents(input.value, key === 'cadAmount' ? 'CAD' : 'BRL') : null;
               const revision = (row.revision || 0) + 1;
               row.revision = revision;
               const job = (async () => {
                 try {
                   if (p[key] == null) return;
-                  const result = await FinanceCad.convertPair(p[key], key === 'amount' ? 'BRL' : 'CAD', entry.date || FinanceCad.dateFor(entry, FinanceUI.getState().entries)?.date);
+                  const result = p[key] === 0 ? { amount: 0 } :
+                    await FinanceCad.convertPair(p[key], key === 'amount' ? 'BRL' : 'CAD', entry.date || FinanceCad.dateFor(entry, FinanceUI.getState().entries)?.date);
                   if (row.revision !== revision) return;
                   const other = key === 'amount' ? 'cadAmount' : 'amount';
                   p[other] = result.amount;
                   row.querySelector('[data-key="' + other + '"]').value = decimal(result.amount);
                   p.cadEstimated = key === 'amount';
                 } catch {
+                  if (row.revision !== revision) return;
+                  if (key === 'cadAmount') {
+                    p.amount = null;
+                    row.querySelector('[data-key=amount]').value = '';
+                  } else if (p.cadEstimated) {
+                    p.cadAmount = null;
+                    row.querySelector('[data-key=cadAmount]').value = '';
+                  }
                   message('Sem cotação: confira os dois valores manualmente.');
                 } finally {
                   total();
@@ -70,8 +80,12 @@ window.PurchaseEditor = {
                   row.querySelector('[data-key="' + field + '"]').value = decimal(p[field]);
                 }
             } else p[key] = input.value.trim();
+            invalid.delete(input);
+            input.removeAttribute('aria-invalid');
             total();
           } catch (e) {
+            invalid.add(input);
+            input.setAttribute('aria-invalid', 'true');
             message(e.message);
           }
         };
@@ -81,7 +95,7 @@ window.PurchaseEditor = {
     parts.forEach(add);
     total();
     dialog.querySelector('[data-add]').onclick = () => {
-      const part = { id: crypto.randomUUID(), title: '', store: entry.store || '', person: 'Luana', quantity: 1, amount: 0, cadAmount: null, cadEstimated: true };
+      const part = { id: crypto.randomUUID(), title: '', store: entry.store || '', person: 'Luana', quantity: 1, amount: null, cadAmount: null, cadEstimated: true };
       parts.push(part);
       add(part);
     };
@@ -93,10 +107,15 @@ window.PurchaseEditor = {
       if (!release) return;
       try {
         await Promise.all([...pending]);
+        if (invalid.size) {
+          invalid.values().next().value.focus();
+          throw Error('Corrija os valores marcados antes de salvar.');
+        }
         const now = WalletStore.snapshot(),
           current = now.finance.entries.find((e) => e.id === entry.id),
           updated = JSON.parse(now.simulator.wishlist || '[]');
         if (!current || business(current) !== baseline) throw Error('A compra mudou em outro aparelho. Feche e abra novamente.');
+        if (parts.some(part => !Number.isSafeInteger(part.amount) || part.amount < 0)) throw Error('Confira o total em reais de cada produto.');
         const amount = parts.reduce((n, p) => n + p.amount, 0),
           cadAmount = parts.every((p) => p.cadAmount != null) ? parts.reduce((n, p) => n + p.cadAmount, 0) : null,
           people = new Map();
@@ -104,13 +123,19 @@ window.PurchaseEditor = {
           p.person = FinancePeople.canonical(p.person);
           people.set(p.person, (people.get(p.person) || 0) + p.amount);
         }
+        const stores = PurchaseItems.byStore(parts);
+        const store = stores.length === 1 ? stores[0].name : '';
+        const description = dialog.querySelector('[data-description]').value;
+        const followsStore = entry.source === 'wishlist' && description === entry.description &&
+          (entry.description === entry.store || ['Compra da Dominadora', 'Compra da Luana', 'Loja não informada'].includes(entry.description));
         const patch = {
-          description: dialog.querySelector('[data-description]').value,
+          description: followsStore ? (store || (stores.length > 1 ? 'Compra em várias lojas' : 'Loja não informada')) : description,
+          ...(entry.source === 'wishlist' ? { store } : {}),
           date: dialog.querySelector('[data-date]').value,
           purchaseItems: parts,
           amount,
           note: PurchaseItems.note(parts, F, entry.note),
-          personAllocations: [...people].map(([person, amount]) => ({ person, amount })),
+          personAllocations: [...people].filter(([, value]) => value > 0).map(([person, value]) => ({ person, amount: value })),
           cadReference: cadAmount == null ? undefined : { amount: cadAmount, kind: 'original', source: 'purchase-items', basisAmount: amount, methodVersion: 2, recordedAt: new Date().toISOString() },
           ...(!entry.purchaseItems && entry.source !== 'wishlist' ? { purchaseOriginalNote: entry.note || '' } : {}),
         };
@@ -120,7 +145,7 @@ window.PurchaseEditor = {
           const old = wishes.find((w) => w.id === p.wishId),
             index = updated.findIndex((w) => w.id === p.wishId);
           if (index < 0 || JSON.stringify(old) !== JSON.stringify(updated[index])) throw Error('Um desejo mudou. Abra a compra novamente.');
-          updated[index] = { ...updated[index], title: p.title, store: p.store, person: FinancePeople.canonical(old.person || 'Dominadora') === p.person ? (old.person || 'Dominadora') : p.person === 'Luana' ? 'Dominadora' : p.person, personId: undefined, quantity: p.quantity, purchasePaidBrl: p.amount, purchasePaidCad: p.cadAmount, updatedAt: Date.now() };
+          updated[index] = { ...updated[index], title: p.title, store: p.store, person: FinancePeople.canonical(old.person || 'Dominadora') === p.person ? (old.person || 'Dominadora') : p.person === 'Luana' ? 'Dominadora' : p.person, personId: FinancePeople.canonical(old.person || 'Dominadora') === p.person ? old.personId : undefined, quantity: p.quantity, purchasePaidBrl: p.amount, purchasePaidCad: p.cadAmount, updatedAt: Date.now() };
         }
         const wishesBefore = now.simulator.wishlist;
         now.simulator.wishlist = JSON.stringify(updated);

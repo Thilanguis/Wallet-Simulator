@@ -7,6 +7,7 @@ window.FinanceCad = (() => {
   let loading = false;
   const usable = (e) => e.currency === 'BRL' && !['cancelled', 'refunded'].includes(e.status);
   function fromWishes(wishes, basisAmount) {
+    if (basisAmount === 0) return { amount: 0, kind: 'original', source: 'wishlist', basisAmount: 0, methodVersion: 2 };
     if (!wishes.length || wishes.some((w) => w.currency !== 'CAD' || !Number.isFinite(w.originalPrice))) return null;
     const amount = wishes.reduce((sum, w) => {
       const before = Math.round(w.originalPrice * 100) * (w.quantity || 1);

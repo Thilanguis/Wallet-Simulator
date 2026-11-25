@@ -8,7 +8,6 @@
     "simulate": "node scripts/simulate.cjs",
     "build": "node scripts/build.cjs",
     "start": "node scripts/serve.cjs",
-    "dev:access": "npm run build && node scripts/dev-access.cjs",
     "setup:local": "node scripts/setup-local.cjs",
     "test:live": "playwright test --config playwright.live.config.cjs",
     "test:firebase": "playwright test --config playwright.firebase.config.cjs",

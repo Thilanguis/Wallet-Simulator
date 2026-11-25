@@ -27,15 +27,14 @@ for (const width of [1440, 393])
     await expect(page.locator('#groupedFinanceList')).not.toContainText('Sem data');
     await expect(page.locator('.note-cad')).toHaveCount(0);
     await page.locator('#financeShowCad').check();
-    await expect(page.locator('#financePrepareCad')).toBeEnabled();
+    await expect(page.locator('#financePrepareCad')).toHaveCount(0);
     await expect(page.locator('#financeCadTotal')).toContainText('250,00');
     await expect(page.locator('#groupedFinanceList .note-cad')).toHaveCount(3);
     await expect.poll(() => page.evaluate(() => WalletStore.finance().entries.every((e) => !!e.cadReference))).toBe(true);
-    await page.locator('#financePrepareCad').click();
-    await expect(page.locator('.cad-review')).toContainText('2025-05-15');
-    await expect(page.locator('.cad-review')).toContainText('data interpolada');
-    await expect(page.locator('[data-apply]')).toBeDisabled();
-    await page.locator('[data-close]').click();
+    await page.locator('[data-note-ids=b] [data-cad-entry]').click();
+    await expect(page.locator('.finance-cad-explanation')).toContainText('15/05/2025');
+    await expect(page.locator('.finance-cad-explanation')).toContainText('interpolada');
+    await page.locator('.finance-cad-dialog button').click();
     expect(await page.evaluate(() => WalletStore.finance().entries.map((e) => [e.amount, e.date, e.cadReference.amount, e.cadReference.referenceDate]))).toEqual([
       [60000, '2025-05-10', 15000, '2025-05-10'],
       [20000, '2025-05-15', 5000, '2025-05-15'],
@@ -94,4 +93,27 @@ test('date interpolation leaves indivisible days in later intervals', async ({pa
     };
   });
   expect(result).toEqual({even:'2025-05-05',odd:'2025-05-05',several:['2025-05-04','2025-05-07'],preserved:'2025-05-01'});
+});
+
+test('a receipt with a dollar symbol is saved as a CAD original and a BRL expense', async ({ page }) => {
+  await start(page, 393);
+  await page.locator('#financeImport > summary').click();
+  await page.locator('[data-finance-jump=receipt]').click();
+  const text = page.locator('#receiptText');
+  await text.evaluate(field => {
+    for (let parent = field.parentElement; parent; parent = parent.parentElement) {
+      if (parent.tagName === 'DETAILS') parent.open = true;
+    }
+  });
+  await text.fill('Loja Boreal\n10/05/2025\nTotal pago $12.50');
+  await page.locator('#suggestReceipt').click();
+  await expect(page.locator('#entryCadOriginal')).toHaveValue('12,50');
+  await expect(page.locator('#entryAmount')).toHaveValue('50,00');
+  await page.locator('#saveEntry').click();
+  await page.locator('[data-dialog-confirm]').click();
+  await expect.poll(() => page.evaluate(() => WalletStore.finance().entries[0]?.amount)).toBe(5000);
+  const saved = await page.evaluate(() => WalletStore.finance().entries[0]);
+  expect(saved.currency).toBe('BRL');
+  expect(saved.originalMoney).toEqual([{ currency: 'CAD', amount: 1250 }]);
+  expect(saved.cadReference.amount).toBe(1250);
 });

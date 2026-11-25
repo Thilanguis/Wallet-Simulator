@@ -109,20 +109,3 @@ test('Luana can share her wishlist without becoming a guest, and external marks 
   assert.equal(result[0].purchaseNoteId, undefined);
   assert.equal(result[1].bought, false);
 });
-
-test('only gifts explicitly shown are projected for their recipient', () => {
-  const roster = [{ id: 'bruna', name: 'Bruna' }, { id: 'ana', name: 'Ana' }];
-  const privateWish = { id: 'inside', title: 'Só no Wallet', personId: 'bruna' };
-  const gift = { id: 'gift', title: 'Presente de Bruna', personId: 'bruna', imageUrl: 'private-image', financeId: 'private-finance' };
-  const before = simulator(roster, [privateWish, gift]);
-  const shown = simulator(roster, [privateWish, { ...gift, visibleToRecipient: true }]);
-  assert.deepEqual(changes(before, shown), []);
-  const updates = changes(before, shown, true);
-  assert.equal(updates.length, 1);
-  assert.equal(updates[0].id, 'bruna');
-  assert.deepEqual(Object.keys(updates[0].data.items), ['gift']);
-  assert.equal(updates[0].data.items.gift.imageUrl, undefined);
-  assert.equal(updates[0].data.items.gift.financeId, undefined);
-  assert.deepEqual(changes(shown, before, true)[0].data.items, {});
-  assert.equal(Object.hasOwn(project(before, 'bruna').items, 'inside'), true);
-});

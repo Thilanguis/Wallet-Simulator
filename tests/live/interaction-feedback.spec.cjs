@@ -81,7 +81,6 @@ for (const reduced of [false, true])
       window.dispatchEvent(new Event('wallet:remote'));
     });
     await page.locator('[data-panel=wishlistPanel]').click();
-    await page.locator('#wishHideBought').check();
     await page.locator('[data-purchase-wish=w1]').check();
     await page.locator('[data-purchase-wish=w2]').check();
     await page.locator('#wishReviewPurchase').click();

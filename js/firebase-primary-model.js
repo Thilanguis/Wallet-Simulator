@@ -179,5 +179,38 @@
       }
     return result;
   }
-  return { field, collections, plain, millis, fingerprint, bootstrap, records, mirrorChanges, overlay };
+  function compactWishlist(wallet) {
+    const json = wallet.simulator.wishlist;
+    if (!json) return wallet;
+    const wishes = JSON.parse(json);
+    const counts = new Map();
+    for (const { imageUrl } of wishes) {
+      if (typeof imageUrl === 'string' && imageUrl.startsWith('data:image/jpeg;base64,')) {
+        counts.set(imageUrl, (counts.get(imageUrl) || 0) + 1);
+      }
+    }
+    const images = [...counts].filter(([, count]) => count > 1).map(([url]) => url);
+    if (!images.length) return wallet;
+    const indexes = new Map(images.map((url, index) => [url, index]));
+    const compact = wishes.map(item => indexes.has(item.imageUrl)
+      ? Object.fromEntries(Object.entries(item).map(([key, value]) => key === 'imageUrl' ? ['walletImageIndex', indexes.get(value)] : [key, value]))
+      : item);
+    return { ...wallet, wishlistImages: images, simulator: { ...wallet.simulator, wishlist: JSON.stringify(compact) } };
+  }
+  function expandWishlist(wallet) {
+    if (!Array.isArray(wallet.wishlistImages)) return wallet;
+    const { wishlistImages, ...rest } = wallet;
+    if (!rest.simulator.wishlist) return rest;
+    const wishes = JSON.parse(rest.simulator.wishlist);
+    const expanded = wishes.map(item => {
+      if (!Object.hasOwn(item, 'walletImageIndex')) return item;
+      const url = wishlistImages[item.walletImageIndex];
+      return Object.fromEntries(Object.entries(item).flatMap(([key, value]) => {
+        if (key !== 'walletImageIndex') return [[key, value]];
+        return !item.imageUrl && typeof url === 'string' ? [['imageUrl', url]] : [];
+      }));
+    });
+    return { ...rest, simulator: { ...rest.simulator, wishlist: JSON.stringify(expanded) } };
+  }
+  return { field, collections, plain, millis, fingerprint, bootstrap, records, mirrorChanges, overlay, compactWishlist, expandWishlist };
 });

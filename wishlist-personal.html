@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#21171f" />
+    <meta name="robots" content="noindex" />
+    <title>Lista de Desejos · Wallet</title>
+    <link rel="icon" type="image/png" href="icons/wallet-192.png" />
+    <link rel="stylesheet" href="css/app.css" />
+    <link rel="stylesheet" href="css/modern.css" />
+    <link rel="stylesheet" href="css/wishlist-personal.css" />
+    <link rel="stylesheet" href="css/wishlist-people.css" />
+    <script defer src="js/ocr.js"></script>
+    <script defer src="js/wishlist-product.js"></script>
+    <script defer src="js/wishlist-fx.js"></script>
+    <script defer src="js/wishlist-photo-list.js"></script>
+    <script defer src="js/wishlist-photo-ink.js"></script>
+    <script defer src="js/wishlist-photo-reader.js"></script>
+    <script type="module" src="js/wishlist-personal.js"></script>
+  </head>
+  <body class="wishlist-personal-page">
+    <div class="container">
+      <header class="personal-wallet-header">
+        <h1 id="simuladorTitulo">Wallet</h1>
+        <a id="personalBackToWallet" href="./" class="wish-share-button" hidden>Voltar ao Wallet</a>
+        <button id="personalSignOut" class="personal-button personal-button-quiet wish-share-button" type="button" hidden>Sair</button>
+      </header>
+      <main id="wishlistPanel" class="section" aria-labelledby="personalPanelTitle">
+        <div class="list-title-row"><h2 id="personalPanelTitle">Lista de Desejos</h2></div>
+        <div id="personalHeadingActions" class="personal-heading-actions" hidden>
+          <button id="personalPeople" class="personal-button personal-button-quiet wish-share-button" type="button" aria-haspopup="dialog"><span aria-hidden="true">👤&nbsp;</span>Pessoas e listas</button>
+          <button id="personalAdd" class="personal-button wish-share-button" type="button"><span aria-hidden="true">＋&nbsp;</span>Adicionar desejo</button>
+        </div>
+        <section id="personalAccess" class="personal-card" aria-labelledby="personalAccessTitle">
+          <h2 id="personalAccessTitle">Conferindo seu acesso</h2>
+          <p id="personalAccessStatus" class="personal-hint" role="status"></p>
+          <div class="personal-actions">
+            <button id="personalSignIn" class="personal-button" type="button" hidden>Entrar com Google</button>
+            <button id="personalRetry" class="personal-button" type="button" hidden>Tentar novamente</button>
+          </div>
+        </section>
+        <div id="personalSharingShortcuts" hidden>
+          <div id="personalSharingOutgoing" class="wish-shortcut-row" hidden><span>Compartilhei com</span><ul></ul></div>
+          <div id="personalSharingIncoming" class="wish-shortcut-row" hidden><span>Compartilharam comigo</span><ul></ul></div>
+          <p id="personalShortcutStatus" class="hint personal-feedback" role="status"></p>
+        </div>
+        <section id="personalReceivedWish" class="wish-group" aria-labelledby="personalReceivedWishTitle" hidden>
+          <div class="wish-group-header">
+            <h3 id="personalReceivedWishTitle"></h3>
+            <button id="personalCloseReceivedWish" class="wish-share-button" type="button" aria-label="Voltar à minha lista">← Voltar à minha lista</button>
+          </div>
+          <ul id="personalReceivedWishItems" class="wish-people-items"></ul>
+        </section>
+        <section id="personalWishlist" class="wish-group" aria-labelledby="personalWishTitle" hidden>
+          <div class="wish-group-header">
+            <div>
+              <h3 id="personalWishTitle">Seus desejos</h3>
+              <p id="personalWishCount" class="personal-hint" role="status"></p>
+            </div>
+            <label class="personal-all"><input type="checkbox" id="personalHideBought" /> Ocultar comprados</label>
+          </div>
+          <div id="personalShareActions" class="personal-selection-bar">
+            <label id="personalSelectAllLabel" class="personal-all"><input type="checkbox" id="personalSelectAll" /> Selecionar todos</label>
+            <div class="personal-selection-actions">
+              <button id="personalCopy" class="personal-button wish-share-button" type="button" disabled>Copiar seleção</button>
+              <button id="personalShare" class="personal-button personal-button-quiet wish-share-button" type="button" disabled hidden>Compartilhar seleção</button>
+            </div>
+          </div>
+          <p id="personalShareFeedback" class="personal-hint personal-feedback" role="status"></p>
+          <textarea id="personalShareText" aria-label="Texto da seleção para copiar" rows="5" readonly hidden></textarea>
+          <div id="personalWishItems"></div>
+        </section>
+      </main>
+    </div>
+    <dialog id="personalEditor" class="personal-dialog" aria-labelledby="personalEditorTitle">
+      <form id="personalEditForm">
+        <header class="personal-editor-header">
+          <h2 id="personalEditorTitle">Adicionar desejo</h2>
+          <button id="personalEditorClose" class="personal-button personal-button-quiet" type="button" aria-label="Fechar formulário" autofocus>×</button>
+        </header>
+        <div class="personal-edit-fields">
+          <div id="personalSingleLink" class="personal-field-wide">
+            <div class="personal-link-row wish-link-row">
+              <label>Link do produto<input name="url" type="url" maxlength="4096" placeholder="Cole o link, se tiver" /></label>
+              <button id="personalReadLink" class="personal-button personal-button-quiet" type="button">Atualizar prévia</button>
+              <a id="personalOpenLink" target="_blank" rel="noopener noreferrer" hidden>Abrir link</a>
+            </div>
+            <p id="personalLinkStatus" class="personal-hint" role="status"></p>
+          </div>
+          <div class="personal-field-wide personal-image-field">
+            <label>Foto ou print do produto<input id="personalUpload" type="file" multiple accept="image/jpeg,image/png,image/webp,image/bmp" /></label>
+            <div class="personal-actions">
+              <button id="personalReadPhoto" class="personal-button personal-button-quiet" type="button" hidden>Ler texto da foto</button>
+              <button id="personalRemovePhoto" class="personal-button personal-button-quiet" type="button" hidden>Remover foto</button>
+            </div>
+            <img id="personalPhotoPreview" class="wish-thumbnail" alt="Prévia da foto do produto" referrerpolicy="no-referrer" hidden />
+            <div id="personalPhotoLoading" class="wish-photo-loading" role="status" hidden>
+            <span class="wish-photo-spinner" aria-hidden="true"><i></i></span>
+            <span class="wish-photo-stage"><strong>Lendo imagens</strong><span id="personalPhotoProgress"></span></span>
+          </div>
+            <p id="personalPhotoStatus" class="personal-hint" role="status"></p>
+            <label id="personalPhotoProducts" hidden>Produto encontrado no print<select id="personalPhotoChoice"></select></label>
+            <small>Para importar uma lista de compras, escolha, cole ou arraste os prints e revise os itens encontrados.</small>
+            <small>Fotos salvas neste navegador. Só você as vê na sua lista.</small>
+          </div>
+          <label id="personalDefaultStoreLabel" class="personal-field-wide wish-default-store">Loja padrão<input id="personalDefaultStore" maxlength="150" placeholder="Substitui a loja de todos os produtos" /></label>
+          <label id="personalBatchTaxLabel" class="personal-field-wide wish-default-store" hidden>Taxas do Québec no lote<select id="personalBatchTax"><option value="">Ajustar por item</option><option value="apply">Aplicar em todos</option><option value="remove">Remover de todos</option></select></label>
+          <fieldset id="personalSingleFields" class="personal-field-wide personal-edit-fields wish-product-fields">
+          <label>Produto<input name="title" maxlength="300" required /></label>
+          <label>Loja<input name="store" maxlength="150" placeholder="Opcional" /></label>
+          <label>Preço unitário<input name="price" inputmode="decimal" /></label>
+          <label>Moeda<select name="currency"><option value="">Escolha a moeda</option><option>CAD</option><option>BRL</option><option>USD</option><option>EUR</option><option>GBP</option><option>AUD</option><option>JPY</option><option>CNY</option><option>CHF</option></select></label>
+          <label>Quantidade<input name="quantity" type="number" inputmode="numeric" min="1" step="1" value="1" required /></label>
+          <output data-unit-brl class="wish-brl-preview" aria-live="polite"></output>
+          <label class="personal-field-wide personal-all"><input name="tax" type="checkbox" /> Aplicar taxas do Québec</label>
+          </fieldset>
+        </div>
+        <section id="personalPhotoBatch" aria-label="Produtos encontrados nas fotos" hidden>
+          <p class="personal-hint">Confira os dados e marque os produtos que quer salvar.</p>
+          <div id="personalBatchCurrencyRow" class="personal-batch-currency" hidden>
+            <p class="personal-hint">O símbolo $ sozinho não indica a moeda. Se os preços forem da mesma moeda, preencha as linhas sem moeda de uma vez.</p>
+            <label for="personalBatchCurrency">Moeda das linhas pendentes</label>
+            <div>
+              <select id="personalBatchCurrency"></select>
+              <button id="personalApplyBatchCurrency" class="personal-button personal-button-quiet" type="button" disabled>Aplicar aos marcados</button>
+            </div>
+          </div>
+          <p id="personalBatchCurrencyStatus" class="personal-hint" role="status"></p>
+          <div id="personalPhotoRows"></div>
+        </section>
+        <p id="personalEditError" class="personal-hint personal-feedback" role="alert"></p>
+        <div class="wish-form-footer">
+          <button type="button" id="personalAddManualProduct" class="wish-form-add-line" aria-label="Adicionar outro produto"><span aria-hidden="true">+</span> Outro produto</button>
+          <div class="wish-form-submit-actions">
+            <button type="button" id="personalEditCancel" class="wish-form-discard">Cancelar</button>
+            <button type="submit" id="personalSave" class="wish-form-submit">Salvar desejo</button>
+          </div>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="personalPurchaseDialog" class="personal-dialog" aria-labelledby="personalPurchaseTitle" aria-describedby="personalPurchaseItem">
+      <h2 id="personalPurchaseTitle">Confirmar compra?</h2>
+      <p id="personalPurchaseItem" class="personal-purchase-item"></p>
+      <p id="personalPurchaseInfo" class="personal-hint"></p>
+      <p id="personalPurchaseError" class="personal-hint personal-feedback" role="alert"></p>
+      <div class="personal-actions personal-purchase-actions">
+        <button id="personalPurchaseBack" class="personal-button personal-button-quiet" type="button" autofocus>← Voltar</button>
+        <button id="personalPurchaseConfirm" class="personal-button" type="button">Marcar como comprado</button>
+      </div>
+    </dialog>
+    <dialog id="personalDeleteDialog" class="personal-dialog" aria-labelledby="personalDeleteTitle" aria-describedby="personalDeleteItem">
+      <h2 id="personalDeleteTitle">Excluir desejo?</h2>
+      <p id="personalDeleteItem" class="personal-hint"></p>
+      <p id="personalDeleteError" class="personal-hint personal-feedback" role="alert"></p>
+      <div class="personal-actions">
+        <button id="personalDeleteConfirm" class="personal-button" type="button">Excluir desejo</button>
+        <button id="personalDeleteCancel" class="personal-button personal-button-quiet" type="button" autofocus>Cancelar</button>
+      </div>
+    </dialog>
+  </body>
+</html>

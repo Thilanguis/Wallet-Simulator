@@ -22,13 +22,14 @@
   };
   const id = () => globalThis.crypto.randomUUID();
   function cents(value, currency = 'BRL') {
-    let text = String(value)
+    let text = (currency === 'CAD' ? String(value).replace(/CA\$|C\$|CAD/gi, '') : String(value))
       .replace(/R\$|US\$|USD|BRL|\$/gi, '')
       .trim();
-    if (currency === 'BRL') {
+    if (currency === 'CAD' && /^-?\d{1,3}(?:,\d{3})+\.\d{1,2}$/.test(text)) text = text.replace(/,/g, '').replace('.', ',');
+    if (currency === 'BRL' || currency === 'CAD') {
       // Accept a decimal point from keyboards/autofill as well as Brazilian commas.
       if (/^-?\d+\.\d{1,2}$/.test(text)) text = text.replace('.', ',');
-      if (!/^-?(?:\d+|\d{1,3}(?:\.\d{3})+)(?:,\d{1,2})?$/.test(text)) throw new Error('Valor brasileiro inválido: ' + value);
+      if (!/^-?(?:\d+|\d{1,3}(?:\.\d{3})+)(?:,\d{1,2})?$/.test(text)) throw new Error('Valor em ' + currency + ' inválido: ' + value);
       text = text.replace(/\./g, '').replace(',', '.');
     } else {
       if (text.includes(',')) text = text.replace(/\./g, '').replace(',', '.');
@@ -45,18 +46,32 @@
   }
   function validate(entry) {
     if (!entry || !categories.includes(entry.category) || !['paid', 'pending', 'cancelled', 'refunded'].includes(entry.status)) throw new Error('Categoria ou situação inválida.');
-    if (!['BRL', 'USD'].includes(entry.currency) || !Number.isSafeInteger(entry.amount) || entry.amount <= 0) throw new Error('Valor/moeda inválidos.');
+    const freePurchase = entry.source === 'wishlist' && entry.currency === 'BRL' && entry.amount === 0 &&
+      Array.isArray(entry.purchaseItems) && entry.purchaseItems.length > 0;
+    if (!['BRL', 'USD'].includes(entry.currency) || !Number.isSafeInteger(entry.amount) || (entry.amount <= 0 && !freePurchase)) {
+      throw new Error('Valor/moeda inválidos.');
+    }
     if (entry.date !== '' && !validDate(entry.date)) throw new Error('Data inválida.');
     if (!String(entry.description || '').trim() || String(entry.description).length > 1000 || String(entry.store || '').length > 200) throw new Error('Descrição/loja inválida.');
     if (entry.note !== undefined && (typeof entry.note !== 'string' || entry.note.length > 4000)) throw new Error('Observações inválidas (máximo de 4 mil caracteres).');
-    if (entry.originalMoney && (!Array.isArray(entry.originalMoney) || entry.originalMoney.some((m) => !['BRL', 'USD'].includes(m.currency) || !Number.isSafeInteger(m.amount) || m.amount <= 0))) throw new Error('Valores originais inválidos.');
+    if (entry.originalMoney && (!Array.isArray(entry.originalMoney) || entry.originalMoney.some((m) => !['BRL', 'USD', 'CAD'].includes(m.currency) || !Number.isSafeInteger(m.amount) || m.amount <= 0))) throw new Error('Valores originais inválidos.');
     if (entry.purchaseItems !== undefined) {
-      const parts=entry.purchaseItems;
-      if(!Array.isArray(parts)||!parts.length||parts.some(p=>!p||typeof p.id!=='string'||!p.id||typeof p.title!=='string'||!p.title.trim()||p.title.length>1000||typeof p.person!=='string'||!p.person.trim()||!Number.isSafeInteger(p.quantity)||p.quantity<1||!Number.isSafeInteger(p.amount)||p.amount<=0||(p.cadAmount!==null&&(!Number.isSafeInteger(p.cadAmount)||p.cadAmount<0)))||new Set(parts.map(p=>p.id)).size!==parts.length||parts.reduce((n,p)=>n+p.amount,0)!==entry.amount)throw new Error('Confira os produtos: a soma deve ser igual ao total da compra.');
+      const parts = entry.purchaseItems;
+      if (!Array.isArray(parts) || !parts.length || parts.some(p =>
+        !p || typeof p.id !== 'string' || !p.id || typeof p.title !== 'string' ||
+        !p.title.trim() || p.title.length > 1000 || typeof p.person !== 'string' || !p.person.trim() ||
+        !Number.isSafeInteger(p.quantity) || p.quantity < 1 || !Number.isSafeInteger(p.amount) || p.amount < 0 ||
+        (p.cadAmount !== null && (!Number.isSafeInteger(p.cadAmount) || p.cadAmount < 0)))) {
+        throw new Error('Confira os dados e os valores dos produtos. Informe R$ 0,00 para brindes.');
+      }
+      if (new Set(parts.map(p => p.id)).size !== parts.length) throw new Error('Há produtos duplicados no lançamento.');
+      if (parts.reduce((sum, p) => sum + p.amount, 0) !== entry.amount) {
+        throw new Error('Confira os produtos: a soma deve ser igual ao total da compra.');
+      }
     }
     if (entry.cadReference !== undefined) {
       const r = entry.cadReference;
-      if (!r || !Number.isSafeInteger(r.amount) || r.amount < 0 || !Number.isSafeInteger(r.basisAmount) || r.basisAmount <= 0 || !['original','estimated'].includes(r.kind) || (r.kind === 'estimated' && (!Number.isFinite(r.rate) || r.rate <= 0 || !validDate(r.rateDate) || !validDate(r.referenceDate)))) throw new Error('Referência em CAD inválida.');
+      if (!r || !Number.isSafeInteger(r.amount) || r.amount < 0 || !Number.isSafeInteger(r.basisAmount) || (r.basisAmount <= 0 && !(freePurchase && r.basisAmount === 0 && r.amount === 0)) || !['original','estimated'].includes(r.kind) || (r.kind === 'estimated' && (!Number.isFinite(r.rate) || r.rate <= 0 || !validDate(r.rateDate) || !validDate(r.referenceDate)))) throw new Error('Referência em CAD inválida.');
     }
     if (entry.personAllocations !== undefined) {
       if (!Array.isArray(entry.personAllocations) || entry.personAllocations.some(p => !p || typeof p.person !== 'string' || !p.person.trim() || p.person.length > 80 || !Number.isSafeInteger(p.amount) || p.amount <= 0) || entry.personAllocations.reduce((n,p) => n + p.amount, 0) > entry.amount) throw new Error('A divisão por pessoa deve caber no total do lançamento.');
@@ -160,15 +175,19 @@
     if (/lista de compras|^\W*(?:\d+[.)\-:]?\s*)?compras\b/.test(n)) return categories[7];
     return null;
   }
-  function moneyTokens(line) {
-    const regex = /(R\$|US\$|USD|\$)?\s*(-?(?:\d{1,3}(?:\.\d{3})+|\d+)(?:[,.]\d{2})?)(?:\s*(d[oó]lares?|USD))?/gi;
+  function moneyTokens(line, { canadian = false } = {}) {
+    const regex = canadian
+      ? /(R\$|US\$|USD|CA\$|C\$|CAD|\$)?\s*(-?(?:\d{1,3}(?:[.,]\d{3})+|\d+)(?:[,.]\d{2})?)(?:\s*(d[oó]lares?|USD|CAD))?/gi
+      : /(R\$|US\$|USD|\$)?\s*(-?(?:\d{1,3}(?:\.\d{3})+|\d+)(?:[,.]\d{2})?)(?:\s*(d[oó]lares?|USD))?/gi;
     const found = [];
     for (const m of line.matchAll(regex)) {
       if (!m[1] && !m[3] && !/[,.]\d{2}$/.test(m[2])) continue;
       // A bare decimal on a date is not money.
       const numberStart = m.index + m[0].indexOf(m[2]);
       if (/[\d/]$/.test(line.slice(Math.max(0, numberStart - 1), numberStart))) continue;
-      const currency = (m[1] && m[1].toUpperCase() !== 'R$') || m[3] ? 'USD' : 'BRL';
+      const symbol = (m[1] || m[3] || '').toUpperCase();
+      const explicitUsd = [m[1], m[3]].some(part => /^(?:US[$D])$/i.test(part || ''));
+      const currency = !symbol || symbol === 'R$' ? 'BRL' : explicitUsd || !canadian ? 'USD' : 'CAD';
       try {
         const amount = cents(m[2], currency);
         if (amount > 0) found.push({ currency, amount, raw: m[0].trim(), index: m.index, end: m.index + m[0].length });

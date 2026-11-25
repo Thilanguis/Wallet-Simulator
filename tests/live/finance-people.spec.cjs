@@ -58,3 +58,38 @@ for (const width of [1440, 768, 393])
     await page.waitForTimeout(350);
     await page.screenshot({ path: '.local/people-summary-' + width + '.png' });
   });
+
+test('edits a CAD expense and retains the assigned split in BRL', async ({ page }) => {
+  await page.setViewportSize({ width: 393, height: 844 });
+  await page.route('https://api.frankfurter.dev/v2/rates?**', route =>
+    route.fulfill({ json: [{ base: 'CAD', quote: 'BRL', date: '2025-05-10', rate: 4 }] }));
+  await page.goto('/');
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  await page.evaluate(() => {
+    FinanceUI.save(Finance.update(Finance.empty(), { type: 'add', entry: {
+      id: 'split-cad', category: 'Lista de Compras', description: 'Compra em CAD',
+      date: '2025-05-10', currency: 'BRL', amount: 40000, status: 'paid',
+      cadReference: { amount: 10000, basisAmount: 40000, kind: 'original', source: 'manual', methodVersion: 2 },
+      personAllocations: [{ person: 'Bruna', amount: 10000 }],
+    } }));
+  });
+  await page.locator('[data-panel=financePanel]').click();
+  await page.locator('[data-note-edit=split-cad]').click();
+  await expect(page.locator('#entryLegacyCurrency')).toBeHidden();
+  await page.locator('#entryPeople > summary').click();
+  const cad = page.getByLabel('Valor da pessoa em CAD', { exact: true });
+  const brl = page.getByLabel('Valor da pessoa', { exact: true });
+  await expect(cad).toHaveValue('25,00');
+  await page.locator('#entryCadOriginal').fill('CAD 120,50');
+  await expect(page.locator('#entryAmount')).toHaveValue('482,00');
+  await cad.fill('CA$ 30,25');
+  await expect(brl).toHaveValue('121,00');
+  await expect(page.locator('#entryPeopleRemainder')).toContainText('361,00');
+  await page.locator('#saveEntry').click();
+  await page.locator('[data-dialog-confirm]').click();
+  await expect(page.locator('.note-edit-dialog')).toHaveCount(0);
+  const entry = await page.evaluate(() => WalletStore.finance().entries.find(item => item.id === 'split-cad'));
+  expect(entry.amount).toBe(48200);
+  expect(entry.cadReference.amount).toBe(12050);
+  expect(entry.personAllocations).toEqual([{ person: 'Bruna', amount: 12100 }]);
+});

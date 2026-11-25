@@ -391,5 +391,72 @@
     return rows.length >= 2 && recognized >= 2 ? rows : [];
   }
 
-  return { read, readBlocks };
+
+  const detailPrice = /^(?:unit\s+price|price\s+per\s+unit|price|preço\s+unitário|preço|valor\s+unitário|prix\s+unitaire|prix)\s*[:：]\s*(.*)$/iu;
+  const detailQty = /^(?:q[tu][y]|qt[ty]|quant(?:ity|idade|ité)|qtd[e.]?|qté)\s*[:：]?\s*(\d{1,6})(?!\d)\s*$/iu;
+  const detailCode = /^(?:(?:i?tem|artigo|sku|product\s+(?:id|code)|código|référence)\s*(?:n[º°.]|no\.?|#|:)?\s+)(?:[\p{L}]{0,5}[\dOIl][\p{L}\d .-]{1,22}|[oO])(?:\W.*)?$/iu;
+  const detailPolicy = /^(?:final sale|no returns?|returns? and exchanges?|non remboursable|venda final|sem devolução)\b|\bno\s+\S+\s+(?:or|of|and)\s+exchanges?\b/iu;
+
+  function detailPriceBoxes(result) {
+    return (result?.lines || []).filter(line => line.bbox && detailPrice.test(product.normalizePhotoLine(line.text)))
+      .map(line => line.bbox);
+  }
+
+  function readItemDetails(result, url = '') {
+    const lines = result?.lines?.map(line => {
+      const text = product.normalizePhotoLine(line.text);
+      // Short labels such as Qty: 1 often get low OCR confidence despite
+      // matching the expected structure and aligning with the unit price.
+      return detailQty.test(text) || detailCode.test(text) ? { ...line, confidence: undefined } : line;
+    });
+    const parts = readingBands({ ...result, lines }).flatMap(band => band.parts).filter(part => part.text);
+    const currencyHints = [...new Set(parts.map(part => part.text).filter(text => currencySetting.test(text)))];
+    const rows = [];
+    let anchored = 0;
+    for (const [index, end] of parts.entries()) {
+      const unit = end.text.match(detailPrice);
+      if (!unit) continue;
+      const height = end.box ? end.box.y1 - end.box.y0 : 0;
+      const lane = parts.slice(0, index).filter(part =>
+        !end.box || (part.box && Math.abs(part.box.x0 - end.box.x0) <= Math.max(5, height * 1.1) &&
+          end.box.y0 - part.box.y0 <= height * 16));
+      const start = lane.findLastIndex(part => detailPrice.test(part.text));
+      const block = lane.slice(start + 1);
+      const item = block.findLastIndex(part => detailCode.test(part.text));
+      const qty = block.findLastIndex(part => detailQty.test(part.text));
+      const boundary = item >= 0 ? item : qty >= 0 ? qty : block.length;
+      const heading = [];
+      let below = block[boundary] || end;
+      for (let i = boundary - 1; i >= 0 && heading.length < 4; i--) {
+        const part = block[i];
+        if (below.box && below.box.y0 - part.box.y1 > height * (heading.length ? 1.3 : 5.5)) break;
+        if (detailPolicy.test(part.text) || itemDetails.test(part.text) || (!part.title && !part.hasMoney) ||
+            /^[a-z]{1,3}\s*:?\s*\d{1,6}$/iu.test(part.text)) {
+          if (heading.length) break;
+          below = part;
+          continue;
+        }
+        if (part.hasMoney || !part.title || currencySetting.test(part.text) || detailCode.test(part.text) || detailQty.test(part.text)) break;
+        heading.unshift(part.title);
+        below = part;
+        if (part.explicit) break;
+      }
+      const title = heading.join(' ');
+      if (!title) continue;
+
+      // The first value after the label is the unit price. A repeated or
+      // greater value at the right may be the row total for several units.
+      const afterLabel = unit[1].replace(/^S(?=\s*\d+[.,]\d{2}\b)/i, '$')
+        .replace(/^((?:[A-Z]{0,3}\$|[€£¥])\s*\d+)\s+(\d{2})(?=\s*(?:[A-Z]{0,3}\$|[€£¥]|$))/iu, '$1.$2');
+      const firstMoney = afterLabel.matchAll(money()).next().value;
+      const bare = afterLabel.match(/^\d+(?:[.,]\s*\d{1,2})?(?=\s|$)/)?.[0];
+      const amount = firstMoney?.index === 0 ? firstMoney[0] : bare;
+      const fields = product.readPhotoText(amount ? [currencyHints.length === 1 ? currencyHints[0] : '', 'Price: ' + amount].join('\n') : '', url, { keepUnconfirmedAmount: true });
+      if (item >= 0 || qty >= 0) anchored++;
+      rows.push({ ...fields, title: title.slice(0, 300), quantity: qty < 0 ? 1 : Math.max(1, Number(block[qty].text.match(detailQty)[1])) });
+    }
+    return anchored >= 2 && rows.some(row => row.price != null) ? rows : [];
+  }
+
+  return { read, readBlocks, readItemDetails, detailPriceBoxes };
 });

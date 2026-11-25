@@ -56,7 +56,7 @@
     };
   }
 
-  function projections(simulator, visibleOnly = false) {
+  function projections(simulator) {
     const lists = new Map();
     const legacy = new Map();
     for (const person of projectionPeople(simulator)) {
@@ -69,7 +69,6 @@
     const owner = (item) => item?.personId == null || item.personId === ''
       ? (!nameKey(item?.person) || primaryNames.has(nameKey(item?.person)) ? primaryId : legacy.get(nameKey(item?.person))) : item.personId;
     for (const item of wishes) {
-      if (visibleOnly && item?.visibleToRecipient !== true) continue;
       const matched = lists.get(owner(item));
       if (!matched) continue;
       const filtered = publicItem(item);
@@ -90,10 +89,10 @@
     return safeKey(id) ? projection(projections(simulator).lists.get(id), walletRevision) : null;
   }
 
-  function changes(before, after, visibleOnly = false) {
+  function changes(before, after) {
     if (before?.wishlist === after?.wishlist && before?.wishlistPeople === after?.wishlistPeople) return [];
-    const prior = projections(before, visibleOnly).lists;
-    const next = projections(after, visibleOnly).lists;
+    const prior = projections(before).lists;
+    const next = projections(after).lists;
     return [...new Set([...prior.keys(), ...next.keys()])].flatMap(id => {
       const data = projection(next.get(id));
       return JSON.stringify(data) === JSON.stringify(projection(prior.get(id))) ? [] : [{ id, data }];
@@ -117,7 +116,7 @@
     const occupied = new Set(wishes.map(item => wishId(item?.id)));
     const shared = new Map();
     for (const [id, row] of mirrors) {
-      if (lists.has(id) && row.walletRevision === version(versions, id) &&
+      if (!row.walletPaged && lists.has(id) && row.walletRevision === version(versions, id) &&
           row.items && typeof row.items === 'object' && !Array.isArray(row.items)) shared.set(id, row.items);
     }
     if (!shared.size) return simulator;
@@ -163,7 +162,7 @@
 
   function active(config) {
     return typeof config?.adminEmail === 'string' && config.adminEmail.length > 0 &&
-      Array.isArray(config.emails) && config.emails.includes(config.adminEmail);
+      Array.isArray(config.emails) && config.emails.length <= 2 && config.emails.includes(config.adminEmail);
   }
 
   return { people, primaryProfile, projectionPeople, sharePerson, project, changes, active, overlay, ready, field, version };

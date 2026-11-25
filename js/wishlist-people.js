@@ -48,7 +48,7 @@ export async function showWishlistPeople(getSharing, { signal, personalLink } = 
   const inboundHeading = element('h3', 'Compartilhadas comigo');
   const recipient = element('div', null, 'wish-circle-picker');
   const picker = element('select');
-  picker.setAttribute('aria-label', 'Escolher conta aprovada');
+  picker.setAttribute('aria-label', 'Escolher conta autorizada');
   const form = element('form');
   const submit = element('button', 'Compartilhar', 'wish-share-button');
   submit.type = 'submit';
@@ -104,7 +104,7 @@ export async function showWishlistPeople(getSharing, { signal, personalLink } = 
     picker.value = targets.some(([id]) => id === picked) ? picked : '';
     form.hidden = !targets.length;
     recipientHelp.textContent = targets.length ? 'As pessoas escolhidas podem ver a sua lista.' :
-      (sent.length ? 'Todas as contas disponíveis já receberam acesso.' : 'Nenhuma outra conta aprovada disponível para compartilhar.');
+      (sent.length ? 'Todas as contas disponíveis já receberam acesso.' : 'Nenhuma outra conta autorizada disponível para compartilhar.');
     submit.disabled = busy || !picker.value;
     outgoing.replaceChildren(...sent.filter(item => people.has(item.recipient)).map(({ recipient }) => {
       const row = element('li', null, 'wish-circle-person');
@@ -194,14 +194,14 @@ export async function showWishlistPeople(getSharing, { signal, personalLink } = 
 export { listItems as renderReadonlyWishlist };
 
 export function mountWishlistShortcuts(getSharing) {
-  const host = document.getElementById('guestSharingShortcuts');
-  const outgoing = document.getElementById('guestSharingOutgoing');
-  const incoming = document.getElementById('guestSharingIncoming');
-  const section = document.getElementById('guestReceivedWish');
-  const title = document.getElementById('guestReceivedWishTitle');
-  const items = document.getElementById('guestReceivedWishItems');
-  const close = document.getElementById('guestCloseReceivedWish');
-  const feedback = document.getElementById('guestShortcutStatus');
+  const host = document.getElementById('personalSharingShortcuts');
+  const outgoing = document.getElementById('personalSharingOutgoing');
+  const incoming = document.getElementById('personalSharingIncoming');
+  const section = document.getElementById('personalReceivedWish');
+  const title = document.getElementById('personalReceivedWishTitle');
+  const items = document.getElementById('personalReceivedWishItems');
+  const close = document.getElementById('personalCloseReceivedWish');
+  const feedback = document.getElementById('personalShortcutStatus');
   const stops = [];
   const pending = new Set();
   let active = true, api, people = new Map(), sent = [], received = [], viewing, stopView;
@@ -261,7 +261,7 @@ export function mountWishlistShortcuts(getSharing) {
       const chip = element('li', null, 'wish-shortcut-chip');
       const control = button(people.get(owner), () => open(owner));
       control.setAttribute('aria-pressed', String(viewing === owner));
-      control.setAttribute('aria-controls', 'guestReceivedWish');
+      control.setAttribute('aria-controls', 'personalReceivedWish');
       chip.append(control);
       return chip;
     });

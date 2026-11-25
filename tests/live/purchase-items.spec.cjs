@@ -70,3 +70,66 @@ for (const width of [1440, 393])
     expect(restored.wishes[0].purchaseNoteId).toBe('buy');
     expect(restored.wishes[0].bought).toBe(true);
   });
+
+for (const hasPaidItem of [true, false]) {
+  test('a wishlist purchase accepts explicit zero ' + (hasPaidItem ? 'alongside a paid item' : 'for the entire order'), async ({ page }) => {
+    await page.route('https://api.frankfurter.dev/**', route => route.abort());
+    await page.goto('/');
+    await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+    await page.evaluate(() => {
+      AppStorage.setItem('wishlist', JSON.stringify([
+        { id: 'paid', title: 'Creme pago', store: 'Loja', currency: 'BRL', originalPrice: 100 },
+        { id: 'sample', title: 'Amostra grátis', store: 'Loja', person: 'Bruna', currency: 'CAD', originalPrice: 0 },
+        { id: 'missing', title: 'Preço não informado', store: 'Loja', currency: 'CAD', originalPrice: null },
+      ]));
+      AppStorage.flush();
+      window.dispatchEvent(new Event('wallet:remote'));
+    });
+
+    await page.locator('[data-panel=wishlistPanel]').click();
+    const checkbox = name => page.getByRole('checkbox', { name: 'Selecionar para compra: ' + name, exact: true });
+    const review = page.locator('#wishPurchaseDialog');
+    const register = page.getByRole('button', { name: 'Registrar compra', exact: true });
+    const confirm = review.getByRole('button', { name: 'Confirmar compra', exact: true });
+    const amount = name => review.getByRole('textbox', { name: 'Valor pago em reais por ' + name, exact: true });
+    await checkbox('Amostra grátis').check();
+    await checkbox('Preço não informado').check();
+    await register.click();
+    await expect(amount('Amostra grátis')).toHaveValue('0,00');
+    await expect(amount('Preço não informado')).toHaveValue('');
+    await confirm.click();
+    await expect(review).toBeVisible();
+    expect(await page.evaluate(() => WalletStore.finance().entries)).toHaveLength(0);
+    await review.getByRole('button', { name: 'Fechar revisão da compra' }).click();
+
+    await checkbox('Preço não informado').uncheck();
+    if (hasPaidItem) await checkbox('Creme pago').check();
+    await register.click();
+    await confirm.click();
+    await expect(review).toBeHidden();
+    const total = hasPaidItem ? 10000 : 0;
+    const original = await page.evaluate(() => WalletStore.finance().entries[0]);
+    expect(original.amount).toBe(total);
+    expect(original.purchaseItems.find(item => item.wishId === 'sample')).toMatchObject({ amount: 0, cadAmount: 0 });
+    expect(original.purchaseItems.find(item => item.wishId === 'missing')).toBeUndefined();
+    await expect(checkbox('Amostra grátis')).toHaveCount(0);
+    await page.getByRole('checkbox', { name: 'Mostrar comprados' }).check();
+    await expect(page.getByRole('checkbox', { name: 'Comprado: Amostra grátis', exact: true })).toBeChecked();
+
+    await page.locator('[data-panel=financePanel]').click();
+    await page.getByRole('button', { name: 'Editar produto Amostra grátis', exact: true }).click();
+    const editor = page.locator('.purchase-items-editor');
+    const sampleTitle = editor.locator('[data-key=title]').nth(hasPaidItem ? 1 : 0);
+    await expect(sampleTitle).toHaveValue('Amostra grátis');
+    await sampleTitle.fill('Amostra sem custo');
+    await editor.locator('[data-save]').click();
+    await expect(editor).toHaveCount(0);
+    const edited = await page.evaluate(() => ({
+      entry: WalletStore.finance().entries[0],
+      wish: JSON.parse(AppStorage.getItem('wishlist')).find(item => item.id === 'sample'),
+    }));
+    expect(edited.entry.amount).toBe(total);
+    expect(edited.entry.personAllocations.every(person => person.amount > 0)).toBe(true);
+    expect(edited.wish).toMatchObject({ title: 'Amostra sem custo', bought: true, purchasePaidBrl: 0, purchasePaidCad: 0 });
+  });
+}

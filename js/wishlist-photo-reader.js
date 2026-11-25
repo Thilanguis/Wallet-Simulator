@@ -181,7 +181,7 @@
   }
 
   function cartPrice(text, { allowShortPrefix = false } = {}) {
-    const label = text.normalize('NFKC').replace(/\s+/g, ' ');
+    const label = text.normalize('NFKD').replace(/\p{M}/gu, '').replace(/\s+/g, ' ');
     // OCR can see "$" as S and thin decimal points as whitespace.
     const prefix = allowShortPrefix ? /(?:CA[$S§]?|A(?=\d))\s*/i : /CA[$S§]+\s*/i;
     const matched = prefix.exec(label);
@@ -388,9 +388,17 @@
         if (band && current()) {
           const bounds = horizontalPriceBounds(ink, band);
           const base = { ...bounds, y:band.y, h:band.bottom-band.y };
-          const output = async (region, enhance, whitelist) => {
-            const strip = drawWishPhoto(bitmap, 1550, region, 5, 18);
-            if (enhance) enhancePrice(strip);
+          const output = async (region, enhance, whitelist, orangeOnly = false, scale = 5) => {
+            const strip = drawWishPhoto(bitmap, 1550, region, scale, 18);
+            if (orangeOnly) {
+              const context = strip.getContext('2d');
+              const pixels = context.getImageData(0, 0, strip.width, strip.height);
+              for (let i = 0; i < pixels.data.length; i += 4) {
+                const shade = 255 - Math.min(255, orangeStrength(pixels.data, i) * 3);
+                pixels.data[i] = pixels.data[i+1] = pixels.data[i+2] = shade;
+              }
+              context.putImageData(pixels, 0, 0);
+            } else if (enhance) enhancePrice(strip);
             const sample = await new Promise(resolve => strip.toBlob(resolve, 'image/png'));
             strip.width = strip.height = 0;
             if (!sample || !current()) return '';
@@ -417,6 +425,26 @@
                 x, y:base.y-.002, w:.042, h:base.h+.004,
               }, false, '0123456789., ')).trim());
               price = reconcileCartDigits([first, second], numeric, drop);
+              if (price == null && drop && (first != null || second != null)) {
+                // In narrow checkout rows the neighbouring gray amount can
+                // reach the numeric crop. Re-read only the coloured digits.
+                const masked = await output(base, false, '0123456789CA$S., ', true);
+                const confirmed = cartPrice(masked, { allowShortPrefix: true });
+                if (confirmed != null && (confirmed === first || confirmed === second)) price = confirmed;
+                if (price == null && first != null && second != null && first !== second) {
+                  const votes = new Map();
+                  for (const [left, top, bottom] of [[.018, .0016, .0016], [.020, .0023, .0016], [.022, 0, .0016]]) {
+                    const w = base.w - left - .005, h = base.h - top - bottom;
+                    if (w <= 0 || h <= 0) continue;
+                    const region = { x: base.x + left, y: base.y + top, w, h };
+                    const reading = await output(region, false, '0123456789CA$S., ', false, 8);
+                    const candidate = cartPrice(reading, { allowShortPrefix: true }) ??
+                      (/^\d{1,3}[.,]\d{2}$/.test(reading.trim()) ? Number(reading.trim().replace(',', '.')) : null);
+                    if (candidate === first || candidate === second) votes.set(candidate, (votes.get(candidate) || 0) + 1);
+                  }
+                  price = [...votes].find(([, count]) => count >= 2)?.[0] ?? null;
+                }
+              }
             }
             if (price == null && first == null && !lowest) {
               // Accept a complete decimal only when the isolated current-price
@@ -498,6 +526,56 @@
     return rows;
   }
 
+
+  async function normalizedPhotoRegion(source, region, max = 2300) {
+    const bitmap = await decodeWishPhoto(source);
+    let canvas;
+    try {
+      canvas = drawWishPhoto(bitmap, max, region, 3, 12);
+      const ctx = canvas.getContext('2d');
+      const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      let dark = 0, samples = 0;
+      for (let y = 18; y < canvas.height - 12; y += 13) {
+        for (let x = 18; x < canvas.width - 12; x += 17) {
+          const i = (y * canvas.width + x) * 4;
+          if (pixels[i] + pixels[i + 1] + pixels[i + 2] < 360) dark++;
+          samples++;
+        }
+      }
+      ctx.filter = (dark > samples / 2 ? 'invert(1) ' : '') + 'grayscale(1) contrast(1.2)';
+      ctx.drawImage(canvas, 0, 0);
+      return await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    } finally {
+      bitmap.close?.();
+      if (canvas) canvas.width = canvas.height = 0;
+    }
+  }
+
+  async function readDetailColumn(source, reading, url, recognize, current) {
+    const initial = WishPhotoList.readItemDetails(reading, url);
+    const boxes = WishPhotoList.detailPriceBoxes(reading);
+    if (boxes.length < 2 || !current()) return initial;
+    const x0 = Math.min(...boxes.map(box => box.x0));
+    const height = Math.max(...boxes.map(box => box.y1 - box.y0));
+    // Keep separate price columns intact. A single aligned column can be
+    // read without thumbnails, icons, or text from adjacent panes.
+    if (Math.max(...boxes.map(box => box.x0)) - x0 > height * 1.5) return initial;
+    const bitmap = await decodeWishPhoto(source);
+    const width = bitmap.naturalWidth ?? bitmap.width;
+    const fullHeight = bitmap.naturalHeight ?? bitmap.height;
+    bitmap.close?.();
+    const x = Math.max(0, x0 - height * 1.4) / width;
+    const top = Math.max(0, Math.min(...boxes.map(box => box.y0)) - height * 15) / fullHeight;
+    const bottom = Math.min(fullHeight, Math.max(...boxes.map(box => box.y1)) + height * 2) / fullHeight;
+    if (x >= .8 || bottom <= top) return initial;
+    const cropped = await normalizedPhotoRegion(source, { x, y: top, w: 1 - x, h: bottom - top }, 2700);
+    if (!cropped || !current()) return initial;
+    const reviewed = await recognize(cropped, undefined, { tessedit_pageseg_mode: '6' }, { layout: true });
+    const alternate = WishPhotoList.readItemDetails(reviewed, url);
+    const score = rows => rows.length + rows.filter(row => row.price != null).length;
+    return alternate.length >= initial.length && score(alternate) >= score(initial) ? alternate : initial;
+  }
+
   async function readWishPhoto(photo, url, recognize, isCurrent) {
     const longPhoto = photo.height >= 1800 && photo.height >= photo.width * 3;
     const checkout = longPhoto ? [] : await recognizeCheckout(photo, url, recognize, isCurrent).catch(() => []);
@@ -505,6 +583,9 @@
     const source = await wishPhotoOcrSource(photo).catch(() => photo.file);
     const first = await recognize(source, undefined, { tessedit_pageseg_mode: '3' }, { layout: true })
       .catch(() => null);
+    const details = await readDetailColumn(source, first, url, recognize, isCurrent)
+      .catch(() => WishPhotoList.readItemDetails(first, url));
+    if (details.length) return { products: details };
     let inspector;
     async function readList(result) {
       if (!result || Number.isFinite(result.confidence) && result.confidence < 45) return [];
@@ -529,8 +610,10 @@
       try {
         const result = await recognize(image, undefined, { tessedit_pageseg_mode: '11' }, { layout: full });
         if (full) {
-          const products = await readList(result);
-          if (products.length > 1) return products;
+          const products = WishPhotoList.readItemDetails(result, url);
+          if (products.length) return products;
+          const structured = await readList(result);
+          if (structured.length > 1) return structured;
         }
         alternatives.push(parse(result));
       } catch {
@@ -556,23 +639,30 @@
     if (isCurrent() && (!primary.title || (primary.price == null && !primary.priceIssue)) &&
         !alternatives.some(result => result.title && result.price != null)) {
       try {
-        const bitmap = await decodeWishPhoto(photo.file);
-        try {
-          const portrait = (bitmap.naturalHeight ?? bitmap.height) > (bitmap.naturalWidth ?? bitmap.width);
-          // Use overlapping halves when text is too small or split among columns.
-          const regions = portrait
-            ? [{ x: 0, y: 0, w: 1, h: .62 }, { x: 0, y: .38, w: 1, h: .62 }]
-            : [{ x: 0, y: 0, w: .62, h: 1 }, { x: .38, y: 0, w: .62, h: 1 }];
-          for (const region of regions) {
-            if (!isCurrent()) break;
-            const canvas = drawWishPhoto(bitmap, 1800, region, 2, 12);
-            const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-            canvas.width = canvas.height = 0;
-            if (blob) await tryRegion(blob);
+        const portrait = photo.height > photo.width;
+        // Use overlapping halves when text is too small or split among columns.
+        const regions = portrait
+          ? [{ x: 0, y: 0, w: 1, h: .62 }, { x: 0, y: .38, w: 1, h: .62 }]
+          : [{ x: 0, y: 0, w: .62, h: 1 }, { x: .38, y: 0, w: .62, h: 1 }];
+        const recovered = [];
+        for (const region of regions) {
+          if (!isCurrent()) break;
+          const blob = await normalizedPhotoRegion(photo.file, region);
+          if (!blob) continue;
+          const reading = await recognize(blob, undefined, { tessedit_pageseg_mode: '11' }, { layout: true }).catch(() => null);
+          if (!reading) continue;
+          const inspectPrice = await wishPhotoPriceInspector(blob).catch(() => null);
+          const structured = WishPhotoList.readItemDetails(reading, url);
+          const found = structured.length ? structured : WishPhotoList.read(reading, url, { inspectPrice });
+          for (const item of found) {
+            const key = photoProductKey(item.title);
+            const index = recovered.findIndex(other => photoProductKey(other.title) === key);
+            if (index < 0) recovered.push(item);
+            else recovered[index] = mergePhotoProduct(recovered[index], [item]);
           }
-        } finally {
-          bitmap.close?.();
+          alternatives.push(parse(reading));
         }
+        if (recovered.length > 1) return { products: recovered };
       } catch {
         // The full-image reading and preview remain available if crops fail.
       }

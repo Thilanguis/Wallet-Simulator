@@ -32,7 +32,7 @@
   const digits = "(?:\\d{1,3}(?:[., '’]\\d{3})+|\\d+)(?:[.,] *\\d{1,2})?";
   const money = () => new RegExp('(' + currencyPrefix + ')\\s*\\$?\\s*(' + digits + ')(?![\\d.,])|(?<![\\d.,])(' + digits + ')\\s*(' + currencySuffix + ')', 'giu');
   const oldLabel = /\b(?:was|original(?: price)?|regular(?: price)?|list price|before|formerly|rrp|msrp|previous price|prix (?:initial|régulier|normal|conseillé)|au lieu de|preço (?:anterior|original|normal|de tabela)|antes|de)\s*[:–—=-]?\s*$/iu;
-  const feeLabel = /\b(?:frete|shipping|delivery|livraison|expédition|entrega|parcelas?|instal+l?ments?|[0-9]+\s*x(?:\s+de)?|subtotal|impostos?|tax(?:es)?|taxas?|économisez|économie|rabais|duty|duties|save|economize|desconto|discount|cashback|a partir de|starting at|from|up to|rewards?)\b/iu;
+  const feeLabel = /\b(?:frete|shipping|delivery|livraison|expédition|entrega|parcelas?|instal+l?ments?|[0-9]+\s*x(?:\s+de)?|subtotal|impostos?|tax(?:es)?|taxas?|économisez|économie|rabais|duty|duties|save|economize|desconto|discount|cashback|a partir de|starting at|from|up to|rewards?|points?|pontos?)\b/iu;
   const currentLabel = /\b(?:sale price|current price|your price|offer price|prix (?:actuel|promotionnel)|maintenant|now|agora|por|à vista|preço (?:atual|promocional)|valor atual|price|preço)\s*[:–—=-]?\s*$/iu;
   const heading = /^(?:nome do produto|produto|product(?: name)?|item)\s*:\s*(.+)$/iu;
   const storeLabel = /^(?:(?:loja|store|seller|vendedor|boutique)\s*:\s*|(?:vendido por|sold by|vendu par)(?:\s*:\s*|\s+))(.+)$/iu;
@@ -194,16 +194,52 @@
     const doc = new DOMParser().parseFromString(text, 'text/html');
     return read(doc, url.hostname, response.url || url.href);
   }
+  function parsePrice(value) {
+    const text = String(value).trim();
+    if (!text) return null;
+    if (!/^\d+(?:[.,]\d+)*$/.test(text)) return NaN;
+    const number = numberFromPhoto(text);
+    return number === null ? NaN : number;
+  }
+
+  function priceInReais(price, currency) {
+    if (price == null || !Number.isFinite(price) || !currency) return '';
+    const real = WishFx.convert(price, currency);
+    return real == null ? 'Cotação indisponível' : (currency === 'BRL' ? '' : '≈ ') +
+      new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(real);
+  }
+
   function bindDefaultStore(input, fields) {
-    const inherited = new WeakMap();
-    function apply(field) {
-      if (!field || (field.value.trim() && field.value !== inherited.get(field))) return;
-      const store = input.value.trim();
-      field.value = store;
-      inherited.set(field, store);
+    let inherited = new WeakMap();
+    function originalValue(field) {
+      const previous = inherited.get(field);
+      return previous?.applied === field.value ? previous.original : field.value;
     }
-    input.addEventListener('input', () => fields().forEach(apply));
-    apply.isInherited = field => inherited.get(field) === field.value;
+    function apply(field, force = false) {
+      if (!field) return;
+      const store = input.value.trim();
+      const previous = inherited.get(field);
+      if (!force && previous) return;
+      const original = originalValue(field);
+      if (store) {
+        inherited.set(field, { original, applied: store });
+        field.value = store;
+      } else if (previous) {
+        inherited.delete(field);
+        field.value = original;
+      }
+    }
+    input.form.addEventListener('reset', () => { inherited = new WeakMap(); });
+    input.addEventListener('input', () => fields().forEach(field => apply(field, true)));
+    apply.originalValue = originalValue;
+    return apply;
+  }
+
+  function bindBatchTax(select, fields) {
+    function apply(field) {
+      if (select.value) field.checked = select.value === 'apply';
+    }
+    select.addEventListener('change', () => fields().forEach(apply));
     return apply;
   }
 
@@ -301,5 +337,5 @@
     section.append(actions, status);
     return section;
   }
-  return { store, read, readLink, imageUrl, savedImageUrl, readPhotoText, normalizePhotoLine, photoLimit, batchLinkField, updateLinkAction, bindDefaultStore };
+  return { store, read, readLink, imageUrl, savedImageUrl, readPhotoText, normalizePhotoLine, photoLimit, batchLinkField, updateLinkAction, bindDefaultStore, bindBatchTax, parsePrice, priceInReais };
 });

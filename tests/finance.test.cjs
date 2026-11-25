@@ -186,3 +186,13 @@ test('moving rows preserves values and IDs, recalculates categories and audits s
   protectedState.entries[0].redemptionId = 'legacy';
   assert.throws(() => F.update(protectedState, { type: 'move', ids: ['b'], category: F.categories[7] }));
 });
+
+test('receipts retain explicit USD and interpret the Canadian price and unqualified dollar symbol as CAD', () => {
+  const Receipt = require('../js/receipt.js');
+  for (const total of ['CA$ 12,34', 'CAD 12.34', '$12.34']) {
+    const { entry } = Receipt.suggest('Loja Boreal\nTotal pago ' + total);
+    assert.equal(entry.currency, 'CAD');
+    assert.equal(entry.amount, 1234);
+  }
+  assert.equal(Receipt.suggest('Loja Boreal\nTotal pago US$12.34').entry.currency, 'USD');
+});

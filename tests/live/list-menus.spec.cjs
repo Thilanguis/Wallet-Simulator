@@ -2,7 +2,7 @@ const {test,expect}=require('../firebase-fixture.cjs');
 for(const width of [1440,393]) test(`list menus ${width} preserve totals and open editors on demand`,async({page})=>{
  await page.setViewportSize({width,height:1000});await page.goto('/');await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
  await page.locator('[data-panel=wishlistPanel]').click();await expect(page.locator('#wishForm')).toBeHidden();await page.locator('#wishEditor > summary').click();
- await page.locator('#wishUrl').fill('https://example.invalid/product');await page.locator('#wishTitle').fill('Desejo teste');await page.locator('#wishStore').fill('Loja teste');await page.locator('#wishPrice').fill('25');await page.locator('#wishSave').click();
+ await page.locator('#wishUrl').fill('https://example.invalid/product');await page.locator('#wishTitle').fill('Desejo teste');await page.locator('#wishStore').fill('Loja teste');await page.locator('#wishPrice').fill('25');await page.locator('#wishCurrency').selectOption('BRL');await page.locator('#wishSave').click();
  await expect(page.locator('#wishForm')).toBeHidden();await page.locator('#wishSelectAllPurchase').check();await expect(page.locator('#wishTotal')).toContainText('25,00');await expect(page.locator('.wish-group-total')).toContainText('25,00');
  await page.getByRole('button',{name:'Editar Desejo teste',exact:true}).click();await expect(page.locator('#wishForm')).toBeVisible();await page.locator('#wishCancel').click();await page.locator('#wishEditor > summary').click();
  await page.screenshot({path:'.local/wishlist-menus-'+width+'.png'});

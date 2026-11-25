@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { read } = require('../js/wishlist-photo-list.js');
+const { read, readItemDetails } = require('../js/wishlist-photo-list.js');
 
 function line(text, x, y, width = Math.max(48, text.length * 9), height = 22) {
   return { text, bbox: {x0: x, y0: y, x1: x + width, y1: y + height}, confidence: 94 };
@@ -181,4 +181,25 @@ test('repeated price columns keep staggered titles and prices in their own cards
     ['Cotton Travel Pouch', 29.75],
     ['Vanilla Candle Glass Jar', 37.2],
   ]));
+});
+
+test('detail rows keep the unit amount, zero and quantity across different labels', () => {
+  const lowConfidence = (text, y) => ({ ...line(text, 20, y, 75, 18), confidence: 21 });
+  const rows = readItemDetails({ lines: [
+    line('Moeda: CAD', 20, 3),
+    line('Repair Kit', 20, 44), line('Travel Edition', 20, 68),
+    line('ITEM 1234876', 20, 94),
+    lowConfidence('Qty: 3', 120), line('Price: $12.50', 20, 145), line('$37.50', 520, 145),
+    line('Oat Cream Sample', 20, 210),
+    line('SKU 3679876', 20, 234), line('Final Sale: No returns', 20, 260),
+    lowConfidence('Quantité: 1', 285), line('Prix unitaire : S0.00 $0.00', 20, 310),
+    line('Hibiscus Gift Set', 20, 380), line('Código: 5678987', 20, 407),
+    lowConfidence('Qtd: 2', 433), line('Preço unitário: não legível', 20, 458),
+    line('Total CAD 37.50', 20, 510),
+  ] });
+  assert.deepEqual(rows.map(({title, price, currency, quantity}) => [title, price, currency, quantity]), [
+    ['Repair Kit Travel Edition', 12.50, 'CAD', 3],
+    ['Oat Cream Sample', 0, 'CAD', 1],
+    ['Hibiscus Gift Set', null, null, 2],
+  ]);
 });

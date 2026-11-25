@@ -111,7 +111,7 @@ window.UIFeedback = (() => {
   }
   function wishes(ids, bought = true) {
     const selected = new Set(ids);
-    if (bought && document.getElementById('wishHideBought')?.checked)
+    if (bought && !document.getElementById('wishShowBought')?.checked)
       [...document.querySelectorAll('#wishList [data-wish-id]')]
         .filter((row) => selected.has(row.dataset.wishId))
         .slice(0, 12)

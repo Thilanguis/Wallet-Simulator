@@ -108,3 +108,20 @@ test('history mirror identity survives prepending another record; records withou
   next.simulator.historico = JSON.stringify([{ id: 'new', descricao: 'Novo', tipo: 'ganho', valor: 4 }, ...JSON.parse(doc.simulator.historico)]);
   assert.deepEqual([...Primary.records(next).historico.keys()].slice(1), ids);
 });
+
+test('a large wishlist stores a repeated JPEG once and restores all items and attachments', () => {
+  const Cloud = require('../js/cloud-sync.js');
+  const photo = 'data:image/jpeg;base64,/' + 'a'.repeat(13000);
+  const wishes = Array.from({ length: 55 }, (_, index) => ({ id: 'wish-' + index, title: 'Produto ' + index, imageUrl: photo, person: 'Luana' }));
+  wishes.push({ id: 'remote', title: 'Imagem da loja', imageUrl: 'https://example.invalid/product.jpg' });
+  wishes.push({ id: 'no-photo', title: 'Sem foto' });
+  const wallet = { simulator: { wishlist: JSON.stringify(wishes) }, financeJson: JSON.stringify(Finance.empty()) };
+  assert.throws(() => Cloud.assertFits(wallet), /excedeu o tamanho/);
+  const compact = Primary.compactWishlist(wallet);
+  assert.deepEqual(compact.wishlistImages, [photo]);
+  assert.doesNotThrow(() => Cloud.assertFits(compact));
+  assert.deepEqual(Primary.expandWishlist(compact), wallet);
+  assert.equal(Primary.expandWishlist(wallet), wallet);
+  const afterRemoval = { ...wallet, simulator: { wishlist: JSON.stringify(wishes.slice(1)) } };
+  assert.deepEqual(Primary.expandWishlist(Primary.compactWishlist(afterRemoval)), afterRemoval);
+});

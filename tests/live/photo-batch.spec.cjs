@@ -360,7 +360,7 @@ test('reads unknown storefronts in different layouts and keeps a print with no v
   for (const [index, title, store, price, currency] of [
     [0, 'Cedar Trail Backpack', 'Arcolume', '149', 'CAD'],
     [1, 'Vaso Horizonte', 'Casa Bruma', '199.9', 'BRL'],
-    [2, 'Linen Studio Apron', 'Harbor Form', '', 'BRL'],
+    [2, 'Linen Studio Apron', 'Harbor Form', '', 'CAD'],
   ]) {
     const row = rows.nth(index);
     await expect(row.locator('[data-field=title]')).toHaveValue(title);
@@ -815,18 +815,34 @@ test('wallet saves each imported product link and restores it in the editor', as
   const newUrl = 'https://loja.example.invalid/novo-jeans';
   await page.getByRole('button', { name: 'Editar Denim Jeans' }).click();
   await page.locator('#wishUrl').fill(newUrl);
+  await page.locator('#wishPrice').fill('12,34');
   await page.locator('#wishSave').click();
+  const check = page.getByRole('checkbox', { name: 'Selecionar para compra: Denim Jeans' });
+  await check.evaluate(checkbox => {
+    window.dispatchEvent(new Event('wallet:remote'));
+    if (!checkbox.isConnected) throw new Error('O checkbox foi substituído durante a atualização');
+  });
+  await check.click();
+  await expect(check).toBeChecked();
   await expect(page.getByRole('link', { name: 'Denim Jeans' })).toHaveAttribute('href', newUrl);
   await expect(page.getByRole('link', { name: 'Linen Shirt' })).toHaveAttribute('href', links[0]);
 });
 
-test('wallet adds products manually and updates only stores inherited from the default', async ({ page }) => {
+test('wallet applies person, store and Quebec taxes to all draft products', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
   await page.locator('[data-panel=wishlistPanel]').click();
   await page.locator('#wishEditor > summary').click();
+  await page.evaluate(async () => {
+    AppStorage.setItem('wishlistPeople', JSON.stringify([{ id: 'bruna', name: 'Bruna' }]));
+    AppStorage.flush();
+    await SharedWallet.flush();
+    window.dispatchEvent(new Event('wallet:remote'));
+  });
   const shop = page.getByLabel('Loja padrão');
+  const lotPerson = page.locator('#wishPerson');
+  await lotPerson.selectOption('Bruna');
   await shop.fill('Loja inicial');
   await page.locator('#wishTitle').fill('Produto inicial');
   await expect(page.locator('#wishStore')).toHaveValue('Loja inicial');
@@ -834,23 +850,217 @@ test('wallet adds products manually and updates only stores inherited from the d
   await add.click();
   const rows = page.locator('#wishBatchRows .preview-row');
   await expect(rows).toHaveCount(2);
+  const person = index => rows.nth(index).locator('[data-field=person]');
+  await expect(person(0)).toHaveValue('Bruna');
+  await expect(person(1)).toHaveValue('Bruna');
+  await person(1).selectOption('Dominadora');
+  await page.getByRole('button', { name: 'Aplicar a todos', exact: true }).click();
+  await expect(person(1)).toHaveValue('Bruna');
+  await page.getByLabel('Para quem no lote?').selectOption('');
+  await page.locator('#wishPersonName').fill('Camila');
+  await expect(person(0)).toHaveValue('');
+  await expect(person(1)).toHaveValue('');
+  await expect(rows.nth(0).getByLabel('Nome da pessoa')).toHaveValue('Camila');
+  await expect(rows.nth(1).getByLabel('Nome da pessoa')).toHaveValue('Camila');
   await rows.nth(1).locator('[data-field=title]').fill('Produto de outra loja');
   await rows.nth(1).locator('[data-field=store]').fill('Loja particular');
   await shop.fill('Loja revisada');
   await expect(rows.first().locator('[data-field=store]')).toHaveValue('Loja revisada');
-  await expect(rows.nth(1).locator('[data-field=store]')).toHaveValue('Loja particular');
+  await expect(rows.nth(1).locator('[data-field=store]')).toHaveValue('Loja revisada');
+  const taxes = page.getByLabel('Taxas do Québec no lote');
+  await taxes.selectOption('apply');
   await add.click();
+  await expect(rows.last().locator('[data-field=taxQuebec]')).toBeChecked();
   await expect(rows.last().locator('[data-field=store]')).toHaveValue('Loja revisada');
   await rows.last().locator('[data-field=title]').fill('Produto adicional');
   const files = await photos(page, [['Pandora', 'Bracelet from photo', 'R$ 12,00']]);
   await page.locator('#wishUpload').setInputFiles(files);
   await expect(page.locator('#wishPhotoLoading')).toBeHidden({ timeout: 45000 });
   await expect(rows).toHaveCount(4);
+  await expect(rows.last().getByLabel('Nome da pessoa')).toHaveValue('Camila');
+  await expect(rows.last().locator('[data-field=store]')).toHaveValue('Loja revisada');
+  await shop.clear();
   await expect(rows.last().locator('[data-field=store]')).toHaveValue('Pandora');
+  const include = rows.last().locator('.row-title input');
+  await include.uncheck();
   await shop.fill('Loja final');
-  await expect(rows.first().locator('[data-field=store]')).toHaveValue('Loja final');
-  await expect(rows.nth(1).locator('[data-field=store]')).toHaveValue('Loja particular');
-  await expect(rows.last().locator('[data-field=store]')).toHaveValue('Pandora');
+  await expect(rows.locator('[data-field=store]').evaluateAll(fields => fields.map(field => field.value)))
+    .resolves.toEqual(Array(4).fill('Loja final'));
+  await expect(rows.last().locator('[data-field=taxQuebec]')).toBeChecked();
+  await taxes.selectOption('remove');
+  await expect(rows.last().locator('[data-field=taxQuebec]')).not.toBeChecked();
+  await include.check();
+  await rows.nth(1).locator('[data-field=store]').fill('Loja particular');
+  await rows.nth(1).locator('[data-field=taxQuebec]').check();
+  await person(1).selectOption('Bruna');
+  await expect(rows.nth(1).getByLabel('Nome da pessoa')).toBeHidden();
+  await rows.nth(2).getByLabel('Nome da pessoa').clear();
+  await page.locator('#wishSave').click();
+  await expect(rows.nth(2).getByLabel('Nome da pessoa')).toHaveAttribute('aria-invalid', 'true');
+  await rows.nth(2).getByLabel('Nome da pessoa').fill('Bia');
   await page.locator('#wishSave').click();
   await expect(page.locator('#wishList [data-wish-id]')).toHaveCount(4);
+  const saved = await page.evaluate(() => ({
+    wishes: JSON.parse(AppStorage.getItem('wishlist')),
+    roster: JSON.parse(AppStorage.getItem('wishlistPeople')),
+  }));
+  expect(saved.wishes.map(({ store, taxQuebec, person }) => [store, taxQuebec, person])).toEqual([
+    ['Loja final', false, 'Camila'], ['Loja particular', true, 'Bruna'],
+    ['Loja final', false, 'Bia'], ['Loja final', false, 'Camila'],
+  ]);
+  expect(saved.roster).toHaveLength(3);
+  for (const { person, personId } of saved.wishes) expect(saved.roster.find(entry => entry.name === person)?.id).toBe(personId);
+  await page.reload();
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  await page.locator('[data-panel=wishlistPanel]').click();
+  for (const [name, title] of [['Camila', 'Bracelet from photo'], ['Bruna', 'Produto de outra loja'], ['Bia', 'Produto adicional']]) {
+    const group = page.locator('.wish-group').filter({ has: page.getByRole('heading', { name, exact: true }) });
+    await expect(group).toContainText(title);
+  }
+});
+
+for (const dark of [true, false]) {
+  test('reads unit prices and samples in an order email in ' + (dark ? 'dark' : 'light') + ' mode', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+    await page.locator('[data-panel=wishlistPanel]').click();
+    await page.locator('#wishEditor > summary').click();
+    const print = await page.evaluate(({ dark }) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 560;
+      canvas.height = 740;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = dark ? '#333437' : '#f1f3f7';
+      ctx.fillRect(0, 0, 560, 740);
+      ctx.fillStyle = dark ? '#171717' : '#fff';
+      ctx.fillRect(24, 100, 512, 560);
+      ctx.font = 'bold 20px Arial';
+      ctx.fillStyle = dark ? '#ededed' : '#262626';
+      ctx.fillText('Order confirmation', 38, 58);
+      for (const [index, [brand, name, qty, price, total]] of [
+        ['Atelier Rose', 'Peptide Recovery Kit', 3, '12.50', '37.50'],
+        ['Luna Care', 'Hydrating Cream Sample', 1, '0.00', '0.00'],
+        ['North Shore', 'Daily Cleansing Duo', 2, '28.30', '56.60'],
+      ].entries()) {
+        const y = 148 + index * 166;
+        const x = dark ? 188 : 115;
+        ctx.fillStyle = index % 2 ? '#abc4bf' : '#d3b9ae';
+        ctx.fillRect(37, y - 17, 65, 77);
+        ctx.fillStyle = dark ? '#f2f2f2' : '#191919';
+        ctx.font = 'bold 17px Arial';
+        ctx.fillText(brand, x, y);
+        ctx.font = '17px Arial';
+        ctx.fillText(name, x, y + 23);
+        ctx.fillStyle = dark ? '#a7a7a7' : '#676767';
+        ctx.font = '13px Arial';
+        ctx.fillText('ITEM ' + (3030657 + index), x, y + 43);
+        ctx.fillStyle = dark ? '#f2f2f2' : '#191919';
+        ctx.font = '14px Arial';
+        ctx.fillText('Qty: ' + qty, x, y + 65);
+        ctx.fillText('Price: $' + price, x, y + 86);
+        ctx.fillText('$' + total, 450, y + 86);
+        ctx.fillStyle = dark ? '#555' : '#bbb';
+        ctx.fillRect(32, y + 114, 485, 1);
+      }
+      return canvas.toDataURL('image/jpeg', dark ? .68 : .9).split(',')[1];
+    }, { dark });
+    await page.locator('#wishUpload').setInputFiles({
+      name: 'pedido-email.jpg', mimeType: 'image/jpeg', buffer: Buffer.from(print, 'base64'),
+    });
+    const rows = page.locator('#wishBatchRows .preview-row');
+    await expect(rows).toHaveCount(3, { timeout: 45000 });
+    for (const [index, [name, price, qty]] of [
+      ['Peptide Recovery Kit', '12.5', '3'], ['Hydrating Cream Sample', '0', '1'], ['Daily Cleansing Duo', '28.3', '2'],
+    ].entries()) {
+      await expect(rows.nth(index).locator('[data-field=title]')).toHaveValue(new RegExp(name, 'i'));
+      await expect(rows.nth(index).locator('[data-field=price]')).toHaveValue(price);
+      await expect(rows.nth(index).locator('[data-field=currency]')).toHaveValue('CAD');
+      await expect(rows.nth(index).locator('[data-field=quantity]')).toHaveValue(qty);
+    }
+  });
+}
+
+test('saved photo batch waits for Firebase and remains selectable and editable after reload', async ({ page }) => {
+  let stored, holdNextWrite = true, rejectNextWish = false, releaseWrite, beginWrite;
+  const writeStarted = new Promise(resolve => { beginWrite = resolve; });
+  const held = new Promise(resolve => { releaseWrite = resolve; });
+  await page.route('**/js/firebase-primary-transport.js', route => route.fulfill({
+    contentType: 'text/javascript',
+    body: [
+      'export async function createPrimaryFirebaseTransport({user}) {',
+      '  const initial = {...WalletCloud.pack(WalletStore.snapshot()),schema:3,revision:1,controller:"",leaseUntil:0,financeImportOpen:false};',
+      '  async function request(body) { const response = await fetch("/__test_wish_wallet", {method:"POST",body:JSON.stringify(body)}); return response.json(); }',
+      '  let current = await request({initial}), receive;',
+      '  return {uid:user.uid, watch(fn) { receive=fn; queueMicrotask(()=>fn(structuredClone(current))); return ()=>{receive=null}; },',
+      '    async transact(change) { current = await request({next:change(structuredClone(current))}); queueMicrotask(()=>receive?.(structuredClone(current))); return structuredClone(current); }};',
+      '}',
+    ].join('\n'),
+  }));
+  await page.route('**/__test_wish_wallet', async route => {
+    const { initial, next } = route.request().postDataJSON();
+    stored ||= initial;
+    if (next) {
+      if (rejectNextWish && next.simulator.wishlist?.includes('Rascunho de erro')) {
+        await route.abort();
+        return;
+      }
+      if (holdNextWrite && next.simulator.wishlist) {
+        holdNextWrite = false;
+        beginWrite();
+        await held;
+      }
+      stored = next;
+    }
+    await route.fulfill({ json: stored });
+  });
+  await page.goto('/');
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  await page.locator('[data-panel=wishlistPanel]').click();
+  const editor = page.locator('#wishEditor');
+  await editor.locator('summary').click();
+  await page.locator('#wishUpload').setInputFiles(await photos(page, [
+    ['Example Shop', 'Gift Lotion', 'CA$ 12.50'], ['Example Shop', 'Gold Sample', 'CA$ 0.00'],
+  ]));
+  await expect(page.locator('#wishPhotoLoading')).toBeHidden({ timeout: 45000 });
+  const row = editor.locator('.preview-row');
+  await expect(row).toHaveCount(2);
+  await page.getByLabel('Loja padrão').fill('Loja da compra');
+  await editor.locator('#wishSave').click();
+  await writeStarted;
+  try {
+    await expect(editor).toHaveAttribute('open', '');
+    await expect(editor.locator('#wishSave')).toBeDisabled();
+    await expect(page.locator('#wishList [data-wish-id]')).toHaveCount(0);
+  } finally {
+    releaseWrite();
+  }
+  await expect(editor).not.toHaveAttribute('open', '');
+  await expect(page.locator('#wishList [data-wish-id]')).toHaveCount(2);
+  const firstCheck = page.getByRole('checkbox', { name: 'Selecionar para compra: Gift Lotion' });
+  await firstCheck.check();
+  await expect(firstCheck).toBeChecked();
+  await page.getByRole('button', { name: 'Editar Gift Lotion' }).click();
+  await expect(editor.locator('#wishPrice')).toHaveValue('12.5');
+  await editor.locator('summary').click();
+  const persisted = JSON.parse(stored.simulator.wishlist);
+  expect(persisted.map(item => item.originalPrice)).toEqual([12.5, 0]);
+  await page.reload();
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  await page.locator('[data-panel=wishlistPanel]').click();
+  const check = page.getByRole('checkbox', { name: 'Selecionar para compra: Gold Sample' });
+  await check.check();
+  await expect(check).toBeChecked();
+  await page.getByRole('button', { name: 'Editar Gold Sample' }).click();
+  await expect(editor.locator('#wishPrice')).toHaveValue('0');
+  await editor.locator('#wishTitle').fill('Gold Sample atualizado');
+  await editor.locator('#wishSave').click();
+  await expect(editor).not.toHaveAttribute('open', '');
+  expect(JSON.parse(stored.simulator.wishlist).map(item => item.title)).toContain('Gold Sample atualizado');
+  rejectNextWish = true;
+  await page.getByRole('button', { name: 'Editar Gold Sample atualizado' }).click();
+  await editor.locator('#wishTitle').fill('Rascunho de erro');
+  await editor.locator('#wishSave').click();
+  await expect(editor.locator('#wishSaveError')).toContainText('Firebase ainda não confirmou o salvamento');
+  await expect(editor.locator('#wishTitle')).toHaveValue('Rascunho de erro');
+  expect(stored.simulator.wishlist).not.toContain('Rascunho de erro');
 });

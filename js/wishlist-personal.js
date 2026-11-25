@@ -1,48 +1,37 @@
-import { showWishlistPeople, renderReadonlyWishlist, mountWishlistShortcuts } from './wishlist-people.js';
+import { showWishlistPeople, mountWishlistShortcuts } from './wishlist-people.js';
 import { googleAuth } from './firebase-google-auth.js';
-import { openWishlistAccess } from './wishlist-access.js';
+import { openPersonalWishlist } from './wishlist-personal-store.js';
 
 const $ = (id) => document.getElementById(id);
 const selection = new Set();
-const personalPage = new URLSearchParams(location.search).has('pessoal');
-let giftItems = [];
-let session, access, stopAccount, stopList, stopShortcuts;
-let generation = 0, listGeneration = 0, requestGeneration = -1;
-let state, personId, listName, items = [], itemChecks = new Map(), canManagePurchased = false;
-const canManageItem = item => !item.bought || canManagePurchased;
+let session, access, stopAccess, stopList, stopShortcuts;
+let generation = 0, listGeneration = 0;
+let state, personId, listName, items = [], itemChecks = new Map();
 
 const notices = {
   loading: ['Conferindo seu acesso', ''],
   login: ['Entre para ver sua lista', 'Use sua conta Google para acessar a Lista de Desejos.'],
-  request: ['Solicite acesso à lista', 'O acesso fica disponível após a aprovação.'],
-  pending: ['Solicitação enviada', 'Aguarde a aprovação para acessar sua Lista de Desejos.'],
   blocked: ['Acesso indisponível', 'Esta conta não tem acesso à Lista de Desejos.'],
-  wallet: ['Sua lista está na carteira', 'Entre na carteira para abrir a Lista de Desejos.'],
-  unavailable: ['Lista de Desejos indisponível', 'Não foi possível conferir o acesso.'],
   error: ['Não foi possível abrir a lista', 'Verifique a conexão e tente novamente.'],
 };
 
 function show(next, message) {
   state = next;
-  $('guestAccess').hidden = next === 'list';
-  $('guestWishlist').hidden = next !== 'list';
-  $('guestHeadingActions').hidden = next !== 'list';
-  $('guestGifts').hidden = next !== 'list' || !giftItems.length;
-  $('guestSignIn').hidden = next !== 'login';
-  $('guestRequest').hidden = next !== 'request';
-  $('guestRequest').disabled = requestGeneration === generation;
-  $('guestRetry').hidden = !['error', 'unavailable'].includes(next);
-  $('guestWalletLink').hidden = next !== 'wallet';
+  $('personalAccess').hidden = next === 'list';
+  $('personalWishlist').hidden = next !== 'list';
+  $('personalHeadingActions').hidden = next !== 'list';
+  $('personalSignIn').hidden = next !== 'login';
+  $('personalRetry').hidden = next !== 'error';
   if (notices[next]) {
     const [title, caption] = notices[next];
-    $('guestAccessTitle').textContent = title;
-    $('guestAccessStatus').textContent = message ?? caption;
+    $('personalAccessTitle').textContent = title;
+    $('personalAccessStatus').textContent = message ?? caption;
   }
 }
 
 function clearShare() {
-  $('guestShareFeedback').textContent = '';
-  const field = $('guestShareText');
+  $('personalShareFeedback').textContent = '';
+  const field = $('personalShareText');
   field.value = '';
   field.hidden = true;
 }
@@ -54,25 +43,21 @@ function clearList() {
   stopShortcuts?.();
   stopShortcuts = null;
   personId = null;
-  canManagePurchased = false;
   closeEditor();
   closeDelete();
   closePurchase();
   document.querySelector('#wishCircleDialog[open]')?.close();
-  giftItems = [];
-  $('guestGiftItems').replaceChildren();
-  $('guestGifts').hidden = true;
   listName = '';
   items = [];
   selection.clear();
-  $('guestHideBought').checked = false;
+  $('personalHideBought').checked = false;
   itemChecks.clear();
-  $('guestWishTitle').textContent = 'Seus desejos';
-  $('guestWishCount').textContent = '';
-  $('guestWishItems').replaceChildren();
+  $('personalWishTitle').textContent = 'Seus desejos';
+  $('personalWishCount').textContent = '';
+  $('personalWishItems').replaceChildren();
   clearShare();
   updateSelection();
-  $('guestWishlist').hidden = true;
+  $('personalWishlist').hidden = true;
 }
 
 function quantity(item) {
@@ -83,20 +68,21 @@ function priceLabel(item) {
   const { originalPrice, currency } = item;
   if (!Number.isFinite(originalPrice) || originalPrice < 0 || !/^[A-Z]{3}$/.test(currency)) return 'Preço não informado';
   const value = new Intl.NumberFormat('pt-BR', { style: 'currency', currency, currencyDisplay: 'code' }).format(originalPrice);
-  return quantity(item) > 1 ? value + ' por unidade' : value;
+  const equivalent = currency === 'BRL' ? '' : WishProduct.priceInReais(originalPrice, currency);
+  return value + (equivalent && equivalent !== 'Cotação indisponível' ? ' · ' + equivalent : '') + (quantity(item) > 1 ? ' por unidade' : '');
 }
 
 function updateSelection() {
   const count = selection.size;
-  const all = $('guestSelectAll');
+  const all = $('personalSelectAll');
   const visibleCount = itemChecks.size;
   all.checked = visibleCount > 0 && count === visibleCount;
   all.indeterminate = count > 0 && count < visibleCount;
-  $('guestSelectAllLabel').hidden = !visibleCount;
-  $('guestShareActions').hidden = !visibleCount;
-  $('guestCopy').disabled = !count;
-  $('guestShare').disabled = !count;
-  $('guestWishCount').textContent = !items.length ? 'Sua lista está vazia.'
+  $('personalSelectAllLabel').hidden = !visibleCount;
+  $('personalShareActions').hidden = !visibleCount;
+  $('personalCopy').disabled = !count;
+  $('personalShare').disabled = !count;
+  $('personalWishCount').textContent = !items.length ? 'Sua lista está vazia.'
     : !visibleCount ? 'Nenhum desejo a comprar.'
       : visibleCount + (visibleCount === 1 ? ' item' : ' itens') + (count ? ' · ' + count + (count === 1 ? ' selecionado' : ' selecionados') : '');
 }
@@ -104,16 +90,15 @@ function updateSelection() {
 function renderList(list) {
   listName = typeof list?.name === 'string' ? list.name.trim() : '';
   items = Array.isArray(list?.items) ? list.items.filter(item => typeof item?.id === 'string' && typeof item.title === 'string') : [];
-  giftItems = Array.isArray(list?.gifts) ? list.gifts : [];
-  renderReadonlyWishlist($('guestGiftItems'), giftItems);
   closeDisallowedDrafts();
-  $('guestWishTitle').textContent = listName || 'Seus desejos';
+  $('personalWishTitle').textContent = listName || 'Seus desejos';
   renderPersonalItems();
   show('list');
+  void WishFx.refresh();
 }
 
 function renderPersonalItems() {
-  const visible = $('guestHideBought').checked ? items.filter(item => !item.bought) : items;
+  const visible = $('personalHideBought').checked ? items.filter(item => !item.bought) : items;
   const ids = new Set(visible.map(item => item.id));
   for (const id of selection) if (!ids.has(id)) selection.delete(id);
   itemChecks = new Map();
@@ -132,12 +117,12 @@ function renderPersonalItems() {
       group.append(heading);
     }
     const rows = document.createElement('ul');
-    rows.className = 'guest-list';
+    rows.className = 'personal-list';
     rows.append(...storeItems.map(renderItem));
     group.append(rows);
     return group;
   });
-  $('guestWishItems').replaceChildren(...groups);
+  $('personalWishItems').replaceChildren(...groups);
   clearShare();
   updateSelection();
 }
@@ -146,7 +131,7 @@ function renderItem(item) {
   const row = document.createElement('li');
   row.className = 'wish-row';
   const label = document.createElement('label');
-  label.className = 'guest-item-select';
+  label.className = 'personal-item-select';
   const check = document.createElement('input');
   check.type = 'checkbox';
   check.checked = selection.has(item.id);
@@ -158,7 +143,7 @@ function renderItem(item) {
   };
   itemChecks.set(item.id, check);
   const name = document.createElement('span');
-  name.className = 'guest-item-name';
+  name.className = 'personal-item-name';
   const title = document.createElement('span');
   title.classList.toggle('is-bought', Boolean(item.bought));
   title.textContent = item.title;
@@ -167,13 +152,14 @@ function renderItem(item) {
     item.taxQuebec ? 'Taxas do Québec à parte' : ''].filter(Boolean).join(' · ');
   if (caption) {
     const detail = document.createElement('span');
-    detail.className = 'guest-item-meta';
+    detail.className = 'personal-item-meta';
     detail.textContent = caption;
     name.append(detail);
   }
   label.append(check, name);
   const price = document.createElement('span');
   price.className = 'wish-row-price';
+  price.dataset.wishPriceId = item.id;
   price.textContent = priceLabel(item);
   const attachment = readAttachment(item.id);
   if (attachment.imageUrl) {
@@ -191,75 +177,24 @@ function renderItem(item) {
     productLink.href = savedUrl;
     productLink.target = '_blank';
     productLink.rel = 'noopener noreferrer';
-    productLink.className = 'guest-item-meta';
+    productLink.className = 'personal-item-meta';
     productLink.textContent = 'Abrir produto';
     name.append(productLink);
   }
   row.append(label, price);
   const actions = document.createElement('div');
-  actions.className = 'guest-item-actions';
+  actions.className = 'personal-item-actions';
   const purchaseAction = item.bought ? 'Desfazer compra' : 'Marcar como comprado';
   actions.append(itemAction(purchaseAction, item, () => openPurchase(item)));
-  if (canManageItem(item)) actions.append(itemAction('Editar', item, () => openEditor(item)), itemAction('Excluir', item, () => openDelete(item)));
+  actions.append(itemAction('Editar', item, () => openEditor(item)), itemAction('Excluir', item, () => openDelete(item)));
   row.append(actions);
   return row;
 }
 
-function setAccount(account, attempt) {
-  if (attempt !== generation) return;
-  const role = account?.role;
-  const staffPersonal = personalPage && ['admin', 'coadmin'].includes(role);
-  const linked = staffPersonal ? access.profile : role === 'guest' && account.personId;
-  $('guestBackToWallet').hidden = !staffPersonal;
-  if (typeof linked === 'string' && linked) {
-    const allowed = staffPersonal || account.canManagePurchased === true;
-    if (personId === linked) {
-      if (canManagePurchased !== allowed) {
-        canManagePurchased = allowed;
-        if (state === 'list') renderList({ name: listName, items, gifts: giftItems });
-      }
-      return;
-    }
-    clearList();
-    personId = linked;
-    canManagePurchased = allowed;
-    show('loading');
-    const listAttempt = listGeneration;
-    const current = () => attempt === generation && listAttempt === listGeneration;
-    const stop = access.watchList(personId, (data) => {
-      if (!current()) return;
-      if (data) renderList(data);
-      else {
-        clearList();
-        show('unavailable', 'A lista vinculada ainda não está disponível.');
-      }
-    }, () => {
-      if (!current()) return;
-      clearList();
-      show('error');
-    }, staffPersonal && linked !== 'primary-luana' ? '' : linked);
-    if (current()) {
-      stopList = stop;
-      if (access.sharing) {
-        const linkedPerson = personId;
-        stopShortcuts = mountWishlistShortcuts(() => access.sharing(linkedPerson));
-      }
-    } else stop?.();
-    return;
-  }
-  clearList();
-  if (role === 'admin' || role === 'coadmin') {
-    show('wallet');
-    location.replace(new URL('./', location.href).href);
-  }
-  else if (role === 'guest') show('blocked', 'Nenhuma lista está vinculada a esta conta.');
-  else show(['request', 'pending'].includes(role) ? role : 'blocked');
-}
-
 function resetAccess() {
   generation++;
-  stopAccount?.();
-  stopAccount = null;
+  stopAccess?.();
+  stopAccess = null;
   access = null;
   clearList();
 }
@@ -267,44 +202,34 @@ function resetAccess() {
 async function connect(user) {
   resetAccess();
   const attempt = generation;
-  $('guestSignOut').hidden = !user;
+  $('personalSignOut').hidden = !user;
+  $('personalBackToWallet').hidden = true;
   if (!user) {
     show('login');
     return;
   }
   show('loading');
+  function stopWithStatus(status) {
+    if (attempt !== generation) return;
+    resetAccess();
+    $('personalBackToWallet').hidden = true;
+    show(status);
+  }
   try {
-    const opened = await openWishlistAccess({ db: session.db, user });
+    const opened = await openPersonalWishlist({ db: session.db, user });
     if (attempt !== generation) return;
     access = opened;
-    if (!opened.enabled) {
-      show('unavailable');
-      return;
-    }
-    if (!personalPage && ['admin', 'coadmin'].includes(opened.role)) {
-      show('wallet');
-      return;
-    }
-    if (opened.role !== 'guest' || opened.personId) setAccount(opened, attempt);
-    const stop = opened.watchAccount(
-      account => setAccount(account, attempt),
-      () => {
-        if (attempt !== generation) return;
-        clearList();
-        show('error');
-      },
-    );
-    if (attempt !== generation) {
-      stop?.();
-      return;
-    }
-    stopAccount = stop;
-    if (opened.role === 'request' && state === 'request') void requestAccess();
+    personId = opened.profile;
+    $('personalBackToWallet').hidden = false;
+    const unwatch = opened.watchAccess(allowed => { if (!allowed) stopWithStatus('blocked'); }, () => stopWithStatus('blocked'));
+    if (attempt !== generation) { unwatch(); return; }
+    stopAccess = unwatch;
+    const stop = opened.watchList(data => { if (attempt === generation) renderList(data); }, () => stopWithStatus('error'));
+    if (attempt !== generation) { stop(); return; }
+    stopList = stop;
+    stopShortcuts = mountWishlistShortcuts(() => opened.sharing());
   } catch {
-    if (attempt === generation) {
-      clearList();
-      show('error');
-    }
+    stopWithStatus('blocked');
   }
 }
 
@@ -327,10 +252,10 @@ function shareText() {
   return [title, ...lines].join('\n\n');
 }
 
-const editor = $('guestEditor');
-const editForm = $('guestEditForm');
-const deleteDialog = $('guestDeleteDialog');
-const purchaseDialog = $('guestPurchaseDialog');
+const editor = $('personalEditor');
+const editForm = $('personalEditForm');
+const deleteDialog = $('personalDeleteDialog');
+const purchaseDialog = $('personalPurchaseDialog');
 let purchaseDraft;
 let editDraft, deleteDraft, editRevision = 0, deleteRevision = 0, photoRevision = 0;
 const formFields = Object.fromEntries([...editForm.elements].filter(field => field.name).map(field => [field.name, field]));
@@ -344,7 +269,7 @@ function cancelLinkRead() {
   clearTimeout(linkTimer);
   linkRequest?.abort();
   linkRequest = null;
-  $('guestReadLink').disabled = false;
+  $('personalReadLink').disabled = false;
 }
 
 async function readLink() {
@@ -355,9 +280,9 @@ async function readLink() {
   const controller = new AbortController();
   linkRequest = controller;
   const current = () => linkRequest === controller && editor.open && editDraft;
-  const status = $('guestLinkStatus');
+  const status = $('personalLinkStatus');
   const deadline = setTimeout(() => controller.abort(), 8000);
-  $('guestReadLink').disabled = true;
+  $('personalReadLink').disabled = true;
   status.textContent = 'Lendo o link…';
   try {
     const product = await WishProduct.readLink(url, controller.signal);
@@ -380,11 +305,11 @@ async function readLink() {
   }
 }
 
-$('guestReadLink').onclick = () => void readLink();
+$('personalReadLink').onclick = () => void readLink();
 formFields.url.addEventListener('input', () => {
-  WishProduct.updateLinkAction($('guestOpenLink'), formFields.url.value);
+  WishProduct.updateLinkAction($('personalOpenLink'), formFields.url.value);
   cancelLinkRead();
-  $('guestLinkStatus').textContent = '';
+  $('personalLinkStatus').textContent = '';
   if (editDraft?.imageUrl && !editDraft.imageUrl.startsWith('data:')) {
     editDraft.imageUrl = '';
     photoPreview('');
@@ -405,17 +330,31 @@ function readAttachment(id) {
   }
 }
 
+function updateUnitBrl(fields) {
+  const output = fields.querySelector('[data-unit-brl]');
+  const price = WishProduct.parsePrice(fields.querySelector('[name=price]').value);
+  const shown = WishProduct.priceInReais(price, fields.querySelector('[name=currency]').value);
+  output.textContent = shown ? 'Valor unitário em reais · ' + shown : '';
+}
+window.addEventListener('wishlist:rates', () => {
+  for (const fieldset of editForm.querySelectorAll('fieldset:has([data-unit-brl])')) updateUnitBrl(fieldset);
+  const rendered = new Map([...$('personalWishItems').querySelectorAll('[data-wish-price-id]')].map(node => [node.dataset.wishPriceId, node]));
+  for (const item of items) if (rendered.has(item.id)) rendered.get(item.id).textContent = priceLabel(item);
+});
+$('personalSingleFields').addEventListener('input', () => updateUnitBrl($('personalSingleFields')));
+$('personalSingleFields').addEventListener('change', () => updateUnitBrl($('personalSingleFields')));
+
 function productUrl(item, attachment = readAttachment(item.id)) {
   return WishProduct.imageUrl(item.url ?? attachment.url) || '';
 }
 
 function photoPreview(imageUrl) {
-  const preview = $('guestPhotoPreview');
+  const preview = $('personalPhotoPreview');
   preview.hidden = !imageUrl;
   if (imageUrl) preview.src = imageUrl;
   else preview.removeAttribute('src');
-  $('guestRemovePhoto').hidden = !imageUrl;
-  $('guestReadPhoto').hidden = !photo;
+  $('personalRemovePhoto').hidden = !imageUrl;
+  $('personalReadPhoto').hidden = !photo;
 }
 
 function applySuggestion(suggestion, { preserveMissing = false } = {}) {
@@ -430,6 +369,7 @@ function applySuggestion(suggestion, { preserveMissing = false } = {}) {
     field.value = proposed;
     photoValues.set(key, field.value);
   }
+  updateUnitBrl($('personalSingleFields'));
 }
 
 for (const event of ['input', 'change']) {
@@ -437,16 +377,16 @@ for (const event of ['input', 'change']) {
 }
 
 function photoLoading(progress = '') {
-  $('guestPhotoProgress').textContent = progress;
-  $('guestPhotoLoading').hidden = !progress;
-  $('guestUpload').disabled = Boolean(progress);
+  $('personalPhotoProgress').textContent = progress;
+  $('personalPhotoLoading').hidden = !progress;
+  $('personalUpload').disabled = Boolean(progress);
 }
 
-const batchCurrency = $('guestBatchCurrency');
+const batchCurrency = $('personalBatchCurrency');
 batchCurrency.replaceChildren(...[...formFields.currency.options].map(option => option.cloneNode(true)));
-const batchCurrencyRow = $('guestBatchCurrencyRow');
-const batchCurrencyStatus = $('guestBatchCurrencyStatus');
-const applyCurrency = $('guestApplyBatchCurrency');
+const batchCurrencyRow = $('personalBatchCurrencyRow');
+const batchCurrencyStatus = $('personalBatchCurrencyStatus');
+const applyCurrency = $('personalApplyBatchCurrency');
 
 function missingBatchCurrencies() {
   return [...batchRows.values()].flatMap(({ include, fields }) => {
@@ -472,45 +412,50 @@ applyCurrency.onclick = () => {
 };
 
 function setBatch(active) {
-  $('guestPhotoBatch').hidden = !active;
-  $('guestSingleFields').hidden = active;
-  $('guestSingleFields').disabled = active;
-  $('guestSingleLink').hidden = active;
+  $('personalPhotoBatch').hidden = !active;
+  $('personalBatchTaxLabel').hidden = !active;
+  editForm.noValidate = active;
+  $('personalSingleFields').hidden = active;
+  $('personalSingleFields').disabled = active;
+  $('personalSingleLink').hidden = active;
   formFields.url.disabled = active;
   if (active) cancelLinkRead();
-  $('guestSave').textContent = active ? 'Salvar selecionados' : 'Salvar desejo';
+  $('personalSave').textContent = active ? 'Salvar selecionados' : 'Salvar desejo';
   if (active) {
-    $('guestPhotoPreview').hidden = true;
-    $('guestRemovePhoto').hidden = true;
-    $('guestReadPhoto').hidden = true;
+    $('personalPhotoPreview').hidden = true;
+    $('personalRemovePhoto').hidden = true;
+    $('personalReadPhoto').hidden = true;
   } else {
     batchCurrency.value = '';
     batchCurrencyStatus.textContent = '';
   }
   updateBatchCurrency();
 }
-const applyDefaultStore = WishProduct.bindDefaultStore($('guestDefaultStore'), () =>
+const applyDefaultStore = WishProduct.bindDefaultStore($('personalDefaultStore'), () =>
   batchRows.size ? [...batchRows.values()].map(({ fields }) => fields.querySelector('[name=store]')) : [formFields.store]);
+const applyBatchTax = WishProduct.bindBatchTax($('personalBatchTax'), () =>
+  $('personalPhotoRows').querySelectorAll('[name=tax]'));
 function appendPhotoRow(suggestion, source, caption, checked = true) {
   const row = document.createElement('div');
-  row.className = 'guest-photo-row';
+  row.className = 'personal-photo-row';
   const header = document.createElement('label');
-  header.className = 'guest-photo-row-heading';
+  header.className = 'personal-photo-row-heading';
   const include = document.createElement('input');
   include.type = 'checkbox';
   include.checked = checked;
   const title = document.createElement('span');
   title.textContent = suggestion.title || caption;
   header.append(include, title);
-  const fields = $('guestSingleFields').cloneNode(true);
+  const fields = $('personalSingleFields').cloneNode(true);
   fields.removeAttribute('id');
   fields.hidden = false;
-  fields.disabled = !checked;
+  fields.disabled = false;
   for (const field of fields.querySelectorAll('[name]')) {
     field.removeAttribute('autofocus');
     const value = typeof field.value === 'string' ? suggestion[field.name] : undefined;
     if (field.type === 'checkbox') field.checked = suggestion[field.name] === true;
     else if (field.name === 'quantity') field.value = suggestion.quantity || '1';
+    else if (field.name === 'currency' && suggestion.manual && !value) field.value = 'CAD';
     else {
       if (field.name === 'currency' && value && ![...field.options].some(option => option.value === value)) {
         field.add(new Option(value, value));
@@ -521,12 +466,12 @@ function appendPhotoRow(suggestion, source, caption, checked = true) {
   const inputs = Object.fromEntries([...fields.querySelectorAll('[name]')].map(field => [field.name, field]));
   fields.prepend(WishProduct.batchLinkField(inputs, { value: suggestion.url }));
   applyDefaultStore(inputs.store);
-  include.onchange = () => {
-    fields.disabled = !include.checked;
-    updateBatchCurrency();
-  };
-  fields.addEventListener('input', updateBatchCurrency);
-  fields.addEventListener('change', updateBatchCurrency);
+  applyBatchTax(inputs.tax);
+  include.onchange = updateBatchCurrency;
+  const refreshPrice = () => { updateBatchCurrency(); updateUnitBrl(fields); };
+  fields.addEventListener('input', refreshPrice);
+  fields.addEventListener('change', refreshPrice);
+  updateUnitBrl(fields);
   row.append(header);
   if (source?.imageUrl) {
     const thumb = document.createElement('img');
@@ -537,7 +482,7 @@ function appendPhotoRow(suggestion, source, caption, checked = true) {
   }
   if (!suggestion.manual && (suggestion.failed || suggestion.priceIssue || suggestion.assumedCurrency || !source || !suggestion.title || suggestion.price == null)) {
     const note = document.createElement('p');
-    note.className = 'guest-hint';
+    note.className = 'personal-hint';
     note.textContent = !source && suggestion.url ? 'Seu rascunho foi mantido. Marque esta linha se quiser salvá-lo.' :
       !source ? 'Não foi possível abrir a foto. Você pode preencher os dados manualmente.' :
       suggestion.priceIssue === 'currency' ? 'Moeda não identificada no print.' :
@@ -548,7 +493,7 @@ function appendPhotoRow(suggestion, source, caption, checked = true) {
     row.append(note);
   }
   row.append(fields);
-  $('guestPhotoRows').append(row);
+  $('personalPhotoRows').append(row);
   batchRows.set(row, { include, fields, imageUrl: source?.imageUrl || '' });
   updateBatchCurrency();
   return inputs;
@@ -556,11 +501,11 @@ function appendPhotoRow(suggestion, source, caption, checked = true) {
 
 function startBatch(products = [], keepDraft = false) {
   if (batchRows.size) return products;
-  if (keepDraft || formFields.url.value.trim() || ['title', 'store', 'price'].some(key => touched.has(key) && formFields[key].value)) {
-    const initial = Object.fromEntries([...$('guestSingleFields').querySelectorAll('[name]')].map(field =>
+  if (keepDraft || formFields.url.value.trim() || ['title', 'store', 'price', 'quantity'].some(key => touched.has(key) && formFields[key].value)) {
+    const initial = Object.fromEntries([...$('personalSingleFields').querySelectorAll('[name]')].map(field =>
       [field.name, field.type === 'checkbox' ? field.checked : field.value]));
     const draft = { ...initial, url: formFields.url.value.trim() };
-    if (applyDefaultStore.isInherited(formFields.store)) draft.store = '';
+    draft.store = applyDefaultStore.originalValue(formFields.store);
     const key = WishPhotoReader.photoProductKey;
     const matches = draft.title && products.filter(item => key(item.title) === key(draft.title));
     if (matches?.length === 1) {
@@ -576,23 +521,23 @@ function startBatch(products = [], keepDraft = false) {
   return products;
 }
 
-$('guestAddManualProduct').onclick = () => {
-  if (!editDraft || editDraft.baseline || !$('guestPhotoLoading').hidden || $('guestSave').disabled) return;
+$('personalAddManualProduct').onclick = () => {
+  if (!editDraft || editDraft.baseline || !$('personalPhotoLoading').hidden || $('personalSave').disabled) return;
   startBatch([], true);
   const fields = appendPhotoRow({ manual: true }, null, 'Novo produto');
-  $('guestPhotoStatus').textContent = batchRows.size + ' produtos para revisar.';
+  $('personalPhotoStatus').textContent = batchRows.size + ' produtos para revisar.';
   fields.title.focus();
 };
 
 async function openPhotos(files) {
-  if (!$('guestPhotoLoading').hidden) return;
+  if (!$('personalPhotoLoading').hidden) return;
   if (files.length <= 1 && !batchRows.size) return openPhoto(files[0]);
   if (!editDraft || editDraft.baseline || !files.length) return openPhoto(files[0]);
   const attempt = ++photoRevision;
   const current = () => editor.open && editDraft && attempt === photoRevision;
   startBatch();
-  $('guestPhotoStatus').textContent = '';
-  $('guestSave').disabled = true;
+  $('personalPhotoStatus').textContent = '';
+  $('personalSave').disabled = true;
   try {
     const prepared = [];
     for (const [index, file] of files.entries()) {
@@ -621,18 +566,18 @@ async function openPhotos(files) {
     }
   } finally {
     if (current()) {
-      $('guestUpload').value = '';
-      $('guestSave').disabled = false;
+      $('personalUpload').value = '';
+      $('personalSave').disabled = false;
       photoLoading();
-      $('guestPhotoStatus').textContent = batchRows.size + ' produtos para revisar.';
+      $('personalPhotoStatus').textContent = batchRows.size + ' produtos para revisar.';
     }
   }
 }
 
 async function readPhoto(attempt = ++photoRevision) {
   const current = () => editor.open && editDraft && attempt === photoRevision;
-  const status = $('guestPhotoStatus');
-  $('guestReadPhoto').disabled = true;
+  const status = $('personalPhotoStatus');
+  $('personalReadPhoto').disabled = true;
   status.textContent = '';
   photoLoading('1/1 · Reconhecendo produtos');
   try {
@@ -644,13 +589,13 @@ async function readPhoto(attempt = ++photoRevision) {
       const products = startBatch(suggestions);
       products.forEach((item, index) => appendPhotoRow(item, photo, 'Produto ' + (index + 1)));
       status.textContent = batchRows.size + ' produtos para revisar.';
-      $('guestReadPhoto').hidden = true;
+      $('personalReadPhoto').hidden = true;
       return;
     }
     if (suggestions.length > 1) {
-      const picker = $('guestPhotoChoice');
+      const picker = $('personalPhotoChoice');
       picker.replaceChildren(new Option('Escolha um produto', ''), ...suggestions.map((item, index) => new Option(item.title || 'Produto ' + (index + 1), String(index))));
-      $('guestPhotoProducts').hidden = false;
+      $('personalPhotoProducts').hidden = false;
       status.textContent = 'Confira qual produto quer preencher com este print.';
       return;
     }
@@ -660,29 +605,29 @@ async function readPhoto(attempt = ++photoRevision) {
     if (current()) status.textContent = 'Foto pronta. Preencha os campos manualmente.';
   } finally {
     if (current()) {
-      $('guestReadPhoto').disabled = false;
+      $('personalReadPhoto').disabled = false;
       photoLoading();
     }
   }
 }
 
-$('guestPhotoChoice').onchange = ({ target }) => {
+$('personalPhotoChoice').onchange = ({ target }) => {
   if (target.value !== '') applySuggestion(suggestions[Number(target.value)]);
 };
 async function openPhoto(file) {
   if (!editDraft || !file) return;
   const attempt = ++photoRevision;
-  $('guestPhotoProducts').hidden = true;
-  $('guestPhotoStatus').textContent = '';
+  $('personalPhotoProducts').hidden = true;
+  $('personalPhotoStatus').textContent = '';
   photoLoading('1/1 · Preparando foto');
-  $('guestSave').disabled = true;
+  $('personalSave').disabled = true;
   const prepared = await WishPhotoReader.prepareWishPhoto(file);
   if (attempt !== photoRevision || !editDraft) return;
-  $('guestUpload').value = '';
-  $('guestSave').disabled = false;
+  $('personalUpload').value = '';
+  $('personalSave').disabled = false;
   if (!prepared.imageUrl) {
     photoLoading();
-    $('guestPhotoStatus').textContent = prepared.warning;
+    $('personalPhotoStatus').textContent = prepared.warning;
     return;
   }
   photo = prepared;
@@ -690,14 +635,14 @@ async function openPhoto(file) {
   photoPreview(prepared.imageUrl);
   void readPhoto(attempt);
 }
-$('guestUpload').onchange = ({ target }) => void openPhotos([...target.files]);
+$('personalUpload').onchange = ({ target }) => void openPhotos([...target.files]);
 editForm.addEventListener('paste', event => {
   const image = [...(event.clipboardData?.items || [])].find(item => item.kind === 'file' && item.type.startsWith('image/'));
   if (!image) return;
   event.preventDefault();
   void openPhotos([image.getAsFile()].filter(Boolean));
 });
-const photoField = $('guestUpload').closest('.guest-image-field');
+const photoField = $('personalUpload').closest('.personal-image-field');
 photoField.addEventListener('dragover', event => {
   if (event.dataTransfer?.types.includes('Files')) event.preventDefault();
 });
@@ -707,17 +652,17 @@ photoField.addEventListener('drop', event => {
   event.preventDefault();
   void openPhotos(files);
 });
-$('guestReadPhoto').onclick = () => { if (photo) void readPhoto(); };
-$('guestRemovePhoto').onclick = () => {
+$('personalReadPhoto').onclick = () => { if (photo) void readPhoto(); };
+$('personalRemovePhoto').onclick = () => {
   photoRevision++;
   photo = null;
   editDraft.imageUrl = '';
-  $('guestSave').disabled = false;
-  $('guestPhotoProducts').hidden = true;
-  $('guestPhotoStatus').textContent = '';
+  $('personalSave').disabled = false;
+  $('personalPhotoProducts').hidden = true;
+  $('personalPhotoStatus').textContent = '';
   photoLoading();
   batchRows.clear();
-  $('guestPhotoRows').replaceChildren();
+  $('personalPhotoRows').replaceChildren();
   setBatch(false);
   photoPreview('');
 };
@@ -737,45 +682,45 @@ function closeEditor() {
   editRevision++;
   editDraft = null;
   cancelLinkRead();
-  $('guestLinkStatus').textContent = '';
+  $('personalLinkStatus').textContent = '';
   photoRevision++;
   photo = null;
   suggestions = [];
   touched.clear();
   photoValues.clear();
   batchRows.clear();
-  $('guestPhotoRows').replaceChildren();
+  $('personalPhotoRows').replaceChildren();
   setBatch(false);
   photoLoading();
   editForm.reset();
-  $('guestPhotoStatus').textContent = '';
-  $('guestPhotoProducts').hidden = true;
-  $('guestReadPhoto').disabled = false;
+  $('personalPhotoStatus').textContent = '';
+  $('personalPhotoProducts').hidden = true;
+  $('personalReadPhoto').disabled = false;
   photoPreview('');
-  $('guestEditError').textContent = '';
-  setBusy('guestSave', 'guestEditCancel', false);
+  $('personalEditError').textContent = '';
+  setBusy('personalSave', 'personalEditCancel', false);
   if (editor.open) editor.close();
 }
 
 function closeDelete() {
   deleteRevision++;
   deleteDraft = null;
-  $('guestDeleteItem').textContent = '';
-  $('guestDeleteError').textContent = '';
-  setBusy('guestDeleteConfirm', 'guestDeleteCancel', false);
+  $('personalDeleteItem').textContent = '';
+  $('personalDeleteError').textContent = '';
+  setBusy('personalDeleteConfirm', 'personalDeleteCancel', false);
   if (deleteDialog.open) deleteDialog.close();
 }
 
 function setBusy(submit, cancel, busy) {
   $(submit).disabled = busy;
   $(cancel).disabled = busy;
-  if (submit === 'guestSave') $('guestEditorClose').disabled = busy;
+  if (submit === 'personalSave') $('personalEditorClose').disabled = busy;
 }
 
 function closeDisallowedDrafts() {
   const stillAllowed = (draft) => {
     const liveItem = items.find(item => item.id === draft.id);
-    return liveItem && canManageItem(liveItem);
+    return Boolean(liveItem);
   };
   if (editDraft?.baseline && !stillAllowed(editDraft.baseline)) closeEditor();
   if (deleteDraft && !stillAllowed(deleteDraft)) closeDelete();
@@ -783,16 +728,16 @@ function closeDisallowedDrafts() {
 }
 
 function openEditor(baseline = null) {
-  if (state !== 'list' || !personId || (baseline && !canManageItem(baseline))) return;
+  if (state !== 'list' || !personId) return;
   closeEditor();
   editDraft = { baseline, ...(baseline ? readAttachment(baseline.id) : {}) };
-  $('guestDefaultStoreLabel').hidden = !!baseline;
-  $('guestAddManualProduct').hidden = !!baseline;
-  $('guestEditorTitle').textContent = baseline ? 'Editar desejo' : 'Adicionar desejo';
+  $('personalDefaultStoreLabel').hidden = !!baseline;
+  $('personalAddManualProduct').hidden = !!baseline;
+  $('personalEditorTitle').textContent = baseline ? 'Editar desejo' : 'Adicionar desejo';
   const fields = formFields;
   editDraft.originalImage = editDraft.imageUrl;
   fields.url.value = baseline ? productUrl(baseline, editDraft) : '';
-  WishProduct.updateLinkAction($('guestOpenLink'), fields.url.value);
+  WishProduct.updateLinkAction($('personalOpenLink'), fields.url.value);
   photoPreview(editDraft.imageUrl);
   if (baseline) {
     fields.title.value = baseline.title;
@@ -804,53 +749,57 @@ function openEditor(baseline = null) {
       fields.currency.add(new Option(baseline.currency, baseline.currency));
     }
     fields.currency.value = baseline.currency;
+  } else {
+    fields.currency.value = 'CAD';
+    photoValues.set('currency', 'CAD');
   }
+  updateUnitBrl($('personalSingleFields'));
   editor.showModal();
   editor.scrollTop = 0;
 }
 
 function closePurchase() {
   purchaseDraft = null;
-  $('guestPurchaseError').textContent = '';
-  setBusy('guestPurchaseConfirm', 'guestPurchaseBack', false);
+  $('personalPurchaseError').textContent = '';
+  setBusy('personalPurchaseConfirm', 'personalPurchaseBack', false);
   if (purchaseDialog.open) purchaseDialog.close();
 }
 
 function openPurchase(item) {
   if (state !== 'list' || !personId) return;
   purchaseDraft = item;
-  $('guestPurchaseTitle').textContent = item.bought ? 'Desfazer compra?' : 'Confirmar compra?';
-  $('guestPurchaseConfirm').textContent = item.bought ? 'Voltar para pendente' : 'Marcar como comprado';
-  $('guestPurchaseItem').textContent = item.title;
-  $('guestPurchaseInfo').textContent = [item.store, quantity(item) > 1 ? '×' + quantity(item) : '', priceLabel(item)].filter(Boolean).join(' · ');
+  $('personalPurchaseTitle').textContent = item.bought ? 'Desfazer compra?' : 'Confirmar compra?';
+  $('personalPurchaseConfirm').textContent = item.bought ? 'Voltar para pendente' : 'Marcar como comprado';
+  $('personalPurchaseItem').textContent = item.title;
+  $('personalPurchaseInfo').textContent = [item.store, quantity(item) > 1 ? '×' + quantity(item) : '', priceLabel(item)].filter(Boolean).join(' · ');
   purchaseDialog.showModal();
 }
 
-$('guestPurchaseBack').onclick = closePurchase;
+$('personalPurchaseBack').onclick = closePurchase;
 purchaseDialog.oncancel = event => {
   event.preventDefault();
-  if (!$('guestPurchaseConfirm').disabled) closePurchase();
+  if (!$('personalPurchaseConfirm').disabled) closePurchase();
 };
-$('guestPurchaseConfirm').onclick = async () => {
+$('personalPurchaseConfirm').onclick = async () => {
   const item = purchaseDraft;
-  if (!item || !personId || $('guestPurchaseConfirm').disabled) return;
-  setBusy('guestPurchaseConfirm', 'guestPurchaseBack', true);
-  $('guestPurchaseError').textContent = '';
+  if (!item || !personId || $('personalPurchaseConfirm').disabled) return;
+  setBusy('personalPurchaseConfirm', 'personalPurchaseBack', true);
+  $('personalPurchaseError').textContent = '';
   try {
-    await access.setBought(personId, item, !item.bought);
+    await access.setBought(item, !item.bought);
     if (purchaseDraft === item) closePurchase();
   } catch (error) {
     if (purchaseDraft !== item) return;
-    $('guestPurchaseError').textContent = mutationError(error);
-    setBusy('guestPurchaseConfirm', 'guestPurchaseBack', false);
+    $('personalPurchaseError').textContent = mutationError(error);
+    setBusy('personalPurchaseConfirm', 'personalPurchaseBack', false);
   }
 };
 
 function openDelete(item) {
-  if (state !== 'list' || !personId || !canManageItem(item)) return;
+  if (state !== 'list' || !personId) return;
   closeDelete();
   deleteDraft = item;
-  $('guestDeleteItem').textContent = item.title;
+  $('personalDeleteItem').textContent = item.title;
   deleteDialog.showModal();
 }
 
@@ -859,23 +808,23 @@ function mutationError(error) {
   return error?.message || 'Não foi possível salvar a alteração. Tente novamente.';
 }
 
-$('guestPeople').onclick = () => {
-  if (personId && state === 'list') void showWishlistPeople(() => access.sharing(personId));
+$('personalPeople').onclick = () => {
+  if (personId && state === 'list') void showWishlistPeople(() => access.sharing());
 };
-$('guestAdd').onclick = () => openEditor();
-$('guestEditCancel').onclick = closeEditor;
-$('guestEditorClose').onclick = closeEditor;
-$('guestDeleteCancel').onclick = closeDelete;
+$('personalAdd').onclick = () => openEditor();
+$('personalEditCancel').onclick = closeEditor;
+$('personalEditorClose').onclick = closeEditor;
+$('personalDeleteCancel').onclick = closeDelete;
 editor.oncancel = event => {
   event.preventDefault();
-  if (!$('guestEditorClose').disabled) closeEditor();
+  if (!$('personalEditorClose').disabled) closeEditor();
 };
 deleteDialog.oncancel = event => {
   event.preventDefault();
-  if (!$('guestDeleteConfirm').disabled) closeDelete();
+  if (!$('personalDeleteConfirm').disabled) closeDelete();
 };
 
-async function savePhotoBatch(guest) {
+async function savePhotoBatch() {
   const selected = [];
   for (const [row, draft] of batchRows) {
     if (!draft.include.checked) continue;
@@ -884,30 +833,30 @@ async function savePhotoBatch(guest) {
     const url = rawUrl ? WishProduct.imageUrl(rawUrl) : '';
     if (url === null) {
       values.url.setAttribute('aria-invalid', 'true');
-      $('guestEditError').textContent = 'Informe um link http ou https válido no produto marcado.';
+      $('personalEditError').textContent = 'Informe um link http ou https válido no produto marcado.';
       values.url.focus();
       return;
     }
-    const price = values.price.value === '' ? null : values.price.valueAsNumber;
+    const price = WishProduct.parsePrice(values.price.value);
     const units = values.quantity.valueAsNumber;
     const valid = Number.isSafeInteger(units) && units > 0 &&
       (price === null || (Number.isFinite(price) && price >= 0 && price <= 90071992547409 / units));
     if (!valid || price !== null && !values.currency.value || !values.title.value.trim()) {
-      $('guestEditError').textContent = 'Confira o produto, o preço, a moeda e a quantidade dos itens marcados.';
+      $('personalEditError').textContent = 'Confira o produto, o preço, a moeda e a quantidade dos itens marcados.';
       (price !== null && !values.currency.value ? values.currency : values.title).focus();
       return;
     }
     selected.push({ row, draft, item: { id: crypto.randomUUID(), title: values.title.value.trim(),
-      store: values.store.value.trim(), originalPrice: price, currency: values.currency.value || 'BRL',
+      store: values.store.value.trim(), originalPrice: price, currency: values.currency.value || 'CAD',
       quantity: units, taxQuebec: values.tax.checked, bought: false, ...(url ? { url } : {}) } });
   }
   if (!selected.length) {
-    $('guestEditError').textContent = 'Selecione pelo menos um produto.';
+    $('personalEditError').textContent = 'Selecione pelo menos um produto.';
     return;
   }
   const attempt = editRevision;
-  $('guestEditError').textContent = '';
-  setBusy('guestSave', 'guestEditCancel', true);
+  $('personalEditError').textContent = '';
+  setBusy('personalSave', 'personalEditCancel', true);
   let saved = 0;
   try {
     for (const { row, draft, item } of selected) {
@@ -915,7 +864,7 @@ async function savePhotoBatch(guest) {
       const key = attachmentKey(item.id);
       if (draft.imageUrl) localStorage.setItem(key, JSON.stringify({ imageUrl: draft.imageUrl }));
       try {
-        await access.saveItem(guest, item);
+        await access.saveItem(item);
       } catch (error) {
         if (draft.imageUrl) localStorage.removeItem(key);
         throw error;
@@ -927,55 +876,55 @@ async function savePhotoBatch(guest) {
     }
     if (attempt === editRevision) {
       closeEditor();
-      $('guestShareFeedback').textContent = saved === 1 ? 'Desejo adicionado.' : saved + ' desejos adicionados.';
+      $('personalShareFeedback').textContent = saved === 1 ? 'Desejo adicionado.' : saved + ' desejos adicionados.';
     }
   } catch (error) {
-    if (attempt === editRevision) $('guestEditError').textContent = (saved ? saved + ' já salvo(s). ' : '') + mutationError(error);
+    if (attempt === editRevision) $('personalEditError').textContent = (saved ? saved + ' já salvo(s). ' : '') + mutationError(error);
   } finally {
-    if (attempt === editRevision) setBusy('guestSave', 'guestEditCancel', false);
+    if (attempt === editRevision) setBusy('personalSave', 'personalEditCancel', false);
   }
 }
 
 editForm.onsubmit = async event => {
   event.preventDefault();
-  const guest = personId, draft = editDraft;
-  if (state !== 'list' || !guest || !draft || $('guestSave').disabled) return;
+  const draft = editDraft;
+  if (state !== 'list' || !personId || !draft || $('personalSave').disabled) return;
   if (batchRows.size) {
-    await savePhotoBatch(guest);
+    await savePhotoBatch();
     return;
   }
   const fields = formFields;
   const title = fields.title.value.trim(), store = fields.store.value.trim();
-  const originalPrice = fields.price.value === '' ? null : fields.price.valueAsNumber;
+  const originalPrice = WishProduct.parsePrice(fields.price.value);
   const units = fields.quantity.valueAsNumber;
   const validAmount = originalPrice === null || (Number.isFinite(originalPrice) && originalPrice >= 0 && originalPrice <= 90071992547409 / units);
   if (!title || !Number.isSafeInteger(units) || units < 1 || !validAmount) {
-    $('guestEditError').textContent = 'Confira o nome, o preço e a quantidade.';
+    $('personalEditError').textContent = 'Confira o nome, o preço e a quantidade.';
     return;
   }
   const url = fields.url.value ? WishProduct.imageUrl(fields.url.value) : '';
   if (url === null || (originalPrice !== null && !fields.currency.value)) {
-    $('guestEditError').textContent = url === null ? 'Informe um link http ou https.' : 'Escolha a moeda do preço.';
+    $('personalEditError').textContent = url === null ? 'Informe um link http ou https.' : 'Escolha a moeda do preço.';
     return;
   }
   const baseline = draft.baseline;
   const item = {
     id: baseline?.id ?? crypto.randomUUID(),
     title, store, originalPrice,
-    currency: fields.currency.value || 'BRL',
+    currency: fields.currency.value || 'CAD',
     quantity: units,
     taxQuebec: fields.tax.checked,
     bought: baseline?.bought === true,
     ...(url || baseline?.url !== undefined || draft.url ? { url } : {}),
   };
   const attempt = editRevision;
-  $('guestEditError').textContent = '';
-  setBusy('guestSave', 'guestEditCancel', true);
+  $('personalEditError').textContent = '';
+  setBusy('personalSave', 'personalEditCancel', true);
   try {
     const key = attachmentKey(item.id);
     if (draft.imageUrl) localStorage.setItem(key, JSON.stringify({ imageUrl: draft.imageUrl }));
     try {
-      await access.saveItem(guest, item, baseline);
+      await access.saveItem(item, baseline);
     } catch (error) {
       const previous = draft.baseline ? { url: draft.url || '', imageUrl: draft.originalImage || '' } : null;
       if (previous?.url || previous?.imageUrl) localStorage.setItem(key, JSON.stringify(previous));
@@ -985,35 +934,35 @@ editForm.onsubmit = async event => {
     if (!draft.imageUrl) localStorage.removeItem(key);
     if (attempt === editRevision) {
       closeEditor();
-      renderList({ name: listName, items, gifts: giftItems });
+      renderList({ name: listName, items });
     }
   } catch (error) {
-    if (attempt === editRevision) $('guestEditError').textContent = mutationError(error);
+    if (attempt === editRevision) $('personalEditError').textContent = mutationError(error);
   } finally {
-    if (attempt === editRevision) setBusy('guestSave', 'guestEditCancel', false);
+    if (attempt === editRevision) setBusy('personalSave', 'personalEditCancel', false);
   }
 };
 
-$('guestDeleteConfirm').onclick = async () => {
-  const guest = personId, item = deleteDraft;
-  if (state !== 'list' || !guest || !item || $('guestDeleteConfirm').disabled) return;
+$('personalDeleteConfirm').onclick = async () => {
+  const item = deleteDraft;
+  if (state !== 'list' || !personId || !item || $('personalDeleteConfirm').disabled) return;
   const attempt = deleteRevision;
-  $('guestDeleteError').textContent = '';
-  setBusy('guestDeleteConfirm', 'guestDeleteCancel', true);
+  $('personalDeleteError').textContent = '';
+  setBusy('personalDeleteConfirm', 'personalDeleteCancel', true);
   try {
     const key = attachmentKey(item.id);
-    await access.removeItem(guest, item);
+    await access.removeItem(item);
     localStorage.removeItem(key);
     if (attempt === deleteRevision) closeDelete();
   } catch (error) {
-    if (attempt === deleteRevision) $('guestDeleteError').textContent = mutationError(error);
+    if (attempt === deleteRevision) $('personalDeleteError').textContent = mutationError(error);
   } finally {
-    if (attempt === deleteRevision) setBusy('guestDeleteConfirm', 'guestDeleteCancel', false);
+    if (attempt === deleteRevision) setBusy('personalDeleteConfirm', 'personalDeleteCancel', false);
   }
 };
 
-$('guestSignIn').onclick = async () => {
-  const button = $('guestSignIn');
+$('personalSignIn').onclick = async () => {
+  const button = $('personalSignIn');
   button.disabled = true;
   try {
     await session.signIn();
@@ -1026,8 +975,8 @@ $('guestSignIn').onclick = async () => {
   }
 };
 
-$('guestSignOut').onclick = async () => {
-  const button = $('guestSignOut');
+$('personalSignOut').onclick = async () => {
+  const button = $('personalSignOut');
   button.disabled = true;
   resetAccess();
   show('loading');
@@ -1040,31 +989,11 @@ $('guestSignOut').onclick = async () => {
   }
 };
 
-async function requestAccess() {
-  const button = $('guestRequest');
-  if (state !== 'request' || !access || requestGeneration === generation) return;
-  const attempt = generation;
-  requestGeneration = attempt;
-  show('request', 'Enviando solicitação…');
-  try {
-    await access.submitRequest();
-    if (attempt === generation && state === 'request') show('pending');
-  } catch {
-    if (attempt === generation && state === 'request') show('request', 'Não foi possível enviar a solicitação. Tente novamente.');
-  } finally {
-    if (attempt === generation) {
-      requestGeneration = -1;
-      button.disabled = false;
-    }
-  }
-}
+$('personalRetry').onclick = () => session ? void connect(session.auth.currentUser) : void start();
 
-$('guestRequest').onclick = requestAccess;
-$('guestRetry').onclick = () => session ? void connect(session.auth.currentUser) : void start();
+$('personalHideBought').onchange = renderPersonalItems;
 
-$('guestHideBought').onchange = renderPersonalItems;
-
-$('guestSelectAll').onchange = ({ target }) => {
+$('personalSelectAll').onchange = ({ target }) => {
   selection.clear();
   for (const [id, checkbox] of itemChecks) {
     checkbox.checked = target.checked;
@@ -1081,21 +1010,21 @@ async function copySelection() {
   clearShare();
   try {
     await navigator.clipboard.writeText(data);
-    if (attempt === listGeneration) $('guestShareFeedback').textContent = 'Seleção copiada.';
+    if (attempt === listGeneration) $('personalShareFeedback').textContent = 'Seleção copiada.';
   } catch {
     if (attempt !== listGeneration) return;
-    const field = $('guestShareText');
+    const field = $('personalShareText');
     field.value = data;
     field.hidden = false;
     field.focus();
     field.select();
-    $('guestShareFeedback').textContent = 'Texto selecionado para copiar.';
+    $('personalShareFeedback').textContent = 'Texto selecionado para copiar.';
   }
 }
 
-$('guestCopy').onclick = copySelection;
-$('guestShare').hidden = typeof navigator.share !== 'function';
-$('guestShare').onclick = async () => {
+$('personalCopy').onclick = copySelection;
+$('personalShare').hidden = typeof navigator.share !== 'function';
+$('personalShare').onclick = async () => {
   const data = shareText();
   if (!data) return;
   const attempt = listGeneration;

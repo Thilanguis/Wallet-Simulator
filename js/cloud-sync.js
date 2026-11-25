@@ -9,6 +9,12 @@
   function pack(wallet) {
     return { simulator: structuredClone(wallet.simulator), financeJson: JSON.stringify(wallet.finance) };
   }
+  const fits = (packed) => new TextEncoder().encode(JSON.stringify(packed)).length <= 650000;
+  function assertFits(packed) {
+    if (!fits(packed)) {
+      throw new Error('A carteira excedeu o tamanho da sincronização. Exporte um backup; nenhum registro foi removido.');
+    }
+  }
   function unpack(doc) {
     if (doc.schema !== 3 || !Number.isSafeInteger(doc.revision) || doc.revision < 1 || !doc.simulator || typeof doc.financeJson !== 'string') throw new Error('Estado compartilhado incompatível.');
     return { version: 2, revision: 0, simulator: structuredClone(doc.simulator), finance: JSON.parse(doc.financeJson) };
@@ -54,6 +60,7 @@
       stopped = false,
       suspended = false,
       connectionTimer = null;
+    const assertWalletFits = wallet => assertFits(transport.preparePayload ? transport.preparePayload(wallet) : wallet);
     function status(next, error) {
       if ((mode === 'local' || mode === 'controlling') && next !== mode && (freezeOnReceive || next !== 'receiving')) {
         onFreeze();
@@ -163,7 +170,7 @@
       try {
         const seed = pack(store.snapshot());
         validate({ version: 2, revision: 0, simulator: seed.simulator, finance: JSON.parse(seed.financeJson) });
-        if (new TextEncoder().encode(JSON.stringify(seed)).length > 650000) throw new Error('A carteira excedeu o tamanho da sincronização. Exporte um backup; nenhum registro foi removido.');
+        assertWalletFits(seed);
         const doc = await transport.transact((current) => {
           if (current) validate(unpack(current));
           if (current && current.controller !== id && current.leaseUntil > now()) throw Object.assign(new Error('A carteira está em uso no outro aparelho. Libere o controle lá ou aguarde 45 segundos após fechá-lo.'), { code: 'wallet/in-use' });
@@ -210,7 +217,7 @@
       try {
         validate({ version: 2, revision: 0, simulator: sent.simulator, finance: JSON.parse(sent.financeJson) });
         // Firestore has a 1 MiB document limit; fail visibly instead of truncating a ledger.
-        if (new TextEncoder().encode(JSON.stringify(sent)).length > 650000) throw new Error('A carteira excedeu o tamanho da sincronização. Exporte um backup; nenhum registro foi removido.');
+        assertWalletFits(sent);
         const doc = await transport.transact((current) => {
           if (!current || current.controller !== id || current.leaseUntil <= now() || current.revision !== expected.revision || signature(current) !== signature(expected))
             throw Object.assign(new Error('A carteira mudou em outro aparelho. Sua cópia foi preservada para conferência.'), { code: 'wallet/stale', current });
@@ -281,7 +288,7 @@
       if (pending) backup(store.snapshot());
       status('local');
     }
-    return { connect, takeControl, release, flush, stop, receive, suspend: fail, state: () => ({ mode, pending, base: structuredClone(base) }) };
+    return { connect, takeControl, release, flush, stop, assertWalletFits, receive, suspend: fail, state: () => ({ mode, pending, base: structuredClone(base) }) };
   }
-  return { create, pack, unpack, signature, LEASE_MS };
+  return { create, pack, unpack, signature, fits, assertFits, LEASE_MS };
 });

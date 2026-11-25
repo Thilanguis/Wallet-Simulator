@@ -1,6 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { hub } = require('./firebase-primary-hub.cjs');
 const Finance = require('../../js/finance.js');
+const { randomBytes } = require('node:crypto');
 const root = 'usuarios/gabriel-local';
 test('an authenticated client opens the wallet with the privilege price migration marker', async ({ page }) => {
   const raw = { saldoDominadora: 1000, bonusEspecialAtivo: false, tarefasBloqueadas: [], accelBoosts: [] };
@@ -154,3 +155,182 @@ test('a blocked task name from Firebase is rendered as text, never as executable
   expect(await page.evaluate(() => window.__securityInjected)).toBeUndefined();
   expect(await page.locator('#tarefasLimitadasLista .tempo-restante').getAttribute('data-nome')).toBe(payload);
 });
+
+test('a wishlist above the old photo budget saves and reloads through the Firebase transport', async ({ page }) => {
+  const Primary = require('../../js/firebase-primary-model.js');
+  const Cloud = require('../../js/cloud-sync.js');
+  const raw = { saldoDominadora: 1000, bonusEspecialAtivo: false, tarefasBloqueadas: [], accelBoosts: [] };
+  const canonical = Primary.bootstrap(raw, {}, { simulator: {}, emptyFinance: Finance.empty() });
+  const photo = 'data:image/jpeg;base64,/' + 'a'.repeat(13000);
+  const catalog = Array.from({ length: 52 }, (_, index) => ({
+    id: 'legacy-item-' + index, title: 'Produto antigo ' + index, store: 'Loja', person: 'Dominadora',
+    quantity: 1, originalPrice: 1, currency: 'CAD', imageUrl: photo, bought: false,
+  }));
+  canonical.simulator.wishlist = JSON.stringify(catalog);
+  expect(() => Cloud.assertFits({ simulator: canonical.simulator, financeJson: canonical.financeJson })).toThrow(/excedeu o tamanho/);
+  const server = await hub({
+    [root]: { ...raw, walletAtualV4: canonical },
+    [root + '/config/acesso']: { emails: ['owner@example.invalid', 'partner@example.invalid'], adminEmail: 'owner@example.invalid', securityVersion: 'google-private-v1' },
+  });
+  await server.attach(page);
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  await page.locator('[data-panel=wishlistPanel]').click();
+  const editor = page.locator('#wishEditor');
+  await editor.locator('summary').click();
+  await editor.locator('#wishTitle').fill('Desejo após o limite antigo');
+  await editor.locator('#wishStore').fill('Loja');
+  await editor.locator('#wishPrice').fill('12,50');
+  await editor.locator('#wishSave').click();
+  await expect(editor).not.toHaveAttribute('open', '');
+  const saved = server.docs.get(root).walletAtualV4;
+  expect(saved.wishlistImages).toEqual([photo]);
+  expect(JSON.parse(saved.simulator.wishlist)).toHaveLength(53);
+  expect(JSON.parse(saved.simulator.wishlist)[0].imageUrl).toBeUndefined();
+  await page.reload();
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  await page.locator('[data-panel=wishlistPanel]').click();
+  await expect(page.getByRole('button', { name: 'Editar Desejo após o limite antigo' })).toBeVisible();
+  const restored = await page.evaluate(() => JSON.parse(AppStorage.getItem('wishlist')));
+  expect(restored.map(item => item.id).slice(0, 52)).toEqual(catalog.map(item => item.id));
+  expect(restored.slice(0, 52).every(item => item.imageUrl === photo)).toBe(true);
+});
+
+test('imports wishes beyond one document and reloads with the second Google account', async ({ page, browser }) => {
+  const Primary = require('../../js/firebase-primary-model.js');
+  const Cloud = require('../../js/cloud-sync.js');
+  const raw = { saldoDominadora: 1000, bonusEspecialAtivo: false, tarefasBloqueadas: [], accelBoosts: [] };
+  const canonical = Primary.bootstrap(raw, {}, { simulator: {}, emptyFinance: Finance.empty() });
+  const catalog = Array.from({ length: 48 }, (_, index) => ({
+    id: 'original-' + index, title: 'Produto ' + index + ' 🚀', store: 'Loja', person: 'Dominadora',
+    quantity: 1, originalPrice: index + 1, currency: 'CAD', bought: false,
+    imageUrl: 'data:image/jpeg;base64,' + randomBytes(9600).toString('base64'),
+  }));
+  canonical.simulator.wishlist = JSON.stringify(catalog);
+  expect(Cloud.fits(Cloud.pack(Cloud.unpack(canonical)))).toBe(true);
+  const server = await hub({ [root]: { ...raw, walletAtualV4: canonical } });
+  await server.attach(page);
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  await page.evaluate(() => {
+    const setItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === 'findom.wallet.v2' && value.includes('Novo produto')) {
+        throw new DOMException('Cache cheio', 'QuotaExceededError');
+      }
+      return setItem.call(this, key, value);
+    };
+  });
+
+  await page.locator('[data-panel=wishlistPanel]').click();
+  const editor = page.locator('#wishEditor');
+  await editor.locator('summary').click();
+  await editor.locator('#wishTitle').fill('Novo produto 0');
+  await editor.locator('#wishStore').fill('Loja');
+  await editor.locator('#wishPrice').fill('12,50');
+  const addRow = editor.locator('#wishAddManualProduct');
+  await addRow.click();
+  const batch = editor.locator('#wishBatchRows');
+  const url = 'https://example.invalid/p/' + 'a'.repeat(3900);
+  for (let index = 0; index < 9; index++) {
+    if (index >= await batch.locator('[data-field=url]').count()) await addRow.click();
+    await batch.locator('[data-field=title]').nth(index).fill('Novo produto ' + index);
+    await batch.locator('[data-field=store]').nth(index).fill('Loja');
+    await batch.locator('[data-field=price]').nth(index).fill('12,50');
+    await batch.locator('[data-field=url]').nth(index).fill(url + index);
+  }
+  await editor.getByRole('button', { name: 'Adicionar selecionados' }).click();
+  await expect(editor).not.toHaveAttribute('open', '');
+  const first = server.docs.get(root).walletAtualV4;
+  expect(first.simulator.wishlist).toBeUndefined();
+  expect(first.wishlistPages.length).toBeGreaterThan(1);
+
+  const extra = Array.from({ length: 45 }, (_, index) => ({
+    ...catalog[index], id: 'extra-' + index, title: 'Imagem adicional ' + index,
+    imageUrl: 'data:image/jpeg;base64,' + randomBytes(9600).toString('base64'),
+  }));
+  await page.evaluate(async items => {
+    const wallet = WalletStore.snapshot();
+    wallet.simulator.wishlist = JSON.stringify([...JSON.parse(wallet.simulator.wishlist), ...items]);
+    WalletStore.commitBoth(wallet.finance, wallet.simulator);
+    await SharedWallet.flush();
+  }, extra);
+  const saved = server.docs.get(root).walletAtualV4;
+  expect(saved.wishlistPages.length).toBeGreaterThan(10);
+  expect(JSON.stringify(saved).length).toBeLessThan(20000);
+
+  const context = await browser.newContext();
+  try {
+    const partner = await context.newPage();
+    await server.attach(partner, '0', { user: { uid: 'partner', email: 'partner@example.invalid', emailVerified: true } });
+    await expect(partner.locator('#cloudStatusText')).toHaveText('Salvo no Firebase');
+    const restore = () => partner.evaluate(() => JSON.parse(AppStorage.getItem('wishlist')));
+    const wishes = await restore();
+    expect(wishes).toHaveLength(102);
+    expect(wishes.slice(0, 48)).toEqual(catalog);
+    expect(wishes.slice(-45)).toEqual(extra);
+    expect(wishes.find(item => item.title === 'Novo produto 8')).toMatchObject({ originalPrice: 12.50, url: url + '8' });
+    await partner.reload();
+    await expect(partner.locator('#cloudStatusText')).toHaveText('Salvo no Firebase');
+    expect(await restore()).toEqual(wishes);
+  } finally {
+    await context.close();
+  }
+});
+
+for (const count of [55, 75]) {
+  const fitsLegacy = count === 55;
+  test('old rules ' + (fitsLegacy ? 'allow a compatible wishlist edit' : 'keep the draft open until paging is enabled'), async ({ page }) => {
+    const Primary = require('../../js/firebase-primary-model.js');
+    const raw = { saldoDominadora: 1000, bonusEspecialAtivo: false, tarefasBloqueadas: [], accelBoosts: [] };
+    const canonical = Primary.bootstrap(raw, {}, { simulator: {}, emptyFinance: Finance.empty() });
+    const wishes = Array.from({ length: count }, (_, index) => ({
+      id: 'old-' + index, title: 'Produto ' + index, store: 'Loja', person: 'Dominadora',
+      quantity: 1, originalPrice: 12.50, currency: 'CAD', bought: false,
+      imageUrl: 'data:image/jpeg;base64,' + randomBytes(9600).toString('base64'),
+    }));
+    canonical.simulator.wishlist = JSON.stringify(wishes);
+    const server = await hub({ [root]: { ...raw, walletAtualV4: canonical } });
+    let blocked = 0;
+    server.rejectWrites(changes => {
+      if (!changes.some(({ path }) => path.startsWith(root + '/wishlistPages/'))) return false;
+      blocked++;
+      return true;
+    });
+    await server.attach(page);
+    await expect(page.locator('#cloudStatusText')).toHaveText('Salvo no Firebase');
+    expect(blocked).toBe(0);
+    await page.locator('[data-panel=wishlistPanel]').click();
+    await page.getByRole('button', { name: 'Editar Produto 0', exact: true }).click();
+    const editor = page.locator('#wishEditor');
+    await editor.locator('#wishTitle').fill('Produto revisado');
+    await editor.locator('#wishSave').click();
+
+    if (fitsLegacy) {
+      await expect(editor).not.toHaveAttribute('open', '');
+      const saved = server.docs.get(root).walletAtualV4;
+      expect(saved.wishlistPages).toBeUndefined();
+      const savedWishes = JSON.parse(saved.simulator.wishlist);
+      expect(savedWishes[0]).toMatchObject({ title: 'Produto revisado', imageUrl: wishes[0].imageUrl });
+      expect(savedWishes.slice(1)).toEqual(wishes.slice(1));
+    } else {
+      await expect(editor.locator('#wishSaveError')).toContainText('O acesso à carteira está ativo.');
+      await expect(page.locator('#firebaseAuthPanel')).toBeHidden();
+      await expect(editor.locator('#wishTitle')).toHaveValue('Produto revisado');
+      expect(server.docs.get(root).walletAtualV4.simulator.wishlist).toBe(canonical.simulator.wishlist);
+
+      server.rejectWrites(() => false);
+      await editor.getByRole('button', { name: 'Reconectar ao Firebase' }).click();
+      await expect(page.locator('#cloudStatusText')).toHaveText('Salvo no Firebase');
+      await expect(editor.locator('#wishTitle')).toHaveValue('Produto revisado');
+      await expect(editor.locator('#wishSave')).toBeEnabled();
+      await editor.locator('#wishSave').click();
+      await expect(editor).not.toHaveAttribute('open', '');
+      expect(server.docs.get(root).walletAtualV4.wishlistPages.length).toBeGreaterThan(1);
+    }
+    expect(blocked).toBeGreaterThan(0);
+    await page.reload();
+    await expect(page.locator('#cloudStatusText')).toHaveText('Salvo no Firebase');
+    const restored = await page.evaluate(() => JSON.parse(AppStorage.getItem('wishlist')));
+    expect(restored).toHaveLength(count);
+    expect(restored[0]).toMatchObject({ title: 'Produto revisado', imageUrl: wishes[0].imageUrl });
+  });
+}

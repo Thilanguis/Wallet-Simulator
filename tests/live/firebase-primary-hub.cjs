@@ -9,6 +9,7 @@ async function hub(seed = {}) {
   const docs = new Map(Object.entries(initial).map(([key, value]) => [key, structuredClone(value)])),
     pages = new Set();
   let writes = 0;
+  let rejectWrite = () => false;
   async function broadcast(path, value) {
     for (const page of pages) if (!page.isClosed()) await page.evaluate(({ path, value }) => window.dispatchEvent(new CustomEvent('__cloudDoc', { detail: { path, value } })), { path, value }).catch(() => {});
   }
@@ -50,12 +51,14 @@ async function hub(seed = {}) {
         contentType: 'text/javascript',
         body: `
         export const getFirestore=app=>({app});export const serverTimestamp=()=> '2026-11-02T00:00:00Z';
-        export const doc=(db,...parts)=>({path:parts.join('/'),kind:'doc'});export const collection=(db,...parts)=>({path:parts.join('/'),kind:'collection'});
+        export const doc=(db,...parts)=>({path:[db.path,...parts].filter(Boolean).join('/'),kind:'doc'});export const collection=(db,...parts)=>({path:parts.join('/'),kind:'collection'});
         const snap=value=>({exists:()=>value!==null,data:()=>value,metadata:{fromCache:false,hasPendingWrites:false}});
         const querySnap=items=>({docs:items.map(({id,value})=>({id,data:()=>value})),metadata:{fromCache:false,hasPendingWrites:false}});
         export const getDocFromServer=async ref=>snap(await window.__hubRead(ref.path));
         export function onSnapshot(ref,options,receive,fail){let active=true;const deliver=async()=>{try{const value=ref.kind==='collection'?querySnap(await window.__hubList(ref.path)):snap(await window.__hubRead(ref.path));if(active)receive(value)}catch(e){fail(e)}};const listener=event=>{if(event.detail.path===ref.path||(ref.kind==='collection'&&event.detail.path.startsWith(ref.path+'/')&&event.detail.path.split('/').length===ref.path.split('/').length+1))void deliver()};window.addEventListener('__cloudDoc',listener);void deliver();return()=>{active=false;window.removeEventListener('__cloudDoc',listener)}}
-        export async function runTransaction(db,change){for(let n=0;n<10;n++){const expected={},writes=[];const result=await change({get:async ref=>{const value=await window.__hubRead(ref.path);expected[ref.path]=value;return snap(value)},set:(ref,data,options)=>writes.push({path:ref.path,data,options})});if(await window.__hubWrite({expected,writes}))return result;}throw new Error('transaction conflict')}
+        async function commitWrites(expected,writes){const result=await window.__hubWrite({expected,writes});if(result==='permission-denied')throw Object.assign(new Error('Missing or insufficient permissions.'),{code:result});return result}
+        export function writeBatch(){const writes=[];return{set:(ref,data)=>writes.push({path:ref.path,data}),commit:()=>commitWrites({},writes)}}
+        export async function runTransaction(db,change){for(let n=0;n<10;n++){const expected={},writes=[];const result=await change({get:async ref=>{const value=await window.__hubRead(ref.path);expected[ref.path]=value;return snap(value)},set:(ref,data,options)=>writes.push({path:ref.path,data,options})});if(await commitWrites(expected,writes))return result;}throw new Error('transaction conflict')}
       `,
       });
     });
@@ -64,9 +67,11 @@ async function hub(seed = {}) {
       [...docs].filter(([key, value]) => value && key.startsWith(path + '/') && key.split('/').length === path.split('/').length + 1).map(([key, value]) => ({ id: key.split('/').at(-1), value: structuredClone(value) })),
     );
     await page.exposeBinding('__hubWrite', (_, { expected, writes: changes }) => {
+      if (rejectWrite(changes)) return 'permission-denied';
       for (const [key, value] of Object.entries(expected)) if (JSON.stringify(docs.get(key) ?? null) !== JSON.stringify(value)) return false;
       for (const { path, data, options } of changes) {
         const value = options?.merge || options?.mergeFields ? { ...(docs.get(path) || {}), ...structuredClone(data) } : structuredClone(data);
+        if (Buffer.byteLength(JSON.stringify(value)) > 1048576) throw new Error('Documento Firebase ultrapassou 1 MiB no teste.');
         docs.set(path, value);
         setTimeout(() => broadcast(path, value), 0);
       }
@@ -75,6 +80,6 @@ async function hub(seed = {}) {
     });
     await page.goto('/');
   }
-  return { attach, docs, publish, writes: () => writes };
+  return { attach, docs, publish, writes: () => writes, rejectWrites: (reject) => { rejectWrite = reject; } };
 }
 module.exports = { hub };

@@ -15,7 +15,6 @@
     <link rel="stylesheet" href="css/luzLateral.css" />
     <link rel="stylesheet" href="css/modern.css" />
     <link rel="stylesheet" href="css/wishlist-people.css" />
-    <script src="js/local-access-menu.js"></script>
     <script type="module" src="js/firebase-connection.js"></script>
   </head>
   <body class="firebase-required firebase-checking">
@@ -61,7 +60,6 @@
         <h2 id="firebaseAuthTitle">Entrar na carteira</h2>
         <p id="firebaseAuthMessage" role="status">Entre com Google para acessar seus saldos, privilégios e notas.</p>
         <button id="googleSignIn" type="button">Entrar com Google</button>
-        <p><a href="./wishlist-guest.html">Acessar minha lista de desejos</a></p>
         <button id="retryFirebaseConnection" type="button" hidden>Tentar novamente</button>
       </section>
       <nav class="app-nav" aria-label="Seções">
@@ -407,14 +405,14 @@
                 <input id="entryDate" type="date" />
               </label>
               <label>
-                Valor original
+                <span id="entryAmountLabel">Valor em reais (BRL)</span>
                 <input id="entryAmount" inputmode="decimal" required placeholder="0,00" />
               </label>
-              <label>
-                Moeda
+              <label id="entryLegacyCurrency" hidden>
+                Moeda do lançamento
                 <select id="entryCurrency">
                   <option value="BRL">Reais · BRL</option>
-                  <option value="USD">Dólares · USD</option>
+                  <option value="USD">Dólares americanos · USD</option>
                 </select>
               </label>
               <label>
@@ -426,7 +424,7 @@
                 </select>
               </label>
             </div>
-            <label class="entry-cad-field">Valor em CAD<input id="entryCadOriginal" inputmode="decimal" placeholder="0,00" /><small id="entryCadHint" role="status"></small></label><details>
+            <label class="entry-cad-field">Valor em dólares canadenses (CAD)<input id="entryCadOriginal" inputmode="decimal" placeholder="0,00" /><small id="entryCadHint" role="status"></small></label><details>
               <summary>Adicionar observações</summary>
               <label>
                 Observações
@@ -550,35 +548,39 @@
           <div id="wishImagePreview"></div>
           <div class="wish-entry-options">
             <div class="wish-person-fields">
-              <label>Para quem?<select id="wishPerson"></select></label>
+              <label><span id="wishPersonLabel">Para quem?</span><select id="wishPerson"></select></label>
               <div id="wishPersonNameField" hidden>
                 <label>Novo nome<input id="wishPersonName" maxlength="80" disabled /></label>
                 <button type="button" id="wishRegisterPerson" class="wish-share-button">Salvar pessoa</button>
               </div>
+              <button type="button" id="wishApplyBatchPerson" class="wish-share-button" hidden>Aplicar a todos</button>
             </div>
-            <label class="wish-visibility">Quem pode ver?
-              <select id="wishVisibility">
-                <option value="wallet">Só no Wallet</option>
-                <option value="recipient">Mostrar na lista da pessoa</option>
-              </select>
-            </label>
-            <label id="wishDefaultStoreLabel">Loja padrão<input id="wishDefaultStore" maxlength="150" placeholder="Preenche os produtos sem loja" /></label>
+            <label id="wishDefaultStoreLabel">Loja padrão<input id="wishDefaultStore" maxlength="150" placeholder="Substitui a loja de todos os produtos" /></label>
+            <label id="wishBatchTaxLabel" hidden>Taxas do Québec no lote<select id="wishBatchTax"><option value="">Ajustar por item</option><option value="apply">Aplicar em todos</option><option value="remove">Remover de todos</option></select></label>
           </div>
           <div id="wishSingleFields" class="form-grid">
             <label>Produto<input id="wishTitle" maxlength="300" required /></label>
             <label>Loja<input id="wishStore" maxlength="150" required /></label>
-            <label>Preço unitário<input id="wishPrice" type="number" min="0" step="0.01" /></label>
-            <label>Moeda<select id="wishCurrency"><option>BRL</option><option>CAD</option><option>USD</option><option>EUR</option><option>GBP</option><option>AUD</option><option>JPY</option><option>CNY</option><option>CHF</option></select></label>
+            <label>Preço unitário<input id="wishPrice" inputmode="decimal" /></label>
+            <label>Moeda<select id="wishCurrency"><option selected>CAD</option><option>BRL</option><option>USD</option><option>EUR</option><option>GBP</option><option>AUD</option><option>JPY</option><option>CNY</option><option>CHF</option></select></label>
             <label>Quantidade<input id="wishQuantity" type="number" inputmode="numeric" min="1" step="1" value="1" required /></label>
             <label class="wish-tax-option"><input id="wishTaxQuebec" type="checkbox" /> Aplicar taxas do Québec (GST 5% + QST 9,975%) — preço sem impostos</label>
           </div>
+          <output id="wishUnitBrl" class="wish-brl-preview" aria-live="polite"></output>
           <p id="wishConversion" class="hint" role="status"></p>
           <div id="wishBatch" hidden>
-            <p class="hint">Confira cada produto e selecione os que quer adicionar. A pessoa escolhida vale para o lote.</p>
+            <p class="hint">A pessoa do lote vale para todos os produtos. Use “Para quem?” em cada item para mudar o destinatário.</p>
             <div id="wishBatchRows"></div>
           </div>
           <p id="wishSaveError" class="hint" role="alert"></p>
-          <div class="btn-row"><button type="button" id="wishAddManualProduct" class="wish-share-button">＋ Adicionar outro produto</button><button type="submit" id="wishSave">Adicionar desejo</button><button type="button" id="wishCancel" class="subtle-btn" hidden>Cancelar edição</button></div>
+          <button type="button" id="wishRetrySync" class="wish-share-button" hidden>Reconectar ao Firebase</button>
+          <div class="wish-form-footer">
+            <button type="button" id="wishAddManualProduct" class="wish-form-add-line" aria-label="Adicionar outro produto"><span aria-hidden="true">+</span> Outro produto</button>
+            <div class="wish-form-submit-actions">
+              <button type="button" id="wishCancel" class="wish-form-discard" hidden>Cancelar edição</button>
+              <button type="submit" id="wishSave" class="wish-form-submit">Adicionar desejo</button>
+            </div>
+          </div>
         </form>
         </details>
         <div class="wish-list-heading">
@@ -595,14 +597,13 @@
           <div class="wish-list-toolbar">
             <div class="wish-list-filters" role="group" aria-label="Filtros e seleção">
               <select id="wishSelectStore" aria-label="Filtrar por loja" hidden></select>
-              <label class="wish-purchase-all"><input type="checkbox" id="wishHideBought" /> Ocultar comprados</label>
+              <label class="wish-purchase-all"><input type="checkbox" id="wishShowBought" autocomplete="off" /> Mostrar comprados</label>
               <label id="wishSelectAllPurchaseLabel" class="wish-purchase-all" hidden>
-                <input type="checkbox" id="wishSelectAllPurchase" /> Selecionar todos
+                <input type="checkbox" id="wishSelectAllPurchase" /> Selecionar pendentes
               </label>
             </div>
             <div class="wish-list-people" role="group" aria-label="Pessoas">
               <button type="button" id="wishCircleOpen" class="wish-share-button" aria-haspopup="dialog" hidden>👤 Pessoas e listas</button>
-              <button type="button" id="wishApprovalNotice" class="wish-share-button" hidden></button>
               <button type="button" id="wishManagePeople" class="wish-share-button" aria-label="Gerenciar amigas" title="Gerenciar amigas" aria-haspopup="dialog">
                 <span>Amigas</span><span id="wishFriendCount" aria-hidden="true">0</span>
               </button>
@@ -618,8 +619,8 @@
         <div id="wishList"></div>
         <dialog id="wishPurchaseDialog" class="app-dialog wish-share-dialog" aria-labelledby="wishPurchaseTitle">
           <form method="dialog"><button type="submit" class="app-dialog-close" aria-label="Fechar revisão da compra">×</button></form>
-          <h2 id="wishPurchaseTitle">Compra da Luana</h2>
-          <p class="hint">A estimativa em reais usa a cotação da lista e inclui todas as unidades de cada produto. Confira ou informe o valor pago antes de registrar a compra em Notas e Gastos Reais.</p>
+          <h2 id="wishPurchaseTitle">Revisar compras</h2>
+          <p class="hint">Confira o valor pago em reais por produto, incluindo todas as unidades. Cada loja gera um lançamento em Notas e Gastos Reais.</p>
           <form id="wishPurchaseForm">
             <label>Data da compra<input id="wishPurchaseDate" type="date" required /></label>
             <div id="wishPurchaseItems"></div>
@@ -687,13 +688,6 @@
             <button type="button" id="reconnectCloud" hidden>Reconectar</button>
           </div>
           <button type="button" id="exportCloudRecovery" hidden>Baixar cópia local antes da sincronização</button>
-        </details>
-        <details id="wishAccessSettings" class="cloud-settings" hidden>
-          <summary>Acesso à Lista de Desejos <span id="wishAccessPending" hidden>· Ativação pendente</span></summary>
-          <p id="wishAccessHelp" class="hint" hidden>Aprove a conta Google e vincule o perfil que ela pode acessar na Lista de Desejos.</p>
-          <p id="wishAccessStatus" class="hint" role="status"></p>
-          <button type="button" id="wishDirectorySync" class="wish-share-button" hidden>Atualizar pessoas disponíveis para compartilhar</button>
-          <ul id="wishAccessAccounts"></ul>
         </details>
         <section id="economySettingsPanel" class="settings-card" aria-labelledby="economySettingsTitle">
           <h3 id="economySettingsTitle">Economia do simulador</h3>

@@ -42,6 +42,7 @@
       return virtual(doc);
     }
     const sharedTransport = {
+      preparePayload: transport.preparePayload,
       watch(receive, fail) {
         return transport.watch((doc) => {
           const base = engine.state().base,
