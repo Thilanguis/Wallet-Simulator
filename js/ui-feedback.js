@@ -35,7 +35,7 @@ window.UIFeedback = (() => {
       if (!locks.has(button)) return;
       locks.delete(button);
       if (button.contains(spinner)) button.replaceChildren(...children);
-      button.disabled = disabled || !WalletStore.isWritable();
+      button.disabled = disabled;
       button.classList.remove('fx-busy');
       if (aria === null) button.removeAttribute('aria-busy');
       else button.setAttribute('aria-busy', aria);

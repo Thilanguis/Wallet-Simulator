@@ -5,6 +5,8 @@ const base = require('@playwright/test');
 const test = base.test.extend({
   firebaseUiFixture: [
     async ({ page, context }, use) => {
+      const uncaught = [];
+      page.on('pageerror', error => uncaught.push(error.message));
       await page.routeWebSocket(/\/ws$/, (socket) => socket.close());
       await context.route('**/js/firebase-google-auth.js', (route) =>
         route.fulfill({
@@ -27,6 +29,7 @@ const test = base.test.extend({
         }),
       );
       await use();
+      base.expect(uncaught, 'Erros de JavaScript não tratados na página').toEqual([]);
     },
     { auto: true },
   ],

@@ -107,3 +107,86 @@ test('estimated CAD shows historical source and reference date', async ({ page, 
   await page.keyboard.press('Escape');
   await expect(page.locator('.finance-cad-dialog')).not.toBeVisible();
 });
+
+test('an update during import confirmation preserves the latest notes and the draft', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#cloudStatusText')).toHaveText('Salvo no Firebase');
+  await page.locator('[data-panel=financePanel]').click();
+  await page.locator('#financeImport > summary').click();
+  await page.locator('[data-finance-jump=import]').click();
+  const draft = '1. Lista de Compras\n• Loja Aurora (1): R$ 10,00';
+  await page.locator('#whatsappInput').fill(draft);
+  await page.locator('#previewImport').click();
+  await page.locator('#confirmImport').click();
+  await expect(page.locator('[data-dialog-confirm]')).toBeVisible();
+  await page.evaluate(() => {
+    WalletStore.commitFinance(Finance.update(WalletStore.finance(), { type: 'add', entry: {
+      id: 'from-other-device', category: 'Lista de Compras', description: 'Compra recebida', amount: 2500,
+      currency: 'BRL', status: 'paid', date: '2026-11-10',
+    } }));
+    window.dispatchEvent(new Event('wallet:remote'));
+  });
+  await page.locator('[data-dialog-confirm]').click();
+  await expect(page.locator('#financeMessage')).toContainText('Os registros mudaram');
+  await expect(page.locator('#whatsappInput')).toHaveValue(draft);
+  expect(await page.evaluate(() => WalletStore.finance().entries.map(entry => entry.id))).toEqual(['from-other-device']);
+  await page.locator('#previewImport').click();
+  await page.locator('#confirmImport').click();
+  await page.locator('[data-dialog-confirm]').click();
+  await expect(page.locator('#groupedFinanceList [data-note-ids]')).toHaveCount(2);
+});
+
+test('a failed or cancelled save releases its button and protects a concurrent edit', async ({ page }) => {
+  await page.route('https://api.frankfurter.dev/**', route => route.fulfill({ json: [{ base: 'CAD', quote: 'BRL', date: '2026-11-10', rate: 4 }] }));
+  await page.goto('/');
+  await expect(page.locator('#cloudStatusText')).toHaveText('Salvo no Firebase');
+  await page.evaluate(() => FinanceUI.save(Finance.update(Finance.empty(), { type: 'add', entry: {
+    id: 'edited-note', category: 'Lista de Compras', description: 'Compra anterior', amount: 2500,
+    currency: 'BRL', status: 'paid', date: '2026-11-10',
+  } })));
+  await page.locator('[data-panel=financePanel]').click();
+  await page.locator('[data-note-edit=edited-note]').click();
+  const save = page.locator('#saveEntry');
+  await page.locator('#entryDescription').fill('Minha correção');
+  await save.click();
+  await expect(page.locator('[data-dialog-cancel]')).toBeVisible();
+  await page.evaluate(() => WalletStore.setWritable(false));
+  await page.locator('[data-dialog-cancel]').click();
+  await expect(save).not.toHaveAttribute('aria-busy', 'true');
+  await page.evaluate(() => WalletStore.setWritable(true));
+  await expect(save).toBeEnabled();
+  await save.click();
+  await expect(page.locator('[data-dialog-confirm]')).toBeVisible();
+  await page.evaluate(() => {
+    WalletStore.commitFinance(Finance.update(WalletStore.finance(), { type: 'edit', id: 'edited-note', patch: { description: 'Correção recebida' } }));
+    window.dispatchEvent(new Event('wallet:remote'));
+  });
+  await page.locator('[data-dialog-confirm]').click();
+  await expect(page.locator('#entryFeedback')).toContainText('O lançamento mudou');
+  await expect(save).toBeEnabled();
+  expect(await page.evaluate(() => WalletStore.finance().entries[0].description)).toBe('Correção recebida');
+});
+
+test('a late currency conversion cannot overwrite another note editor', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#cloudStatusText')).toHaveText('Salvo no Firebase');
+  await page.evaluate(() => {
+    FinanceUI.save(Finance.update(Finance.empty(), { type: 'add', entry: {
+      id: 'stable-amount', category: 'Lista de Compras', description: 'Valor registrado', amount: 2500,
+      currency: 'BRL', status: 'paid', date: '2026-11-10',
+    } }));
+    FinanceCad.convertPair = () => new Promise(resolve => { window.finishDraftConversion = resolve; });
+  });
+  await page.locator('[data-panel=financePanel]').click();
+  await page.locator('#financeAdd > summary').click();
+  await page.locator('#entryCadOriginal').fill('10,00');
+  await expect.poll(() => page.evaluate(() => Boolean(window.finishDraftConversion))).toBe(true);
+  await page.locator('[data-note-edit=stable-amount]').click();
+  const dialog = page.getByRole('dialog', { name: 'Editar lançamento' });
+  await expect(dialog.locator('#entryAmount')).toHaveValue('25,00');
+  await page.evaluate(async () => {
+    window.finishDraftConversion({ amount: 4000, rate: 4, rateDate: '2026-11-10' });
+    await Promise.resolve();
+  });
+  await expect(dialog.locator('#entryAmount')).toHaveValue('25,00');
+});

@@ -12,10 +12,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!button) return;
     const entry = state.entries.find(e => e.id === button.dataset.cadEntry);
     if (!entry) return;
-    const itemId = button.dataset.cadItem;
-    const item = itemId ? PurchaseItems.read(entry, JSON.parse(AppStorage.getItem('wishlist') || '[]'), F, peopleRoster()).find(p => p.id === itemId) : null;
-    cadDialog.querySelector('p').textContent = item ? item.title + '\n' + (item.cadEstimated ? 'Valor estimado: ' : 'Valor original: ') + (item.cadAmount == null ? 'CAD indisponível' : F.format(item.cadAmount, 'CAD')) + '\nValor do produto em reais: ' + F.format(item.amount) + '\n\nReferência da compra:\n' + FinanceCad.details(entry) : FinanceCad.details(entry);
-    cadDialog.showModal();
+    try {
+      const itemId = button.dataset.cadItem;
+      const item = itemId ? PurchaseItems.read(entry, JSON.parse(AppStorage.getItem('wishlist') || '[]'), F, peopleRoster()).find(p => p.id === itemId) : null;
+      cadDialog.querySelector('p').textContent = item ? item.title + '\n' + (item.cadEstimated ? 'Valor estimado: ' : 'Valor original: ') + (item.cadAmount == null ? 'CAD indisponível' : F.format(item.cadAmount, 'CAD')) + '\nValor do produto em reais: ' + F.format(item.amount) + '\n\nReferência da compra:\n' + FinanceCad.details(entry) : FinanceCad.details(entry);
+      cadDialog.showModal();
+    } catch (error) {
+      AppDialog.alert(error.message);
+    }
   });
   const duplicateHint = document.createElement('p');
   duplicateHint.id = 'entryDuplicateHint'; duplicateHint.className = 'notice'; duplicateHint.hidden = true;
@@ -603,12 +607,9 @@ document.addEventListener('DOMContentLoaded', () => {
     editing = null;
     receiptSuggestion = null;
     $('entryForm').reset();
-    conversionRevision++;
-    conversionPending = Promise.resolve();
-    conversionError = '';
+    resetEntryConversion();
     syncEntryUnits();
     $('entryCadOriginal').dataset.estimated = 'true';
-    $('entryCadHint').textContent = '';
     fillPersonAllocations(null);
     $('entryFeedback').hidden = true;
     duplicateHint.hidden = true;
@@ -619,6 +620,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $('cancelEdit').hidden = true;
   }
   function fill(entry, edit = false) {
+    resetEntryConversion();
     const canadianReceipt = !edit && entry.currency === 'CAD';
     for (const [field, key] of [
       ['Category', 'category'],
@@ -646,6 +648,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (canadianReceipt) convertEntry('CAD');
   }
   let conversionRevision = 0, conversionPending = Promise.resolve(), conversionError = '';
+  function resetEntryConversion() {
+    conversionRevision++;
+    conversionPending = Promise.resolve();
+    conversionError = '';
+    $('entryCadHint').textContent = '';
+  }
   function convertEntry(from) {
     const revision = ++conversionRevision;
     conversionError = '';
@@ -704,8 +712,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const release = UIFeedback.busy($('saveEntry'));
     if (!release) return;
     const editedId = editing;
+    const entryAtStart = editedId ? WalletStore.finance().entries.find(entry => entry.id === editedId) : null;
     try {
-      await conversionPending;
+      let conversion;
+      do {
+        conversion = conversionPending;
+        await conversion;
+      } while (conversion !== conversionPending);
+      if (editing !== editedId) throw new Error('O formulário mudou. Confira os dados e salve novamente.');
       if (conversionError) throw new Error(conversionError);
       const candidate = F.validate({
         category: $('entryCategory').value,
@@ -718,22 +732,37 @@ document.addEventListener('DOMContentLoaded', () => {
         note: $('entryNote').value.trim(),
         ...(allocationDirty ? { personAllocations: readPersonAllocations() } : {}),
       });
-      const previous = editing ? state.entries.find(e => e.id === editing) : null;
+      const previous = entryAtStart;
+      const draftReceipt = receiptSuggestion;
+      const draftRevision = conversionRevision;
       const cadText = $('entryCadOriginal').value.trim();
       if(candidate.currency==='BRL'){
         if(cadText && $('entryCadOriginal').dataset.estimated !== 'true')candidate.cadReference={amount:F.cents(cadText, 'CAD'),kind:'original',source:previous?.source==='wishlist'?'wishlist':'manual',basisAmount:candidate.amount,methodVersion:2,recordedAt:new Date().toISOString()};
         else candidate.cadReference=(await FinanceCad.referenceFor({...previous,...candidate,cadReference:undefined},state.entries).catch(()=>null)) || undefined;
       }
-      if (editing) {
-        const existing = state.entries.find((e) => e.id === editing);
+      const currentLedger = () => {
+        if (editing !== editedId || conversionRevision !== draftRevision || receiptSuggestion !== draftReceipt) {
+          throw new Error('O formulário mudou. Confira os dados e salve novamente.');
+        }
+        const ledger = WalletStore.finance();
+        if (editedId && (!previous || !SharedMerge.equal(previous, ledger.entries.find(entry => entry.id === editedId)))) {
+          throw new Error('O lançamento mudou. Reabra a edição para conferir os dados atuais.');
+        }
+        return ledger;
+      };
+      const checked = currentLedger();
+      if (editedId) {
+        const existing = previous;
         if (existing.redemptionId) throw new Error('Este lançamento está vinculado a um registro anterior e não pode ser alterado por aqui.');
         if (!(await AppDialog.confirm('Confirmar correção de ' + existing.description + ' para ' + F.format(candidate.amount, candidate.currency) + ' · ' + statusLabels[candidate.status] + '?'))) return;
-        save(F.update(state, { type: 'edit', id: editing, patch: candidate }));
+        save(F.update(currentLedger(), { type: 'edit', id: editedId, patch: candidate }));
       } else {
-        const duplicate = F.duplicates(state.entries, candidate);
+        const duplicate = F.duplicates(checked.entries, candidate);
         if (duplicate.length && !(await AppDialog.confirm('Há registro com a mesma loja, data, valor e moeda. Esta é outra compra?'))) return;
         if (receiptSuggestion && !(await AppDialog.confirm('Confirmar dados conferidos do comprovante e registrar ' + F.format(candidate.amount, candidate.currency) + '?'))) return;
-        save(F.update(state, { type: 'add', entry: { ...candidate, ...(receiptSuggestion ? { source: 'receipt', originalMoney: [candidate.cadReference?.kind === 'original' ? { currency: 'CAD', amount: candidate.cadReference.amount } : { currency: candidate.currency, amount: candidate.amount }] } : {}) } }));
+        const latest = currentLedger();
+        if (!SharedMerge.equal(duplicate, F.duplicates(latest.entries, candidate))) throw new Error('Os registros mudaram. Confira possíveis duplicatas e salve novamente.');
+        save(F.update(latest, { type: 'add', entry: { ...candidate, ...(draftReceipt ? { source: 'receipt', originalMoney: [candidate.cadReference?.kind === 'original' ? { currency: 'CAD', amount: candidate.cadReference.amount } : { currency: candidate.currency, amount: candidate.amount }] } : {}) } }));
       }
       resetForm();
       message('Lançamento salvo. Totais atualizados.');
@@ -1153,10 +1182,12 @@ document.addEventListener('DOMContentLoaded', () => {
         F.validate(entry);
         return { ...r, entry };
       });
-      const next = F.commitPreview(state, { rows }),
-        count = next.entries.length - state.entries.length;
+      const ledger = state;
+      const next = F.commitPreview(ledger, { rows }),
+        count = next.entries.length - ledger.entries.length;
       if (!count) throw new Error('Nenhum item novo selecionado.');
       if (!(await AppDialog.confirm('Salvar ' + count + ' novos lançamentos? Itens repetidos/divergentes serão ignorados.'))) return;
+      if (!SharedMerge.equal(ledger, WalletStore.finance())) throw new Error('Os registros mudaram. Analise a lista novamente antes de confirmar.');
       save(next);
       proposed = null;
       $('importPreview').hidden = true;
@@ -1226,12 +1257,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
       if (!candidates.length) throw new Error('Selecione pelo menos um comprovante.');
-      const revision = state.revision;
-      const repeated = candidates.some((entry, i) => F.duplicates([...state.entries, ...candidates.slice(0, i)], entry).length);
+      const ledger = WalletStore.finance();
+      const repeated = candidates.some((entry, i) => F.duplicates([...ledger.entries, ...candidates.slice(0, i)], entry).length);
       const warning = repeated ? ' Há itens com a mesma loja, data, valor e moeda. Confirme apenas se forem compras distintas.' : '';
       if (!(await AppDialog.confirm('Registrar ' + candidates.length + ' lançamentos conferidos?' + warning))) return;
-      if (state.revision !== revision) throw new Error('Os registros mudaram. Confira os itens e confirme novamente.');
-      const next = candidates.reduce((ledger, entry) => F.update(ledger, { type: 'add', entry }), state);
+      if (!SharedMerge.equal(ledger, WalletStore.finance())) throw new Error('Os registros mudaram. Confira os itens e confirme novamente.');
+      const next = candidates.reduce((current, entry) => F.update(current, { type: 'add', entry }), ledger);
       save(next);
       receiptBatchMode(false);
       $('ocrProgress').textContent = candidates.length + ' lançamentos registrados. Totais atualizados.';

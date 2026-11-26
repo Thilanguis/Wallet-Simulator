@@ -326,3 +326,25 @@ test('registers one expense per store with people, contributions and independent
   await expect(freeNote.locator('.note-purchase-breakdown')).toHaveCount(0);
   await expect(freeNote.getByRole('button', { name: 'Desfazer compra' })).toHaveCount(0);
 });
+
+test('an interrupted wish deletion shows the error and leaves the desire available', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#cloudStatusText')).toHaveText('Salvo no Firebase');
+  await page.evaluate(() => {
+    AppStorage.setItem('wishlist', JSON.stringify([{ id: 'retry-delete', title: 'Desejo de teste', originalPrice: 20, currency: 'BRL' }]));
+    AppStorage.flush();
+    window.dispatchEvent(new Event('wallet:remote'));
+  });
+  await page.locator('[data-panel=wishlistPanel]').click();
+  const remove = page.getByRole('button', { name: 'Excluir Desejo de teste' });
+  await remove.click();
+  await expect(page.locator('[data-dialog-confirm]')).toBeVisible();
+  await page.evaluate(() => WalletStore.setWritable(false));
+  await page.locator('[data-dialog-confirm]').click();
+  await expect(page.getByRole('dialog')).toContainText('Aguarde a conexão');
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => WalletStore.setWritable(true));
+  await expect(remove).toBeVisible();
+  await page.getByRole('checkbox', { name: 'Selecionar para compra: Desejo de teste' }).check();
+  await expect(page.locator('#wishTotal')).toContainText('20,00');
+});

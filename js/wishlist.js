@@ -1357,7 +1357,12 @@ document.addEventListener('DOMContentLoaded', () => {
           check.onchange = () => {
             $('wishPurchaseFeedback').textContent = '';
             if (item.bought) {
-              save(rows().map((x) => (x.id === item.id ? { ...x, bought: false, purchaseNoteId: undefined, updatedAt: Date.now() } : x)));
+              try {
+                save(rows().map((x) => (x.id === item.id ? { ...x, bought: false, purchaseNoteId: undefined, updatedAt: Date.now() } : x)));
+              } catch (error) {
+                check.checked = true;
+                AppDialog.alert(error.message);
+              }
               return;
             }
             togglePurchaseSelection([item.id], check.checked);
@@ -1423,9 +1428,14 @@ document.addEventListener('DOMContentLoaded', () => {
         remove.textContent = '×';
         remove.setAttribute('aria-label', 'Excluir ' + item.title);
         remove.onclick = async () => {
-          if (await AppDialog.confirm('Excluir este desejo?')) {
-            save(rows().filter((x) => x.id !== item.id));
+          if (!(await AppDialog.confirm('Excluir este desejo?'))) return;
+          try {
+            const current = rows();
+            if (!SharedMerge.equal(item, current.find(wish => wish.id === item.id))) throw new Error('O desejo mudou durante a confirmação. Confira o item antes de excluir.');
+            save(current.filter(wish => wish.id !== item.id));
             if (editing === item.id) reset();
+          } catch (error) {
+            AppDialog.alert(error.message);
           }
         };
         row.append(check, product, price, edit, remove);
@@ -1961,6 +1971,8 @@ document.addEventListener('DOMContentLoaded', () => {
       setPhotoBusy(true);
       await readPhotoSuggestions([{photo, row: replacement, url: ''}], token, fillBatchPhoto);
       if (token === photoRevision) showPhotoBatchReview();
+    } catch (error) {
+      if (token === photoRevision) $('wishPhotoMessage').textContent = error.message || 'Não foi possível abrir a foto.';
     } finally {
       if (token === photoRevision) {
         picker.value = '';
