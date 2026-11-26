@@ -5,9 +5,10 @@ window.PurchaseEditor = {
       decimal = (n) => (n / 100).toFixed(2).replace('.', ','),
       snap = WalletStore.snapshot(),
       wishes = JSON.parse(snap.simulator.wishlist || '[]'),
-      business = (e) => JSON.stringify((({ cadReference, updatedAt, ...rest }) => rest)(e)),
+      business = ({ cadReference, updatedAt, ...rest }) => rest,
       baseline = business(entry),
-      parts = PurchaseItems.read(entry, wishes, F),
+      parts = PurchaseItems.read(entry, wishes, F, JSON.parse(snap.simulator.wishlistPeople || '[]')),
+      originalPeople = new Map(parts.map(part => [part.id, part.person])),
       pending = new Set(), invalid = new Set();
     const dialog = document.createElement('dialog');
     dialog.className = 'note-edit-dialog purchase-items-editor';
@@ -114,15 +115,48 @@ window.PurchaseEditor = {
         const now = WalletStore.snapshot(),
           current = now.finance.entries.find((e) => e.id === entry.id),
           updated = JSON.parse(now.simulator.wishlist || '[]');
-        if (!current || business(current) !== baseline) throw Error('A compra mudou em outro aparelho. Feche e abra novamente.');
+        if (!current || !SharedMerge.equal(business(current), baseline)) throw Error('A compra mudou em outro aparelho. Feche e abra novamente.');
         if (parts.some(part => !Number.isSafeInteger(part.amount) || part.amount < 0)) throw Error('Confira o total em reais de cada produto.');
         const amount = parts.reduce((n, p) => n + p.amount, 0),
           cadAmount = parts.every((p) => p.cadAmount != null) ? parts.reduce((n, p) => n + p.cadAmount, 0) : null,
           people = new Map();
-        for (const p of parts) {
-          p.person = FinancePeople.canonical(p.person);
-          people.set(p.person, (people.get(p.person) || 0) + p.amount);
+        const roster = JSON.parse(now.simulator.wishlistPeople || '[]');
+        const originalRoster = structuredClone(roster);
+        const previousWishes = new Map(wishes.map(wish => [wish.id, wish]));
+        const updatedWishes = new Map(updated.map(wish => [wish.id, wish]));
+        for (const part of parts) {
+          const entered = part.person.trim().replace(/\s+/g, ' ').normalize('NFC');
+          if (!entered || entered.length > 80) throw Error('Informe um nome de até 80 caracteres para cada produto.');
+          const wish = updatedWishes.get(part.wishId);
+          const old = previousWishes.get(part.wishId);
+          if (part.wishId && (!wish || wish.purchaseNoteId !== entry.id || !SharedMerge.equal(old, wish))) {
+            throw Error('Um desejo mudou. Abra a compra novamente.');
+          }
+          const identity = FinancePeople.identity(entered);
+          let friend;
+          if (wish && identity !== 'luana') {
+            const currentFriend = roster.find(person => wish.personId ? person.id === wish.personId : F.norm(person.name) === F.norm(wish.person || ''));
+            friend = roster.find(person => F.norm(person.name) === F.norm(entered));
+            if (!friend && currentFriend && FinancePeople.identity(currentFriend.name) === identity &&
+                originalPeople.get(part.id) !== entered) {
+              currentFriend.name = entered;
+              friend = currentFriend;
+            }
+            friend ||= roster.find(person => FinancePeople.identity(person.name) === identity);
+            if (!friend) {
+              friend = { id: crypto.randomUUID(), name: entered };
+              roster.push(friend);
+            }
+          }
+          part.person = friend?.name || (identity === 'luana' ? 'Luana' : entered);
+          people.set(part.person, (people.get(part.person) || 0) + part.amount);
+          if (wish) Object.assign(wish, {
+            title: part.title, store: part.store, person: friend?.name || 'Dominadora', personId: friend?.id,
+            quantity: part.quantity, purchasePaidBrl: part.amount, purchasePaidCad: part.cadAmount, updatedAt: Date.now(),
+          });
         }
+        const peopleChange = !SharedMerge.equal(roster, originalRoster) ? { before: originalRoster, after: roster } : undefined;
+        if (peopleChange) now.simulator.wishlistPeople = JSON.stringify(roster);
         const stores = PurchaseItems.byStore(parts);
         const store = stores.length === 1 ? stores[0].name : '';
         const description = dialog.querySelector('[data-description]').value;
@@ -140,17 +174,10 @@ window.PurchaseEditor = {
           ...(!entry.purchaseItems && entry.source !== 'wishlist' ? { purchaseOriginalNote: entry.note || '' } : {}),
         };
         const next = F.update(now.finance, { type: 'edit', id: entry.id, patch });
-        for (const p of parts) {
-          if (!p.wishId) continue;
-          const old = wishes.find((w) => w.id === p.wishId),
-            index = updated.findIndex((w) => w.id === p.wishId);
-          if (index < 0 || JSON.stringify(old) !== JSON.stringify(updated[index])) throw Error('Um desejo mudou. Abra a compra novamente.');
-          updated[index] = { ...updated[index], title: p.title, store: p.store, person: FinancePeople.canonical(old.person || 'Dominadora') === p.person ? (old.person || 'Dominadora') : p.person === 'Luana' ? 'Dominadora' : p.person, personId: FinancePeople.canonical(old.person || 'Dominadora') === p.person ? old.personId : undefined, quantity: p.quantity, purchasePaidBrl: p.amount, purchasePaidCad: p.cadAmount, updatedAt: Date.now() };
-        }
         const wishesBefore = now.simulator.wishlist;
         now.simulator.wishlist = JSON.stringify(updated);
-        WalletStore.commitBoth(next, now.simulator);
-        FinanceUI.rememberChange(now.finance, next, wishesBefore, now.simulator.wishlist);
+        await FinanceUI.commitPurchase(next, now.simulator, [entry.id], parts.flatMap(part => part.wishId ? [part.wishId] : []));
+        FinanceUI.rememberChange(now.finance, next, wishesBefore, now.simulator.wishlist, peopleChange);
         window.dispatchEvent(new Event('wallet:remote'));
         window.dispatchEvent(new Event('finance:changed'));
         dialog.close();

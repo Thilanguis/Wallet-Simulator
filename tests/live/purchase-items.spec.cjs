@@ -35,7 +35,10 @@ for (const width of [1440, 393])
     await page.locator('#financeShowCad').check();
     await expect(page.locator('#financePrepareCad')).toHaveCount(0);
     await expect(page.locator('[data-note-ids=buy] .note-purchase-breakdown')).toContainText('CAD');
-    await page.getByRole('button', { name: 'Editar produto Anel', exact: true }).click();
+    const purchase = page.locator('[data-note-ids=buy]');
+    await expect(purchase.locator('.note-purchase-breakdown [data-purchase-edit]')).toHaveCount(0);
+    await expect(purchase.locator('.note-tools [data-note-edit]')).toHaveCount(1);
+    await purchase.getByRole('button', { name: /^Editar compra / }).click();
     const dialog = page.locator('.purchase-items-editor'),
       first = dialog.locator('.purchase-edit-item').first();
     await first.locator('[data-key=cadAmount]').fill('25');
@@ -52,7 +55,7 @@ for (const width of [1440, 393])
     expect(saved.wishes[0].originalPrice).toBe(50);
     expect(saved.wishes[0].bought).toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    await page.getByRole('button', { name: 'Editar produto Anel', exact: true }).click();
+    await purchase.getByRole('button', { name: /^Editar compra / }).click();
     await expect(page.locator('.purchase-edit-item').first().locator('[data-key=cadAmount]')).toHaveValue('25,00');
     await page.waitForTimeout(300);
     await page.screenshot({path:'.local/purchase-editor-'+width+'.png'});
@@ -117,7 +120,7 @@ for (const hasPaidItem of [true, false]) {
     await expect(page.getByRole('checkbox', { name: 'Comprado: Amostra grátis', exact: true })).toBeChecked();
 
     await page.locator('[data-panel=financePanel]').click();
-    await page.getByRole('button', { name: 'Editar produto Amostra grátis', exact: true }).click();
+    await page.getByRole('button', { name: 'Editar compra Loja', exact: true }).click();
     const editor = page.locator('.purchase-items-editor');
     const sampleTitle = editor.locator('[data-key=title]').nth(hasPaidItem ? 1 : 0);
     await expect(sampleTitle).toHaveValue('Amostra grátis');
@@ -133,3 +136,72 @@ for (const hasPaidItem of [true, false]) {
     expect(edited.wish).toMatchObject({ title: 'Amostra sem custo', bought: true, purchasePaidBrl: 0, purchasePaidCad: 0 });
   });
 }
+
+test('renames and reassigns a bought Shein item before undo and backdated registration', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-11-26T18:00:00Z'));
+  await page.goto('/');
+  await expect(page.locator('#cloudStatusText')).toHaveText('Salvo no Firebase');
+  await page.evaluate(async () => {
+    let finance = Finance.empty();
+    const common = { category: 'Lista de Compras', currency: 'BRL', status: 'paid', amount: 1000 };
+    for (const [id, date, description] of [['before', '2026-11-10', 'Compra anterior'], ['after', '2026-11-12', 'Compra posterior']]) {
+      finance = Finance.update(finance, { type: 'add', entry: { ...common, id, date, description } });
+    }
+    finance = Finance.update(finance, { type: 'add', entry: {
+      ...common, id: 'shein-old', date: '2026-11-11', description: 'Shein', source: 'wishlist', amount: 2000,
+      note: 'Nathalia · R$ 10,00\n• Blusa · Loja: Shein · R$ 10,00\nDominadora · R$ 10,00\n• Saia · Loja: Shein · R$ 10,00',
+    } });
+    const simulator = WalletStore.snapshot().simulator;
+    simulator.wishlistPeople = JSON.stringify([{ id: 'nat', name: 'Natália' }, { id: 'bruna', name: 'Bruna' }]);
+    const item = { store: 'Shein', bought: true, purchaseNoteId: 'shein-old', originalPrice: 10, currency: 'BRL' };
+    simulator.wishlist = JSON.stringify([
+      { ...item, id: 'blusa', title: 'Blusa', person: 'Natália', personId: 'nat' },
+      { ...item, id: 'saia', title: 'Saia', person: 'Dominadora' },
+    ]);
+    WalletStore.commitBoth(finance, simulator);
+    await SharedWallet.flush();
+  });
+  await page.locator('[data-panel=financePanel]').click();
+  const old = page.locator('[data-note-ids=shein-old]');
+  await old.getByRole('button', { name: 'Editar compra Shein' }).click();
+  const dialog = page.locator('.purchase-items-editor');
+  await expect(dialog.locator('[data-key=person]').first()).toHaveValue('Natália');
+  const savePeople = async () => {
+    await dialog.locator('[data-key=person]').first().fill('Nathália');
+    await dialog.locator('[data-key=person]').last().fill('Bruna');
+    await dialog.locator('[data-save]').click();
+    await expect(dialog).toHaveCount(0);
+    await expect(old.locator('.note-purchase-person-heading')).toHaveText([/Nathália/, /Bruna/]);
+  };
+  await savePeople();
+  await page.locator('#financeUndo').click();
+  await expect(old.locator('.note-purchase-person-heading')).toHaveText([/Natália/, /Luana/]);
+  await old.getByRole('button', { name: 'Editar compra Shein' }).click();
+  await savePeople();
+  await page.reload();
+  await expect(page.locator('#cloudStatusText')).toHaveText('Salvo no Firebase');
+  await page.locator('[data-panel=financePanel]').click();
+  await old.getByRole('button', { name: 'Desfazer compra' }).click();
+  await page.locator('[data-dialog-confirm]').click();
+
+  const wishes = page.locator('#wishlistPanel');
+  for (const [name, title] of [['Nathália', 'Blusa'], ['Bruna', 'Saia']]) {
+    const group = wishes.locator('.wish-group').filter({ has: page.getByRole('heading', { name, exact: true }) });
+    const check = group.getByRole('checkbox', { name: 'Selecionar para compra: ' + title });
+    await expect(check).toBeEnabled();
+    await check.check();
+  }
+  await wishes.getByRole('button', { name: 'Registrar compra', exact: true }).click();
+  await page.locator('#wishPurchaseDate').fill('2026-11-11');
+  await page.getByRole('button', { name: 'Confirmar compra', exact: true }).click();
+  await expect(page.locator('#wishPurchaseDialog')).toBeHidden();
+  await page.reload();
+  await expect(page.locator('#cloudStatusText')).toHaveText('Salvo no Firebase');
+  await page.locator('[data-panel=financePanel]').click();
+  const recorded = page.locator('#groupedFinanceList .notebook-line').filter({ has: page.locator('.note-entry-title', { hasText: 'Shein' }) });
+  await expect(recorded.locator('.note-purchase-person-heading')).toHaveText([/Nathália/, /Bruna/]);
+  const persisted = await page.evaluate(() => ({ entries: WalletStore.finance().entries, wishes: JSON.parse(AppStorage.getItem('wishlist')) }));
+  expect(persisted.entries.map(entry => entry.date)).toEqual(['2026-11-10', '2026-11-11', '2026-11-12']);
+  expect(persisted.entries[1].purchaseItems.map(item => item.person)).toEqual(['Nathália', 'Bruna']);
+  expect(persisted.wishes.map(item => [item.person, item.personId, item.bought])).toEqual([['Nathália', 'nat', true], ['Bruna', 'bruna', true]]);
+});

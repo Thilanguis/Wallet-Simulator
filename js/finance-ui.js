@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const entry = state.entries.find(e => e.id === button.dataset.cadEntry);
     if (!entry) return;
     const itemId = button.dataset.cadItem;
-    const item = itemId ? PurchaseItems.read(entry, JSON.parse(AppStorage.getItem('wishlist') || '[]'), F).find(p => p.id === itemId) : null;
+    const item = itemId ? PurchaseItems.read(entry, JSON.parse(AppStorage.getItem('wishlist') || '[]'), F, peopleRoster()).find(p => p.id === itemId) : null;
     cadDialog.querySelector('p').textContent = item ? item.title + '\n' + (item.cadEstimated ? 'Valor estimado: ' : 'Valor original: ') + (item.cadAmount == null ? 'CAD indisponível' : F.format(item.cadAmount, 'CAD')) + '\nValor do produto em reais: ' + F.format(item.amount) + '\n\nReferência da compra:\n' + FinanceCad.details(entry) : FinanceCad.details(entry);
     cadDialog.showModal();
   });
@@ -44,10 +44,10 @@ document.addEventListener('DOMContentLoaded', () => {
   let lastChange = null;
   const collapsedGroups = new Set();
   try { JSON.parse(sessionStorage.getItem('financeCollapsedGroups') || '[]').forEach(name => collapsedGroups.add(name)); } catch {}
-  function rememberChange(before, after, wishesBefore, wishesAfter) {
+  function rememberChange(before, after, wishesBefore, wishesAfter, peopleChange) {
     const change = FinanceTools.capture(before, after, wishesBefore, wishesAfter);
     if (!change) return;
-    lastChange = change;
+    lastChange = { ...change, peopleChange };
     $('financeUndoBar').hidden = !lastChange;
   }
   $('financeUndo').onclick = () => {
@@ -55,8 +55,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const snapshot = WalletStore.snapshot();
       const wishStateBeforeUndo = JSON.parse(snapshot.simulator.wishlist || '[]');
       const restored = FinanceTools.undo(snapshot.finance, lastChange, snapshot.simulator.wishlist);
-      if (restored.wishlist !== undefined) {
-        snapshot.simulator.wishlist = restored.wishlist;
+      if (lastChange.peopleChange) {
+        const { before, after } = lastChange.peopleChange;
+        snapshot.simulator.wishlistPeople = JSON.stringify(SharedMerge.list(after, before, JSON.parse(snapshot.simulator.wishlistPeople || '[]')));
+      }
+      if (restored.wishlist !== undefined || lastChange.peopleChange) {
+        if (restored.wishlist !== undefined) snapshot.simulator.wishlist = restored.wishlist;
         WalletStore.commitBoth(restored.finance, snapshot.simulator);
       } else WalletStore.commitFinance(restored.finance);
       lastChange = null; $('financeUndoBar').hidden = true;
@@ -166,14 +170,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const stores = PurchaseItems.byStore(items);
         const cad = p => !FinanceCad.isEnabled() ? '' : '<button type="button" class="note-cad note-cad-detail" data-cad-entry="'+esc(entry.id)+'" data-cad-item="'+esc(p.id)+'" aria-label="Ver detalhes do valor em CAD">'+(p.cadAmount==null?'CAD —':(p.cadEstimated?'≈ ':'')+('CAD '+(p.cadAmount/100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})))+'</button> ';
         const product = (p) => '<li><span>' + esc(p.title) + (p.quantity > 1 ? ' ×' + p.quantity : '') +
-          '</span><span class="purchase-product-price">' + cad(p) + F.format(p.amount) +
-          ' <button type="button" class="note-icon" data-purchase-edit="' + esc(entry.id) + '" data-purchase-item="' + esc(p.id) +
-          '" aria-label="Editar produto ' + esc(p.title) + '">✎</button></span></li>';
+          '</span><span class="purchase-product-price">' + cad(p) + F.format(p.amount) + '</span></li>';
         const totalOf = (parts) => F.format(parts.reduce((sum, p) => sum + p.amount, 0));
         const people = (parts) => {
           const groups = new Map();
           for (const item of parts) {
-            const person = FinancePeople.canonical(item.person);
+            const person = FinancePeople.canonical(item.person, peopleRoster());
             if (!groups.has(person)) groups.set(person, []);
             groups.get(person).push(item);
           }
@@ -303,7 +305,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     ? '<span class="note-tools">' +
                       showWishes +
                       (shopping && row.entries[0].source !== 'wishlist' && !row.entries[0].purchaseItems ? '<button type="button" class="note-icon" data-purchase-edit="' + esc(row.entries[0].id) + '" aria-label="Editar itens da compra">≡</button>' : '') +
-                      row.entries.map((entry) => '<button type="button" class="note-icon" data-note-edit="' + esc(entry.id) + '" aria-label="Editar ' + esc(entry.description) + '" title="Editar">✎</button>').join('') +
+                      row.entries.map((entry) => {
+                        const label = entry.source === 'wishlist' || entry.purchaseItems ? 'Editar compra' : 'Editar lançamento';
+                        return '<button type="button" class="note-icon" data-note-edit="' + esc(entry.id) + '" aria-label="' +
+                          (label === 'Editar compra' ? label + ' ' : 'Editar ') + esc(entry.description) + '" title="' + label + '">✎</button>';
+                      }).join('') +
                       '<button type="button" class="note-icon note-delete" data-note-delete aria-label="Excluir item" title="Excluir"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7m4-7v7"/></svg></button></span>'
                     : '') +
                   '</li>'
@@ -457,7 +463,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function readPersonAllocations() {
     const currency = $('entryCurrency').value;
     return [...$('entryPeopleRows').children].flatMap(row => {
-      const person = FinancePeople.canonical(row.querySelector('[data-person]').value);
+      const person = FinancePeople.canonical(row.querySelector('[data-person]').value, peopleRoster());
       const value = row.querySelector('[data-amount]').value.trim();
       const cadOnly = currency === 'BRL' && row.dataset.source === 'CAD' && row.querySelector('[data-cad]').value.trim() && !value;
       if (cadOnly) throw new Error('Confira o total em BRL e CAD para converter a divisão.');
@@ -848,7 +854,7 @@ document.addEventListener('DOMContentLoaded', () => {
           item.purchaseNoteId === id ? { ...item, bought: false, purchaseNoteId: undefined, purchasePaidBrl: undefined, purchasePaidCad: undefined, updatedAt } : item,
         ));
         const next = F.update(snapshot.finance, { type: 'delete', id });
-        WalletStore.commitBoth(next, snapshot.simulator);
+        await commitPurchase(next, snapshot.simulator, [id], wishes.filter(item => item.purchaseNoteId === id).map(item => item.id));
         rememberChange(snapshot.finance, next, wishesBefore, snapshot.simulator.wishlist);
         refreshFinance();
         window.dispatchEvent(new Event('finance:changed'));
@@ -1290,7 +1296,29 @@ document.addEventListener('DOMContentLoaded', () => {
       message(error.message, true);
     }
   };
-  window.FinanceUI = { rememberChange, getState: () => structuredClone(state), save, message, render };
+  async function commitPurchase(finance, simulator, entryIds, wishIds) {
+    const sync = window.SharedWallet;
+    const beforePeople = JSON.parse(AppStorage.getItem('wishlistPeople') || '[]');
+    const afterPeople = JSON.parse(simulator.wishlistPeople || '[]');
+    const previousPeople = new Map(beforePeople.map(person => [person.id, person]));
+    const changedPeople = afterPeople.filter(person => !SharedMerge.equal(person, previousPeople.get(person.id))).map(person => person.id);
+    if (sync) sync.assertWalletFits(WalletCloud.pack({ finance, simulator }));
+    WalletStore.commitBoth(finance, simulator);
+    if (!sync) return;
+    await sync.flush();
+    const confirmed = sync.state().base;
+    const sameRows = (expected, actual, ids) => {
+      const index = rows => new Map(rows.map(row => [row.id, row]));
+      const before = index(expected), after = index(actual);
+      return ids.every(id => SharedMerge.equal(before.get(id), after.get(id)));
+    };
+    if (!confirmed || !sameRows(finance.entries, JSON.parse(confirmed.financeJson).entries, entryIds) ||
+        !sameRows(JSON.parse(simulator.wishlist || '[]'), JSON.parse(confirmed.simulator.wishlist || '[]'), wishIds) ||
+        !sameRows(afterPeople, JSON.parse(confirmed.simulator.wishlistPeople || '[]'), changedPeople)) {
+      throw Error('O Firebase ainda não confirmou a alteração da compra. Confira o estado da conexão e tente novamente.');
+    }
+  }
+  window.FinanceUI = { rememberChange, commitPurchase, getState: () => structuredClone(state), save, message, render };
   $('whatsappInput').addEventListener('input', () => rememberDraft(false));
   $('importDate').addEventListener('input', () => rememberDraft(false));
   try {

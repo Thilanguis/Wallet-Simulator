@@ -1083,7 +1083,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $('wishPurchaseError').textContent = '';
     updatePurchaseTotals();
   });
-  purchaseForm.onsubmit = (event) => {
+  purchaseForm.onsubmit = async (event) => {
     event.preventDefault();
     const release = UIFeedback.busy(purchaseForm.querySelector('button[type=submit]'));
     if (!release) return;
@@ -1143,7 +1143,7 @@ document.addEventListener('DOMContentLoaded', () => {
       snapshot.simulator.wishlist = JSON.stringify(list.map((item) =>
         links.has(item.id) ? { ...item, ...links.get(item.id) } : item,
       ));
-      WalletStore.commitBoth(finance, snapshot.simulator);
+      await FinanceUI.commitPurchase(finance, snapshot.simulator, [...new Set([...links.values()].map(item => item.purchaseNoteId))], [...ids]);
       purchaseSelection.clear();
       purchaseDialog.close();
       $('wishPurchaseFeedback').textContent = (total ? 'Compra registrada na Lista de Compras' : 'Brindes registrados na Lista de Compras') + ' · ' + Finance.format(total);

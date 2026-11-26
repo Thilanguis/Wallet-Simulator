@@ -1,8 +1,8 @@
 (function (root, factory) {
-  const api = factory();
+  const api = factory(typeof module === 'object' ? require('./finance-people.js') : root.FinancePeople);
   if (typeof module === 'object') module.exports = api;
   else root.PurchaseItems = api;
-})(typeof window === 'object' ? window : globalThis, () => {
+})(typeof window === 'object' ? window : globalThis, (People) => {
   'use strict';
   function cad(wish) {
     if (wish.currency !== 'CAD' || !Number.isFinite(wish.originalPrice)) return null;
@@ -22,8 +22,13 @@
     }
     return [...stores.values()];
   }
-  function read(entry, wishes, F) {
-    if (entry.purchaseItems) return structuredClone(entry.purchaseItems);
+  function read(entry, wishes, F, roster = []) {
+    const byId = new Map(wishes.map(wish => [wish.id, wish]));
+    const wishPerson = wish => roster.find(person => person.id && person.id === wish?.personId)?.name || wish?.person;
+    if (entry.purchaseItems) return structuredClone(entry.purchaseItems).map(part => {
+      const wish = byId.get(part.wishId);
+      return wish?.purchaseNoteId === entry.id ? { ...part, person: wishPerson(wish) || part.person } : part;
+    });
     if (entry.source !== 'wishlist')
       return [{ id: crypto.randomUUID(), title: entry.description, store: entry.store || '', person: 'Luana', quantity: 1, amount: entry.amount, cadAmount: entry.cadReference?.amount ?? null, cadEstimated: entry.cadReference?.kind !== 'original' }];
     const result = [];
@@ -44,10 +49,10 @@
           w.purchaseNoteId === entry.id &&
           !used.has(w.id) &&
           F.norm(w.title + (w.quantity > 1 ? ' ×' + w.quantity : '')) === F.norm(title) &&
-          (!store || F.norm(w.store || '') === F.norm(store)) &&
-          F.norm(['Luana', 'Dominadora'].includes(w.person || 'Dominadora') ? 'Luana' : w.person) === F.norm(['Luana', 'Dominadora'].includes(person) ? 'Luana' : person),
+          (!store || F.norm(w.store || '') === F.norm(store)),
       );
-      const w = matches.length === 1 ? matches[0] : null;
+      const samePerson = matches.filter(wish => People.identity(wishPerson(wish) || 'Luana') === People.identity(person));
+      const w = matches.length === 1 ? matches[0] : samePerson.length === 1 ? samePerson[0] : null;
       if (w) used.add(w.id);
       const amount = F.cents(m[3]),
         original = w ? cad(w) : null;
@@ -56,7 +61,7 @@
         ...(w ? { wishId: w.id } : {}),
         title: w ? w.title : title,
         store: store || w?.store || '',
-        person,
+        person: wishPerson(w) || person,
         quantity: w?.quantity || 1,
         amount,
         cadAmount: original ?? (entry.cadReference?.rate ? Math.round(amount / entry.cadReference.rate) : null),

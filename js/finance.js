@@ -110,18 +110,29 @@
       )
       .sort((a, b) => b.date.localeCompare(a.date) || String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
   }
+  function placeWishlistPurchase(entries, entry) {
+    const index = entries.findIndex(other => other.category === entry.category && other.date && other.date > entry.date);
+    if (index < 0) entries.push(entry);
+    else entries.splice(index, 0, entry);
+  }
   function update(state, action) {
     const next = structuredClone(state);
     if (action.type === 'add') {
       const entry = validate({ ...action.entry, status: action.entry.status === 'pending' ? 'paid' : action.entry.status, id: action.entry.id || id(), createdAt: new Date().toISOString() });
       if (next.entries.some((e) => e.id === entry.id)) throw new Error('Identificador repetido.');
-      next.entries.push(entry);
+      if (entry.source === 'wishlist' && entry.date) placeWishlistPurchase(next.entries, entry);
+      else next.entries.push(entry);
     } else if (action.type === 'edit') {
       const i = next.entries.findIndex((e) => e.id === action.id);
       if (i < 0) throw new Error('Lançamento não encontrado.');
       const old = next.entries[i];
       next.entries[i] = validate({ ...old, ...action.patch, status: (action.patch.status || old.status) === 'pending' ? 'paid' : action.patch.status || old.status, id: old.id, updatedAt: new Date().toISOString() });
-      next.audit.push({ id: id(), entryId: old.id, at: new Date().toISOString(), type: 'edit', before: old, after: next.entries[i] });
+      const after = next.entries[i];
+      if (after.source === 'wishlist' && after.date && after.date !== old.date) {
+        next.entries.splice(i, 1);
+        placeWishlistPurchase(next.entries, after);
+      }
+      next.audit.push({ id: id(), entryId: old.id, at: new Date().toISOString(), type: 'edit', before: old, after });
     } else if (action.type === 'move') {
       if (!Array.isArray(action.ids) || !action.ids.length || !categories.includes(action.category)) throw new Error('Destino inválido.');
       const ids = new Set(action.ids),
