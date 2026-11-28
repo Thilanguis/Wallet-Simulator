@@ -1,4 +1,5 @@
 const {test,expect}=require('@playwright/test');
+test.use({ serviceWorkers: 'block' });
 test('persistent auth waits for restoration and survives repeated reloads',async({page})=>{
   await page.route('**/js/firebase-primary-transport.js',route=>route.fulfill({contentType:'text/javascript',body:`export async function createPrimaryFirebaseTransport(){if(sessionStorage.getItem('test-wallet-unavailable'))throw new Error('Conexão interrompida');const value={...WalletCloud.pack(WalletStore.snapshot()),schema:3,revision:1,controller:'',leaseUntil:0};return{watch(fn){queueMicrotask(()=>fn(value));return()=>{}},async transact(change){return change(value)}}}`}));
   await page.route('https://www.gstatic.com/firebasejs/**/firebase-auth.js',route=>route.fulfill({contentType:'text/javascript',body:`
@@ -25,4 +26,46 @@ test('persistent auth waits for restoration and survives repeated reloads',async
   });
   await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
   await expect(page.locator('#firebaseAuthPanel')).toBeHidden();
+});
+
+test('wallet and personal wishlist auth retain different users in the same browser', async ({ page }) => {
+  await page.route('https://www.gstatic.com/firebasejs/**/firebase-app.js', route =>
+    route.fulfill({ contentType: 'text/javascript', body: 'export const getApps = () => []; export const initializeApp = (_, name) => ({ name });' }));
+  await page.route('https://www.gstatic.com/firebasejs/**/firebase-firestore.js', route =>
+    route.fulfill({ contentType: 'text/javascript', body: 'export const getFirestore = app => ({ app });' }));
+  await page.route('https://www.gstatic.com/firebasejs/**/firebase-auth.js', route => route.fulfill({ contentType: 'text/javascript', body: `
+    export class GoogleAuthProvider { setCustomParameters() {} }
+    export function initializeAuth(app) {
+      const key = 'test-auth:' + app.name;
+      return { key, currentUser: localStorage.getItem(key) };
+    }
+    export function signInWithPopup(auth) {
+      localStorage.setItem(auth.key, window.nextUser);
+      auth.currentUser = window.nextUser;
+    }
+    export function signOut(auth) {
+      localStorage.removeItem(auth.key);
+      auth.currentUser = null;
+    }
+  ` }));
+  // A blank document on the app origin can load the real modules without starting the wallet UI.
+  await page.route('**/auth-session-test', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html>' }));
+  await page.goto('/auth-session-test');
+  const users = await page.evaluate(async () => {
+    const { googleAuth } = await import('/js/firebase-google-auth.js');
+    const wallet = await googleAuth();
+    window.nextUser = 'wallet-owner';
+    await wallet.signIn();
+    const wishlist = await googleAuth('findom-wallet-personal-wishlist');
+    window.nextUser = 'wishlist-user';
+    await wishlist.signIn();
+    return [(await googleAuth()).auth.currentUser, (await googleAuth('findom-wallet-personal-wishlist')).auth.currentUser];
+  });
+  expect(users).toEqual(['wallet-owner', 'wishlist-user']);
+  await page.reload();
+  expect(await page.evaluate(async () => {
+    const { googleAuth } = await import('/js/firebase-google-auth.js');
+    await (await googleAuth('findom-wallet-personal-wishlist')).signOut();
+    return (await googleAuth()).auth.currentUser;
+  })).toBe('wallet-owner');
 });

@@ -236,7 +236,7 @@ async function connect(user) {
 async function start() {
   show('loading');
   try {
-    session = await googleAuth();
+    session = await googleAuth('findom-wallet-personal-wishlist');
     session.watch(user => void connect(user));
   } catch {
     show('error');

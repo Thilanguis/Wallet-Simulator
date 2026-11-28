@@ -1,6 +1,6 @@
-export async function googleAuth() {
+export async function googleAuth(appName) {
   const { existingFirestoreDb } = await import('./firebase-connection.js');
-  const db = await existingFirestoreDb();
+  const db = await existingFirestoreDb(appName);
   const sdk = await import('https://www.gstatic.com/firebasejs/12.6.0/firebase-auth.js');
   let auth;
   if (sdk.initializeAuth) {
