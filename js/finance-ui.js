@@ -892,22 +892,24 @@ document.addEventListener('DOMContentLoaded', () => {
       if (button.hasAttribute('data-note-wishlist')) {
         const id = button.dataset.noteWishlist;
         if (!(await AppDialog.confirm('Desfazer esta compra? Isso vai excluir o lançamento de Notas e Gastos Reais e devolver os itens vinculados à Lista de Desejos como não comprados.'))) return;
+        if (!WalletStore.isWritable()) throw new Error('Reconecte ao Firebase antes de devolver os itens à Lista de Desejos.');
         const snapshot = WalletStore.snapshot();
         const entry = snapshot.finance.entries.find((item) => item.id === id && item.source === 'wishlist');
         const wishes = JSON.parse(snapshot.simulator.wishlist || '[]');
-        if (!entry || !wishes.some((item) => item.purchaseNoteId === id)) throw new Error('A compra ou seus itens mudaram. Confira a lista antes de tentar novamente.');
+        const returnedIds = wishes.filter(item => item.purchaseNoteId === id).map(item => item.id);
+        if (!entry || !returnedIds.length) throw new Error('A compra ou seus itens mudaram. Confira a lista antes de tentar novamente.');
         const wishesBefore = snapshot.simulator.wishlist;
         const updatedAt = Date.now();
         snapshot.simulator.wishlist = JSON.stringify(wishes.map((item) =>
           item.purchaseNoteId === id ? { ...item, bought: false, purchaseNoteId: undefined, purchasePaidBrl: undefined, purchasePaidCad: undefined, updatedAt } : item,
         ));
         const next = F.update(snapshot.finance, { type: 'delete', id });
-        await commitPurchase(next, snapshot.simulator, [id], wishes.filter(item => item.purchaseNoteId === id).map(item => item.id));
+        await commitPurchase(next, snapshot.simulator, [id], returnedIds, { returningWishes: true });
         rememberChange(snapshot.finance, next, wishesBefore, snapshot.simulator.wishlist);
         refreshFinance();
         window.dispatchEvent(new Event('finance:changed'));
         document.querySelector('[data-panel="wishlistPanel"]').click();
-        window.dispatchEvent(new CustomEvent('wishlist:purchase-undone', { detail: { ids: wishes.filter(item => item.purchaseNoteId === id).map(item => item.id) } }));
+        window.dispatchEvent(new CustomEvent('wishlist:purchase-undone', { detail: { ids: returnedIds } }));
         return;
       }
       if (button.hasAttribute('data-note-edit'))
@@ -1346,7 +1348,7 @@ document.addEventListener('DOMContentLoaded', () => {
       message(error.message, true);
     }
   };
-  async function commitPurchase(finance, simulator, entryIds, wishIds) {
+  async function commitPurchase(finance, simulator, entryIds, wishIds, { returningWishes = false } = {}) {
     const sync = window.SharedWallet;
     const beforePeople = JSON.parse(AppStorage.getItem('wishlistPeople') || '[]');
     const afterPeople = JSON.parse(simulator.wishlistPeople || '[]');
@@ -1357,15 +1359,21 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!sync) return;
     await sync.flush();
     const confirmed = sync.state().base;
-    const sameRows = (expected, actual, ids) => {
+    const sameRows = (expected, actual, ids, matches = SharedMerge.equal) => {
       const index = rows => new Map(rows.map(row => [row.id, row]));
       const before = index(expected), after = index(actual);
-      return ids.every(id => SharedMerge.equal(before.get(id), after.get(id)));
+      return ids.every(id => matches(before.get(id), after.get(id)));
     };
+    // A concurrent edit of the product name, link or recipient does not invalidate a confirmed return.
+    const matchesWish = returningWishes
+      ? (_, actual) => actual?.bought === false && actual.purchaseNoteId == null && actual.purchasePaidBrl == null && actual.purchasePaidCad == null
+      : SharedMerge.equal;
     if (!confirmed || !sameRows(finance.entries, JSON.parse(confirmed.financeJson).entries, entryIds) ||
-        !sameRows(JSON.parse(simulator.wishlist || '[]'), JSON.parse(confirmed.simulator.wishlist || '[]'), wishIds) ||
+        !sameRows(JSON.parse(simulator.wishlist || '[]'), JSON.parse(confirmed.simulator.wishlist || '[]'), wishIds, matchesWish) ||
         !sameRows(afterPeople, JSON.parse(confirmed.simulator.wishlistPeople || '[]'), changedPeople)) {
-      throw Error('O Firebase ainda não confirmou a alteração da compra. Confira o estado da conexão e tente novamente.');
+      throw Error(returningWishes
+        ? 'O Firebase ainda não confirmou o retorno dos itens. Em Configurações, abra Carteira compartilhada, reconecte e confira se a compra ainda aparece antes de tentar novamente.'
+        : 'O Firebase ainda não confirmou a alteração da compra. Confira o estado da conexão e tente novamente.');
     }
   }
   window.FinanceUI = { rememberChange, commitPurchase, getState: () => structuredClone(state), save, message, render };

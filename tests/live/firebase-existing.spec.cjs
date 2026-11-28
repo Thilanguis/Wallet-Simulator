@@ -334,3 +334,95 @@ for (const count of [55, 75]) {
     expect(restored[0]).toMatchObject({ title: 'Produto revisado', imageUrl: wishes[0].imageUrl });
   });
 }
+
+test('returns reassigned items after a refused write and preserves a concurrent link edit', async ({ page }) => {
+  const Primary = require('../../js/firebase-primary-model.js');
+  const legacy = { saldoDominadora: 1000 };
+  const wallet = Primary.bootstrap(legacy, {}, { simulator: {}, emptyFinance: Finance.empty() });
+  const id = 'purchase-to-return';
+  const product = { id: 'product', title: 'Bolsa', store: 'Loja', person: 'Bruna', personId: 'bruna', quantity: 1, originalPrice: 15, currency: 'CAD', bought: true, purchaseNoteId: id };
+  wallet.simulator.wishlist = JSON.stringify([product]);
+  wallet.simulator.wishlistPeople = JSON.stringify([{ id: 'bruna', name: 'Bruna' }, { id: 'cecilia', name: 'Cecília' }]);
+  wallet.financeJson = JSON.stringify(Finance.update(Finance.empty(), { type: 'add', entry: {
+    id, description: 'Loja', store: 'Loja', category: 'Lista de Compras',
+    currency: 'BRL', status: 'paid', date: '2025-05-10', amount: 6000, source: 'wishlist',
+    purchaseItems: [{ id: 'row', wishId: product.id, title: product.title, store: product.store, person: product.person, quantity: 1, amount: 6000, cadAmount: 1500 }],
+  } }));
+  const server = await hub({ [root]: { ...legacy, walletAtualV4: wallet } });
+  await page.setViewportSize({ width: 820, height: 1000 });
+  await page.route('https://api.frankfurter.dev/v2/rates?**', route => route.fulfill({ json: [] }));
+  await server.attach(page);
+  const state = () => server.docs.get(root).walletAtualV4;
+  const savedWishes = () => JSON.parse(state().simulator.wishlist);
+  const undoWrite = changes => changes.some(({ path, data }) => path === root && data.walletAtualV4 &&
+    !JSON.parse(data.walletAtualV4.financeJson).entries.some(entry => entry.id === id));
+
+  await expect(page.locator('#cloudStatusText')).toHaveText('Salvo no Firebase');
+  await page.locator('[data-panel=financePanel]').click();
+  const purchase = page.locator('[data-note-ids=' + id + ']');
+  await purchase.getByRole('button', { name: 'Editar compra Loja' }).click();
+  const editor = page.locator('.purchase-items-editor');
+  await editor.getByLabel('Pessoa', { exact: true }).fill('Cecília');
+  await editor.getByRole('button', { name: 'Salvar compra' }).click();
+  await expect(editor).toHaveCount(0);
+  expect(savedWishes()[0]).toMatchObject({ personId: 'cecilia', bought: true, purchaseNoteId: id });
+
+  const undo = async () => {
+    await purchase.getByRole('button', { name: 'Desfazer compra' }).click();
+    await page.locator('[data-dialog-confirm]').click();
+  };
+  await purchase.getByRole('button', { name: 'Desfazer compra' }).click();
+  await page.evaluate(() => window.dispatchEvent(new Event('offline')));
+  await expect(page.locator('#cloudStatusText')).toContainText('Sem conexão');
+  await page.locator('[data-dialog-confirm]').click();
+  await expect(page.locator('#appDialogMessage')).toContainText('Reconecte ao Firebase');
+  expect(savedWishes()[0]).toMatchObject({ bought: true, purchaseNoteId: id });
+  await page.locator('[data-dialog-confirm]').click();
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await expect(page.locator('#cloudStatusText')).toHaveText('Salvo no Firebase');
+
+  server.rejectWrites(undoWrite);
+  await undo();
+  await expect(page.locator('#appDialogMessage')).toContainText(/Firebase.*confirmou/);
+  expect(savedWishes()[0]).toMatchObject({ personId: 'cecilia', bought: true, purchaseNoteId: id });
+  expect(JSON.parse(state().financeJson).entries).toHaveLength(1);
+  await page.locator('[data-dialog-confirm]').click();
+
+  server.rejectWrites(() => false);
+  await page.locator('[data-panel=backupPanel]').click();
+  await page.locator('#cloudSettings > summary').click();
+  await page.locator('#reconnectCloud').click();
+  await expect(page.locator('#cloudStatusText')).toHaveText('Salvo no Firebase');
+  await page.locator('[data-panel=financePanel]').click();
+
+  const url = 'https://example.invalid/produto';
+  let concurrentEdit = false;
+  server.rejectWrites(changes => {
+    if (concurrentEdit || !undoWrite(changes)) return false;
+    concurrentEdit = true;
+    const previous = server.docs.get(root);
+    const current = state();
+    const wishes = savedWishes();
+    wishes[0].url = url;
+    server.docs.set(root, { ...previous, walletAtualV4: {
+      ...current,
+      revision: current.revision + 1,
+      simulator: { ...current.simulator, wishlist: JSON.stringify(wishes) },
+    } });
+    return false;
+  });
+  await undo();
+  await expect(page.locator('#wishlistPanel')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Cecília', exact: true })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: 'Selecionar para compra: Bolsa' })).toBeEnabled();
+  expect(concurrentEdit).toBe(true);
+  expect(savedWishes()[0]).toMatchObject({ personId: 'cecilia', bought: false, url });
+  expect(savedWishes()[0].purchaseNoteId).toBeUndefined();
+  expect(JSON.parse(state().financeJson).entries).toHaveLength(0);
+
+  await page.reload();
+  await expect(page.locator('#cloudStatusText')).toHaveText('Salvo no Firebase');
+  await page.locator('[data-panel=wishlistPanel]').click();
+  await expect(page.getByRole('heading', { name: 'Cecília', exact: true })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: 'Selecionar para compra: Bolsa' })).toBeEnabled();
+});
