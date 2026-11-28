@@ -71,23 +71,32 @@
     return lines.join('\n');
   }
   function timeline(entries) {
-    const byMonth = new Map();
-    let undated = 0;
-    for (const entry of entries) {
-      if (['cancelled', 'refunded'].includes(entry.status)) continue;
-      if (!entry.date) {
-        undated++;
-        continue;
+    const active = entries.filter(entry => !['cancelled', 'refunded'].includes(entry.status));
+    const dated = active.filter(entry => entry.date).sort((a, b) => a.date.localeCompare(b.date));
+    const periods = [];
+    let period;
+    let windowStart;
+    for (const entry of dated) {
+      const day = Date.parse(entry.date) / 86400000;
+      // Count the start date as the first of the six calendar days.
+      if (!period || day - windowStart >= 6) {
+        period = { start: entry.date, end: entry.date, items: [] };
+        periods.push(period);
+        windowStart = day;
       }
-      const month = entry.date.slice(0, 7);
-      if (!byMonth.has(month)) byMonth.set(month, []);
-      byMonth.get(month).push(entry);
+      period.end = entry.date;
+      period.items.push(entry);
     }
-    const months = [...byMonth.keys()].sort().reverse().map((month) => {
-      const items = byMonth.get(month).sort((a, b) => b.date.localeCompare(a.date));
-      return { month, items, days: new Set(items.map((entry) => entry.date)).size, totals: F.totals(items) };
-    });
-    return { months, undated };
+    return {
+      periods: periods.reverse().map(({ start, end, items }) => ({
+        start,
+        end,
+        items: items.sort((a, b) => b.date.localeCompare(a.date)),
+        days: new Set(items.map((entry) => entry.date)).size,
+        totals: F.totals(items),
+      })),
+      undated: active.length - dated.length,
+    };
   }
   return { calculate, sections, rowText, parts, money, text, timeline };
 });

@@ -26,7 +26,15 @@
   function names(roster = []) {
     return [...new Set([...base, ...roster.map((p) => typeof p === 'string' ? p : p.name)].map(name => canonical(name, roster)).filter(Boolean))];
   }
-  function allocation(entry, roster = []) {
+  function allocation(entry, roster = [], items = entry.purchaseItems) {
+    if (items?.length) {
+      const people = new Map();
+      for (const item of items) {
+        const person = canonical(item.person, roster);
+        people.set(person, (people.get(person) || 0) + item.amount);
+      }
+      return [...people].map(([person, amount]) => ({ person, amount }));
+    }
     if (Array.isArray(entry.personAllocations)) {
       const result = entry.personAllocations.map((p) => ({ person: canonical(p.person, roster), amount: p.amount }));
       const rest = entry.amount - result.reduce((n, p) => n + p.amount, 0);
@@ -44,21 +52,18 @@
     }
     if (entry.category === F.categories[1]) return [{ person: 'Luana', amount: entry.amount }];
     const text = ' ' + F.norm([entry.category, entry.description, entry.store, entry.note].join(' ')).replace(/[^\p{L}]+/gu, ' ') + ' ';
-    const found = names(roster).filter((name) => {
-      const variants = identity(name) === 'natalia' ? ['natalia', 'nathalia'] : [F.norm(name)];
-      return variants.some((v) => text.includes(' ' + v + ' '));
-    });
+    const found = [...names(roster), 'Natália', 'Nathália'].filter(name => text.includes(' ' + F.norm(name) + ' '));
     const unique = [...new Set(found.map(name => canonical(name, roster)))];
     if (!unique.length) unique.push('Luana');
     const each = Math.floor(entry.amount / unique.length),
       remainder = entry.amount % unique.length;
     return unique.map((person, i) => ({ person, amount: each + (i < remainder ? 1 : 0) }));
   }
-  function totals(entries, roster = []) {
+  function totals(entries, roster = [], readItems = (entry) => entry.purchaseItems) {
     const people = new Map([['Luana', 0]]);
     for (const e of entries) {
       if (e.currency !== 'BRL' || ['cancelled', 'refunded'].includes(e.status)) continue;
-      for (const p of allocation(e, roster)) people.set(p.person, (people.get(p.person) || 0) + p.amount);
+      for (const p of allocation(e, roster, readItems(e))) people.set(p.person, (people.get(p.person) || 0) + p.amount);
     }
     return [...people].map(([person, amount]) => ({ person, amount })).sort((a, b) => (a.person === 'Luana' ? -1 : b.person === 'Luana' ? 1 : b.amount - a.amount || a.person.localeCompare(b.person)));
   }

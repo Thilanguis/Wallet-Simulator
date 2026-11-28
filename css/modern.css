@@ -2619,7 +2619,13 @@ html:has(dialog[open]) {
 #groupedFinanceList .note-purchase-value { white-space: nowrap; font-variant-numeric: tabular-nums; }
 #groupedFinanceList .note-purchase-payment { flex-wrap: wrap; }
 .finance-timeline { margin: 14px 0 20px; }
-.finance-timeline > summary { color: #e1ca91; font-weight: 650; }
+.finance-timeline > summary {
+  display: flex; align-items: center; gap: 5px; padding: 9px 12px;
+  list-style: none; color: #e1ca91; font-weight: 650;
+}
+.finance-timeline > summary::-webkit-details-marker { display: none; }
+.finance-timeline[open] .finance-timeline-chevron { transform: rotate(90deg); }
+#financeTimelineContent { padding: 0 12px 9px; }
 #financeTimelineContent { margin-top: 12px; }
 .timeline-chart-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
 .timeline-chart-header .hint { margin: 0; }
@@ -2636,8 +2642,8 @@ html:has(dialog[open]) {
 .timeline-line { stroke: #d0ad67; stroke-width: 2; stroke-linejoin: round; }
 #financeTimelineContent .timeline-dot {
   position: absolute;
-  left: var(--month-x);
-  top: var(--month-y);
+  left: var(--period-x);
+  top: var(--period-y);
   transform: translate(-50%, -50%);
   width: 22px;
   height: 22px;
@@ -2656,21 +2662,21 @@ html:has(dialog[open]) {
 .timeline-range { position: relative; height: 18px; margin: 8px 12px 18px 34px; font-size: 12px; color: #bdb2a0; }
 #financeTimelineContent:has([data-metric='value'][aria-pressed='true']) .timeline-scale { width: 65px; }
 #financeTimelineContent:has([data-metric='value'][aria-pressed='true']) .timeline-range { margin-inline-start: 77px; }
-.timeline-range span { position: absolute; left: var(--month-x); transform: translateX(-50%); white-space: nowrap; }
+.timeline-range span { position: absolute; left: var(--period-x); transform: translateX(-50%); white-space: nowrap; }
 .timeline-range span:first-child:not(:only-child) { transform: none; }
 .timeline-range span:last-child:not(:only-child) { transform: translateX(-100%); }
 .timeline-selection { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
 .timeline-selection label { margin: 0; }
 .timeline-selection select { width: auto; max-width: 100%; margin: 0; }
-.timeline-month { margin: 12px 0; }
-.timeline-month-summary { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
-.timeline-month-summary strong { color: #e8d5a9; }
-.timeline-month ul { margin: 8px 0 0; padding: 0; list-style: none; }
-.timeline-month li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; padding: 7px 0; border-top: 1px solid #ffffff15; overflow-wrap: anywhere; }
-.timeline-month li time, .timeline-month li small { color: #bdb2a0; }
-.timeline-month li small { display: block; }
+.timeline-period { margin: 12px 0; }
+.timeline-period-summary { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+.timeline-period-summary strong { color: #e8d5a9; }
+.timeline-period ul { margin: 8px 0 0; padding: 0; list-style: none; }
+.timeline-period li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; padding: 7px 0; border-top: 1px solid #ffffff15; overflow-wrap: anywhere; }
+.timeline-period li time, .timeline-period li small { color: #bdb2a0; }
+.timeline-period li small { display: block; }
 @media (max-width: 480px) {
-  .timeline-month li { font-size: 12px; }
+  .timeline-period li { font-size: 12px; }
 }
 #groupedFinanceList .note-tools {
   flex-wrap: wrap;
@@ -3069,6 +3075,7 @@ body:not(.firebase-required) #firebaseAuthPanel {
 #financePanel > .section:has(#financeImportTitle) { padding-top: 18px; padding-bottom: 18px; }
 #financePanel > .section:has(#financeImportTitle) details { margin: 8px 0; padding: 9px 12px; }
 #financePanel > .section:has(#financeImportTitle) summary { font-size: 13px; }
+#financePanel > .section:has(#financeImportTitle) #financeTimeline { padding: 0; }
 #wishlistPanel .wish-group { margin-top: 16px; padding-top: 8px; }
 #wishlistPanel .wish-group h3 { margin: 6px 0; font-size: 17px; }
 #wishlistPanel .wish-row { padding: 9px 0; }
@@ -3338,7 +3345,9 @@ body:not(.firebase-required) #firebaseAuthPanel {
   border: 1px solid #6b5034;
   border-radius: 12px;
   background: linear-gradient(110deg, #38291e, #221d18 75%);
+  cursor: pointer;
 }
+#financePeopleTotals { cursor: auto; }
 #financePanel #financeSearch {
   width: clamp(145px, 16vw, 210px);
   min-width: 0;

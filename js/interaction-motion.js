@@ -26,6 +26,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   function touch(target, x, y) {
     if (media.matches || !target || target.disabled || target.matches('[aria-disabled="true"],[draggable="true"],#btnRoletaFlutuante')) return;
+    // Keep the disclosure hit areas stationary during a press, including their outer edges.
+    if (target.matches('#financeTimeline > summary, #financePeopleToggle')) return;
     const rect = target.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
     release();

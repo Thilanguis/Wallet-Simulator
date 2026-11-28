@@ -139,18 +139,31 @@ document.addEventListener('DOMContentLoaded', () => {
     window.dispatchEvent(new Event('finance:changed'));
   }
   const filters = () => ({ search: $('financeSearch').value.trim(), from: $('financeFrom').value, to: $('financeTo').value, category: $('financeCategory').value, person: $('financePerson').value, store: $('financeStore').value.trim(), status: $('financeStatus').value });
+  const storedWishes = () => JSON.parse(AppStorage.getItem('wishlist') || '[]');
+  function purchaseItemsFor(entry, roster, wishes) {
+    if (!entry.purchaseItems && entry.source !== 'wishlist') return null;
+    try {
+      return PurchaseItems.read(entry, wishes ?? storedWishes(), F, roster);
+    } catch {
+      return null; // Older entries may only have usable subtotals.
+    }
+  }
+  function personAllocation(entry, roster = peopleRoster()) {
+    return FinancePeople.allocation(entry, roster, purchaseItemsFor(entry, roster));
+  }
   function matchingEntries({ search, store, person, ...criteria } = filters()) {
     const terms = search ? F.norm(search).split(' ') : [];
     const shop = F.norm(store);
     return F.filtered(state.entries, criteria).filter((entry) => {
-      if (person && !FinancePeople.allocation(entry, peopleRoster()).some(p => p.person === person && p.amount > 0)) return false;
+      const allocations = person || terms.length ? personAllocation(entry) : [];
+      if (person && !allocations.some(p => p.person === person && p.amount > 0)) return false;
       const items = entry.purchaseItems || [];
       if (shop && !F.norm(entry.store || '').includes(shop) && !items.some((item) => F.norm(item.store || '').includes(shop))) {
         const noteStores = entry.source === 'wishlist' ? [...(entry.note || '').matchAll(/ · Loja: ([^\r\n]+?) · R\$/g)] : [];
         if (!noteStores.some(([, name]) => F.norm(name).includes(shop))) return false;
       }
       if (!terms.length) return true;
-      const text = F.norm([FinancePeople.allocation(entry, peopleRoster()).map(p => p.person).join(' '), entry.description, entry.store, entry.category, entry.note, items.map((item) => [item.title, item.store].join(' ')).join(' '), entry.date, entry.date?.split('-').reverse().join('/'), F.format(entry.amount, entry.currency)].join(' '));
+      const text = F.norm([allocations.map(p => p.person).join(' '), entry.description, entry.store, entry.category, entry.note, items.map((item) => [item.title, item.store].join(' ')).join(' '), entry.date, entry.date?.split('-').reverse().join('/'), F.format(entry.amount, entry.currency)].join(' '));
       return terms.every((term) => text.includes(term));
     });
   }
@@ -170,7 +183,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function purchaseBreakdown(entry) {
     if (entry.purchaseItems || entry.source === 'wishlist') {
       try {
-        const items = PurchaseItems.read(entry, JSON.parse(AppStorage.getItem('wishlist') || '[]'), F);
+        const items = PurchaseItems.read(entry, storedWishes(), F, peopleRoster());
         const stores = PurchaseItems.byStore(items);
         const cad = p => !FinanceCad.isEnabled() ? '' : '<button type="button" class="note-cad note-cad-detail" data-cad-entry="'+esc(entry.id)+'" data-cad-item="'+esc(p.id)+'" aria-label="Ver detalhes do valor em CAD">'+(p.cadAmount==null?'CAD —':(p.cadEstimated?'≈ ':'')+('CAD '+(p.cadAmount/100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})))+'</button> ';
         const product = (p) => '<li><span>' + esc(p.title) + (p.quantity > 1 ? ' ×' + p.quantity : '') +
@@ -336,61 +349,59 @@ document.addEventListener('DOMContentLoaded', () => {
     );
   }
   const timeline = $('financeTimeline');
-  const monthLabel = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' });
-  const monthNumber = (month) => Number(month.slice(0, 4)) * 12 + Number(month.slice(5));
-  let selectedTimelineMonth;
+  const dayNumber = (date) => Date.parse(date) / 86400000;
+  const shortDate = (date) => date.slice(5).split('-').reverse().join('/');
+  const fullDate = (date) => date.split('-').reverse().join('/');
+  const periodLabel = ({ start, end }) => start === end ? fullDate(start) : fullDate(start) + ' a ' + fullDate(end);
+  let selectedTimelinePeriod;
   let timelineMetric = 'count';
   function renderTimeline() {
     const content = $('financeTimelineContent');
-    const { months, undated } = FinanceList.timeline(state.entries);
+    const { periods, undated } = FinanceList.timeline(state.entries);
     const notes = undated ? `<p class="hint">${undated} lançamento(s) sem data ficam fora da linha do tempo.</p>` : '';
-    if (!months.length) {
+    if (!periods.length) {
       content.innerHTML = '<p class="hint">Nenhum gasto com data registrada.</p>' + notes;
       return;
     }
-    const label = (month) => monthLabel.format(new Date(month + '-01T12:00:00Z'));
     const byValue = timelineMetric === 'value';
     const measure = ({ items, totals }) => byValue ? totals.total : items.length;
-    const peak = Math.max(1, ...months.map(measure));
+    const peak = Math.max(1, ...periods.map(measure));
     const scaleMoney = new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 });
     const scale = (value) => byValue ? 'R$ ' + scaleMoney.format(value / 100) : value;
-    const ordered = [...months].reverse();
-    const first = monthNumber(ordered[0].month);
-    const last = monthNumber(ordered.at(-1).month);
+    const ordered = [...periods].reverse();
+    const first = dayNumber(ordered[0].start);
+    const last = dayNumber(ordered.at(-1).start);
     const x = (number) => first === last ? 50 : (number - first) / (last - first) * 100;
     const y = (count) => 100 - count / peak * 100;
     const coordinates = [];
     for (const [index, row] of ordered.entries()) {
-      const { month } = row;
-      const number = monthNumber(month);
-      const previous = index ? monthNumber(ordered[index - 1].month) : number;
-      if (number - previous > 1) {
-        coordinates.push(`${x(previous + 1)},100`);
-        if (number - previous > 2) coordinates.push(`${x(number - 1)},100`);
+      const number = dayNumber(row.start);
+      const previous = index ? dayNumber(ordered[index - 1].end) : number;
+      if (number - previous >= 6) {
+        coordinates.push(`${x(previous + 1)},100`, `${x(number - 1)},100`);
       }
       coordinates.push(`${x(number)},${y(measure(row))}`);
     }
     const dots = ordered.map((row) => {
-      const { month, items, totals } = row;
-      const pointLabel = esc(label(month) + ' · ' + (byValue ? F.format(totals.total) : `${items.length} lançamento(s)`));
-      return `<button type="button" class="timeline-dot" data-month="${esc(month)}"
-        style="--month-x:${x(monthNumber(month))}%;--month-y:${y(measure(row))}%"
+      const { start, items, totals } = row;
+      const count = items.length + (items.length === 1 ? ' lançamento' : ' lançamentos');
+      const pointLabel = esc(periodLabel(row) + ' · ' + (byValue ? F.format(totals.total) : count));
+      return `<button type="button" class="timeline-dot" data-period="${esc(start)}"
+        style="--period-x:${x(dayNumber(start))}%;--period-y:${y(measure(row))}%"
         aria-label="${pointLabel}" title="${pointLabel}" aria-pressed="false"></button>`;
     }).join('');
-    const rangeLabel = (month) => month.slice(5) + '/' + month.slice(0, 4);
-    const axisMonths = [first];
+    const axisDays = [first];
     if (last > first) {
       const step = Math.max(1, Math.ceil((last - first) / 3));
-      for (let number = first + step; number <= last - step; number += step) axisMonths.push(number);
-      axisMonths.push(last);
+      for (let number = first + step; number <= last - step; number += step) axisDays.push(number);
+      axisDays.push(last);
     }
-    const ticks = axisMonths.map((number) => {
-      const year = Math.floor((number - 1) / 12);
-      const month = String(number - year * 12).padStart(2, '0');
-      return `<span style="--month-x:${x(number)}%">${rangeLabel(year + '-' + month)}</span>`;
+    const ticks = axisDays.map((number) => {
+      const date = new Date(number * 86400000).toISOString().slice(0, 10);
+      return `<span style="--period-x:${x(number)}%" title="${fullDate(date)}">${shortDate(date)}/${date.slice(2, 4)}</span>`;
     }).join('');
     const series = coordinates.join(' ');
-    content.innerHTML = `<div class="timeline-chart-header"><p class="hint">${byValue ? 'Total em reais por mês' : 'Lançamentos por mês'}</p>
+    content.innerHTML = `<div class="timeline-chart-header"><p class="hint">${byValue ? 'Total em reais por período de até 6 dias' : 'Lançamentos por período de até 6 dias'}</p>
       <div class="timeline-metrics" role="group" aria-label="Métrica do gráfico">
         <button type="button" data-metric="count" aria-pressed="${!byValue}">Frequência</button>
         <button type="button" data-metric="value" aria-pressed="${byValue}">Gastos em R$</button>
@@ -404,24 +415,25 @@ document.addEventListener('DOMContentLoaded', () => {
         <line class="timeline-cursor" x1="0" x2="0" y1="0" y2="100"/>
       </svg>${dots}</div></div>
       <div class="timeline-range">${ticks}</div>
-      <div class="timeline-selection"><label for="financeTimelineMonth">Mês em detalhe</label><select id="financeTimelineMonth">
-        ${months.map(({ month }) => `<option value="${esc(month)}">${esc(label(month))}</option>`).join('')}
-      </select></div><div id="financeTimelineMonthDetails" class="timeline-month" aria-live="polite"></div>${notes}`;
-    const picker = $('financeTimelineMonth');
-    function selectMonth(month) {
-      const { items, days, totals } = months.find((row) => row.month === month);
-      selectedTimelineMonth = month;
-      picker.value = month;
-      const position = x(monthNumber(month));
+      <div class="timeline-selection"><label for="financeTimelinePeriod">Período em detalhe</label><select id="financeTimelinePeriod">
+        ${periods.map((row) => `<option value="${esc(row.start)}">${esc(periodLabel(row))}</option>`).join('')}
+      </select></div><div id="financeTimelinePeriodDetails" class="timeline-period" aria-live="polite"></div>${notes}`;
+    const picker = $('financeTimelinePeriod');
+    function selectPeriod(start) {
+      const row = periods.find((period) => period.start === start);
+      const { items, days, totals } = row;
+      selectedTimelinePeriod = start;
+      picker.value = start;
+      const position = x(dayNumber(start));
       const cursor = content.querySelector('.timeline-cursor');
       cursor.setAttribute('x1', position);
       cursor.setAttribute('x2', position);
-      content.querySelectorAll('.timeline-dot').forEach((dot) => dot.setAttribute('aria-pressed', String(dot.dataset.month === month)));
+      content.querySelectorAll('.timeline-dot').forEach((dot) => dot.setAttribute('aria-pressed', String(dot.dataset.period === start)));
       const amounts = [totals.total ? F.format(totals.total) : '', totals.foreign.USD ? F.format(totals.foreign.USD, 'USD') : ''].filter(Boolean).join(' + ');
-      const entries = items.map((entry) => `<li><time datetime="${esc(entry.date)}">${esc(entry.date.slice(8))}/${esc(entry.date.slice(5, 7))}</time><span>${esc(entry.description)} <small>${esc(entry.category)}</small></span><strong>${F.format(entry.amount, entry.currency)}</strong></li>`).join('');
-      $('financeTimelineMonthDetails').innerHTML = `<p class="timeline-month-summary"><span>${items.length} ${items.length === 1 ? 'lançamento' : 'lançamentos'} · ${days} ${days === 1 ? 'dia' : 'dias'}</span><strong>${amounts}</strong></p><ul>${entries}</ul>`;
+      const entries = items.map((entry) => `<li><time datetime="${esc(entry.date)}">${esc(shortDate(entry.date))}</time><span>${esc(entry.description)} <small>${esc(entry.category)}</small></span><strong>${F.format(entry.amount, entry.currency)}</strong></li>`).join('');
+      $('financeTimelinePeriodDetails').innerHTML = `<p class="timeline-period-summary"><span>${items.length} ${items.length === 1 ? 'lançamento' : 'lançamentos'} · ${days} ${days === 1 ? 'data' : 'datas'} · ${esc(periodLabel(row))}</span><strong>${amounts}</strong></p><ul>${entries}</ul>`;
     }
-    picker.onchange = () => selectMonth(picker.value);
+    picker.onchange = () => selectPeriod(picker.value);
     content.querySelectorAll('[data-metric]').forEach((button) => {
       button.onclick = () => {
         timelineMetric = button.dataset.metric;
@@ -429,8 +441,8 @@ document.addEventListener('DOMContentLoaded', () => {
         content.querySelector('[aria-pressed="true"][data-metric]').focus({ preventScroll: true });
       };
     });
-    content.querySelectorAll('.timeline-dot').forEach((dot) => { dot.onclick = () => selectMonth(dot.dataset.month); });
-    selectMonth(months.some(({ month }) => month === selectedTimelineMonth) ? selectedTimelineMonth : months[0].month);
+    content.querySelectorAll('.timeline-dot').forEach((dot) => { dot.onclick = () => selectPeriod(dot.dataset.period); });
+    selectPeriod(periods.some(({ start }) => start === selectedTimelinePeriod) ? selectedTimelinePeriod : periods[0].start);
   }
   timeline.addEventListener('toggle', () => { if (timeline.open) renderTimeline(); });
 
@@ -546,15 +558,19 @@ document.addEventListener('DOMContentLoaded', () => {
     synchronizePeople();
     updatePeopleRemainder();
   });
-  $('financePeopleToggle').onclick = () => {
+  const peopleToggle = $('financePeopleToggle');
+  $('financeTopTotal').addEventListener('click', (event) => {
+    if (event.target.closest('#financePeopleToggle, #financePeopleTotals, .finance-total-controls')) return;
+    peopleToggle.click();
+  });
+  peopleToggle.onclick = () => {
     const open = $('financePeopleTotals').hidden;
     $('financePeopleTotals').hidden = !open;
     $('financePeopleToggle').setAttribute('aria-expanded', String(open));
     $('financePeopleToggle').setAttribute('aria-label', open ? 'Fechar divisão por pessoa' : 'Ver divisão por pessoa');
     $('financePeopleToggle').textContent = open ? '▴' : '▾';
   };
-  function renderPeople() {
-    const totals=FinancePeople.totals(state.entries,peopleRoster());
+  function renderPeople(totals) {
     const luana = totals.filter(p => p.person === 'Luana');
     const friends = totals.filter(p => p.person !== 'Luana');
     const row = p => '<div class="finance-person-total"><span>'+esc(p.person)+'</span><strong>'+F.format(p.amount)+'</strong></div>';
@@ -565,10 +581,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function render() {
     const selectedPerson = $('financePerson').value;
-    const names = [...new Set([...FinancePeople.names(peopleRoster()), ...FinancePeople.totals(state.entries, peopleRoster()).map(p => p.person)])];
+    const roster = peopleRoster();
+    const wishes = storedWishes();
+    const peopleTotals = FinancePeople.totals(state.entries, roster, (entry) => purchaseItemsFor(entry, roster, wishes));
+    const names = [...new Set([...FinancePeople.names(roster), ...peopleTotals.map(p => p.person)])];
     $('financePerson').replaceChildren(new Option('Todas as pessoas', ''), ...names.map(name => new Option(name, name)));
     $('financePerson').value = selectedPerson;
-    renderPeople();
+    renderPeople(peopleTotals);
     const duplicateGroups = FinanceTools.duplicateGroups(state.entries);
     $('financeDuplicates').hidden = !duplicateGroups.length;
     $('financeDuplicates').querySelector('summary').textContent = 'Possíveis duplicatas · ' + duplicateGroups.length + (duplicateGroups.length === 1 ? ' grupo' : ' grupos');
@@ -585,7 +604,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if ($('homeTotal').textContent !== total) $('homeTotal').textContent = total;
     const result = $('financeSearchResults');
     result.hidden = !filtering;
-    result.textContent = entries.length ? entries.length + (entries.length === 1 ? ' lançamento encontrado' : ' lançamentos encontrados') + (activeFilters.person ? ' · Parte de ' + activeFilters.person + ': ' + F.format(entries.filter(e => e.currency === 'BRL' && !['cancelled','refunded'].includes(e.status)).reduce((sum, e) => sum + FinancePeople.allocation(e, peopleRoster()).filter(p => p.person === activeFilters.person).reduce((n, p) => n + p.amount, 0), 0)) : '') : 'Nenhum lançamento encontrado.';
+    result.textContent = entries.length ? entries.length + (entries.length === 1 ? ' lançamento encontrado' : ' lançamentos encontrados') + (activeFilters.person ? ' · Parte de ' + activeFilters.person + ': ' + F.format(entries.filter(e => e.currency === 'BRL' && !['cancelled','refunded'].includes(e.status)).reduce((sum, e) => sum + personAllocation(e, roster).filter(p => p.person === activeFilters.person).reduce((n, p) => n + p.amount, 0), 0)) : '') : 'Nenhum lançamento encontrado.';
     $('financeHistory').innerHTML = entries.map(entryHTML).join('') || '<p class="hint">Nenhum lançamento neste período.</p>';
     updateSelection();
     $('shareText').value = FinanceList.text(state.entries);
@@ -1372,7 +1391,10 @@ document.addEventListener('DOMContentLoaded', () => {
     window.dispatchEvent(new Event('finance:changed'));
   });
   window.addEventListener('wallet:remote', (event) => {
-    if (event.detail && !event.detail.initial && !event.detail.financeChanged) return;
+    if (event.detail && !event.detail.initial && !event.detail.financeChanged) {
+      if (event.detail.changedKeys?.some(key => key === 'wishlist' || key === 'wishlistPeople')) render();
+      return;
+    }
     state = F.validateState(WalletStore.finance());
     selectedFinance.clear();
     render();

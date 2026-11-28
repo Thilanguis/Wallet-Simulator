@@ -51,7 +51,8 @@
           F.norm(w.title + (w.quantity > 1 ? ' ×' + w.quantity : '')) === F.norm(title) &&
           (!store || F.norm(w.store || '') === F.norm(store)),
       );
-      const samePerson = matches.filter(wish => People.identity(wishPerson(wish) || 'Luana') === People.identity(person));
+      const exactPerson = matches.filter(wish => F.norm(wishPerson(wish) || 'Luana') === F.norm(person));
+      const samePerson = exactPerson.length ? exactPerson : matches.filter(wish => People.identity(wishPerson(wish) || 'Luana') === People.identity(person));
       const w = matches.length === 1 ? matches[0] : samePerson.length === 1 ? samePerson[0] : null;
       if (w) used.add(w.id);
       const amount = F.cents(m[3]),

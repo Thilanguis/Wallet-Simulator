@@ -172,6 +172,9 @@ test('renames and reassigns a bought Shein item before undo and backdated regist
     await dialog.locator('[data-save]').click();
     await expect(dialog).toHaveCount(0);
     await expect(old.locator('.note-purchase-person-heading')).toHaveText([/Nathália/, /Bruna/]);
+    await expect(page.locator('#financePeopleTotals .finance-person-total').filter({ hasText: 'Nathália' })).toContainText('10,00');
+    await expect(page.locator('#financePeopleTotals .finance-person-total').filter({ hasText: 'Bruna' })).toContainText('10,00');
+    await expect(page.locator('.finance-friends-total')).toContainText('20,00');
   };
   await savePeople();
   await page.locator('#financeUndo').click();

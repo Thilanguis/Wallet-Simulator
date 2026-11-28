@@ -2,6 +2,7 @@ const { test, expect } = require('../firebase-fixture.cjs');
 for (const width of [1440, 768, 393])
   test('people totals and manual split ' + width, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
+    await page.route('https://api.frankfurter.dev/v2/rates?**', route => route.fulfill({ json: [] }));
     await page.goto('/');
     await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
     await page.evaluate(() => {
@@ -17,7 +18,20 @@ for (const width of [1440, 768, 393])
       window.beforePeople = JSON.stringify(WalletStore.finance().entries);
     });
     await page.locator('[data-panel=financePanel]').click();
-    await page.locator('#financePeopleToggle').click();
+    const disclosure = page.locator('#financePeopleToggle');
+    const breakdown = page.locator('#financePeopleTotals');
+    await expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+    await page.locator('#financeTopTotal').click({ position: { x: 4, y: 4 } });
+    await expect(disclosure).toHaveAttribute('aria-expanded', 'true');
+    await breakdown.locator('.finance-person-total').first().click();
+    await expect(breakdown).toBeVisible();
+    await disclosure.press('Space');
+    await expect(breakdown).toBeHidden();
+    await page.locator('#financeShowCad').click();
+    await expect(breakdown).toBeHidden();
+    await page.locator('#financeShowCad').click();
+    await page.locator('#homeTotal').click();
+    await expect(breakdown).toBeVisible();
     const person = (name) => page.locator('.finance-person-total').filter({ has: page.locator('span', { hasText: new RegExp('^' + name + '$') }) });
     await expect(person('Luana')).toContainText('910,00');
     await expect(person('Mel')).toContainText('100,00');
@@ -92,4 +106,60 @@ test('edits a CAD expense and retains the assigned split in BRL', async ({ page 
   expect(entry.amount).toBe(48200);
   expect(entry.cadReference.amount).toBe(12050);
   expect(entry.personAllocations).toEqual([{ person: 'Bruna', amount: 12100 }]);
+});
+
+test('totals and filters follow new recipients in existing purchase details', async ({ page }) => {
+  await page.route('https://api.frankfurter.dev/v2/rates?**', route => route.fulfill({ json: [] }));
+  await page.goto('/');
+  await expect(page.locator('#cloudStatusText')).toContainText('Salvo no Firebase');
+  const newFriend = 'Cecília';
+  await page.evaluate(() => {
+    const common = {
+      category: 'Lista de Compras', currency: 'BRL', status: 'paid', date: '2025-05-10',
+    };
+    const structured = Finance.update(Finance.empty(), { type: 'add', entry: {
+      ...common, id: 'structured', description: 'Compra detalhada', amount: 10000,
+      purchaseItems: [
+        { id: 'first', wishId: 'linked', title: 'Blusa', store: 'Loja A', person: 'Luana', quantity: 1, amount: 2500, cadAmount: null },
+        { id: 'second', title: 'Saia', store: 'Loja A', person: 'Luana', quantity: 1, amount: 7500, cadAmount: null },
+      ],
+      personAllocations: [{ person: 'Luana', amount: 10000 }],
+    } });
+    FinanceUI.save(Finance.update(structured, { type: 'add', entry: {
+      ...common, id: 'legacy', description: 'Compra antiga', amount: 6000, source: 'wishlist',
+      note: 'Natália · R$ 10,00\n• Pulseira · Loja: Loja B · R$ 10,00\nMel · R$ 35,00\n• Colar · Loja: Loja B · R$ 35,00\nNathália · R$ 15,00\n• Brinco · Loja: Loja B · R$ 15,00',
+    } }));
+  });
+  await page.locator('[data-panel=financePanel]').click();
+  await page.locator('#financePeopleToggle').click();
+  await expect(page.locator('.finance-friends-total')).toContainText('60,00');
+  const before = await page.evaluate(() => WalletStore.finance());
+
+  await page.evaluate((name) => {
+    const wallet = WalletStore.snapshot();
+    wallet.simulator.wishlistPeople = JSON.stringify([{ id: 'new-friend', name }, { id: 'nat', name: 'Natália' }, { id: 'nath', name: 'Nathália' }]);
+    wallet.simulator.wishlist = JSON.stringify([
+      { id: 'linked', title: 'Blusa', person: 'Luana', personId: 'new-friend', purchaseNoteId: 'structured', store: 'Loja A', bought: true },
+      { id: 'pulseira', title: 'Pulseira', person: 'Natália', personId: 'nat', purchaseNoteId: 'legacy', store: 'Loja B', bought: true },
+      { id: 'colar', title: 'Colar', person: 'Mel', personId: 'new-friend', purchaseNoteId: 'legacy', store: 'Loja B', bought: true },
+    ]);
+    WalletStore.commitBoth(wallet.finance, wallet.simulator);
+    window.dispatchEvent(new CustomEvent('wallet:remote', { detail: { financeChanged: false, changedKeys: ['wishlist', 'wishlistPeople'] } }));
+  }, newFriend);
+
+  const totals = page.locator('#financePeopleTotals');
+  await expect(totals.locator('.finance-person-total').filter({ hasText: newFriend })).toContainText('60,00');
+  await expect(totals.locator('.finance-person-total').filter({ hasText: 'Nathália' })).toContainText('15,00');
+  await expect(totals.locator('.finance-person-total').filter({ hasText: 'Natália' })).toContainText('10,00');
+  await expect(totals.locator('.finance-person-total').filter({ hasText: 'Luana' })).toContainText('75,00');
+  await expect(totals.locator('.finance-friends-total')).toContainText('85,00');
+  await expect(totals).not.toContainText('Mel');
+  await expect(page.locator('#homeTotal')).toContainText('160,00');
+  await expect(page.locator('.note-purchase-person-heading').filter({ hasText: newFriend })).toHaveCount(2);
+
+  await page.locator('#financeFilters > summary').click();
+  await page.locator('#financePerson').selectOption(newFriend);
+  await expect(page.locator('#financeSearchResults')).toContainText('Parte de Cecília: R$');
+  await expect(page.locator('#financeSearchResults')).toContainText('60,00');
+  expect(await page.evaluate(() => WalletStore.finance())).toEqual(before);
 });
