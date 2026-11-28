@@ -304,7 +304,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const shopping = group.category === F.categories[7];
                 const content = editable ? notebookEntryHTML(row, shopping, breakdown) : esc(FinanceList.rowText(row, shopping));
                 const contentTag = breakdown ? 'div' : 'span';
-                const showWishes = editable && row.entries.length === 1 && row.entries[0].source === 'wishlist' && linkedPurchases.has(ids)
+                const showWishes = editable && row.entries.length === 1 && row.entries[0].source === 'wishlist' &&
+                  (linkedPurchases.has(ids) || row.entries[0].purchaseItems?.length)
                   ? `<button type="button" class="note-icon" data-note-wishlist="${esc(ids)}" aria-label="Desfazer compra" title="Desfazer compra e devolver itens aos desejos">↩</button>`
                   : '';
                 return (
@@ -891,18 +892,17 @@ document.addEventListener('DOMContentLoaded', () => {
       if(button.hasAttribute('data-note-edit')){const entry=state.entries.find(e=>e.id===button.dataset.noteEdit);if(entry.source==='wishlist'||entry.purchaseItems){PurchaseEditor.open(entry);return;}}
       if (button.hasAttribute('data-note-wishlist')) {
         const id = button.dataset.noteWishlist;
-        if (!(await AppDialog.confirm('Desfazer esta compra? Isso vai excluir o lançamento de Notas e Gastos Reais e devolver os itens vinculados à Lista de Desejos como não comprados.'))) return;
+        if (!(await AppDialog.confirm('Desfazer esta compra? Isso vai excluir o lançamento de Notas e Gastos Reais e devolver os produtos à Lista de Desejos como não comprados.'))) return;
         if (!WalletStore.isWritable()) throw new Error('Reconecte ao Firebase antes de devolver os itens à Lista de Desejos.');
         const snapshot = WalletStore.snapshot();
         const entry = snapshot.finance.entries.find((item) => item.id === id && item.source === 'wishlist');
         const wishes = JSON.parse(snapshot.simulator.wishlist || '[]');
-        const returnedIds = wishes.filter(item => item.purchaseNoteId === id).map(item => item.id);
-        if (!entry || !returnedIds.length) throw new Error('A compra ou seus itens mudaram. Confira a lista antes de tentar novamente.');
+        if (!entry) throw new Error('A compra mudou. Confira a lista antes de tentar novamente.');
+        const roster = JSON.parse(snapshot.simulator.wishlistPeople || '[]');
+        const returned = PurchaseItems.returnToWishlist(entry, wishes, roster, F, Date.now());
+        const returnedIds = returned.ids;
         const wishesBefore = snapshot.simulator.wishlist;
-        const updatedAt = Date.now();
-        snapshot.simulator.wishlist = JSON.stringify(wishes.map((item) =>
-          item.purchaseNoteId === id ? { ...item, bought: false, purchaseNoteId: undefined, purchasePaidBrl: undefined, purchasePaidCad: undefined, updatedAt } : item,
-        ));
+        snapshot.simulator.wishlist = JSON.stringify(returned.wishes);
         const next = F.update(snapshot.finance, { type: 'delete', id });
         await commitPurchase(next, snapshot.simulator, [id], returnedIds, { returningWishes: true });
         rememberChange(snapshot.finance, next, wishesBefore, snapshot.simulator.wishlist);

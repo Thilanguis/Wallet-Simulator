@@ -72,6 +72,58 @@
     if (!result.length || result.reduce((n, p) => n + p.amount, 0) !== entry.amount) throw Error('Os detalhes antigos não fecham com o total. Corrija os detalhes antes de editar os produtos.');
     return result;
   }
+  function restoreWish(part, id, roster, updatedAt) {
+    const name = People.canonical(part.person, roster);
+    const person = People.identity(name) === 'luana' ? 'Dominadora' : name;
+    const personId = roster.find(friend => friend.name === person)?.id;
+    // The note records what was paid in BRL, including all units. An original shop price may be unavailable.
+    const quantity = part.quantity || 1;
+    const originalPrice = part.amount / quantity / 100;
+    return {
+      id, title: part.title, store: part.store || '', person, ...(personId ? { personId } : {}),
+      quantity, currency: 'BRL', originalPrice, price: originalPrice, bought: false, updatedAt,
+    };
+  }
+
+  function returnToWishlist(entry, wishes, roster, F, updatedAt) {
+    const byId = new Map(wishes.map(wish => [String(wish.id), wish]));
+    const returned = new Map();
+    const update = (wish) => {
+      returned.set(String(wish.id), {
+        ...wish, bought: false, purchaseNoteId: undefined, purchasePaidBrl: undefined, purchasePaidCad: undefined, updatedAt,
+      });
+    };
+    const linked = wishes.filter(wish => wish.purchaseNoteId === entry.id);
+    linked.forEach(update);
+
+    const parts = entry.purchaseItems || (entry.note?.split(/\r?\n/).some(line => line.trimStart().startsWith('•'))
+      ? read(entry, wishes, F, roster) : null);
+    if (!parts && !linked.length) throw Error('Os detalhes dos produtos desta compra não estão disponíveis.');
+
+    const ambiguousLegacy = !entry.purchaseItems && linked.some(wish => !parts?.some(part => part.wishId === wish.id));
+    const seenLinks = new Set();
+    for (const part of parts || []) {
+      if (part.wishId != null) {
+        const key = String(part.wishId);
+        if (seenLinks.has(key)) throw Error('Há produtos com o mesmo vínculo nesta compra.');
+        seenLinks.add(key);
+      }
+      const wish = part.wishId != null ? byId.get(String(part.wishId)) : null;
+      if (wish) {
+        if (wish.purchaseNoteId === entry.id) continue;
+        if (wish.bought || wish.purchaseNoteId) throw Error('Um produto desta compra está vinculado a outro lançamento. Confira os itens antes de desfazer.');
+        update(wish);
+        continue;
+      }
+      if (ambiguousLegacy) throw Error('Os vínculos desta compra antiga não permitem devolver todos os produtos com segurança.');
+      const restored = restoreWish(part, part.wishId ?? crypto.randomUUID(), roster, updatedAt);
+      if (returned.has(String(restored.id))) throw Error('Há produtos com o mesmo vínculo nesta compra.');
+      returned.set(String(restored.id), restored);
+    }
+    const existing = wishes.map(wish => returned.get(String(wish.id)) || wish);
+    const added = [...returned].filter(([id]) => !byId.has(id)).map(([, wish]) => wish);
+    return { wishes: [...existing, ...added], ids: [...returned.values()].map(wish => wish.id) };
+  }
   function note(items, F, oldNote = '') {
     const groups = new Map();
     for (const p of items) {
@@ -91,5 +143,5 @@
     }
     return lines.join('\n');
   }
-  return { cad, snapshot, byStore, read, note };
+  return { cad, snapshot, byStore, read, note, restoreWish, returnToWishlist };
 });

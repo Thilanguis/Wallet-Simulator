@@ -208,3 +208,48 @@ test('renames and reassigns a bought Shein item before undo and backdated regist
   expect(persisted.entries[1].purchaseItems.map(item => item.person)).toEqual(['Nathália', 'Bruna']);
   expect(persisted.wishes.map(item => [item.person, item.personId, item.bought])).toEqual([['Nathália', 'nat', true], ['Bruna', 'bruna', true]]);
 });
+
+test('returns linked and note-only items to their respective people in one undo', async ({ page }) => {
+  await page.route('https://api.frankfurter.dev/v2/rates?**', route => route.fulfill({ json: [] }));
+  await page.goto('/');
+  await expect(page.locator('#cloudStatusText')).toHaveText('Salvo no Firebase');
+  await page.evaluate(async () => {
+    const wallet = WalletStore.snapshot();
+    const purchaseId = 'mixed-return';
+    wallet.simulator.wishlistPeople = JSON.stringify([{ id: 'ana', name: 'Ana' }, { id: 'livia', name: 'Lívia' }]);
+    wallet.simulator.wishlist = JSON.stringify([
+      { id: 'linked', title: 'Blusa vinculada', person: 'Dominadora', store: 'Loja A', originalPrice: 25, currency: 'CAD', url: 'https://example.invalid/blusa', quantity: 1, bought: true, purchaseNoteId: purchaseId },
+      { id: 'unrelated', title: 'Outro produto', person: 'Ana', personId: 'ana', store: 'Loja B', originalPrice: 10, currency: 'BRL', quantity: 1, bought: true, purchaseNoteId: 'other-purchase' },
+    ]);
+    const parts = [
+      { id: 'part-1', wishId: 'linked', title: 'Blusa vinculada', person: 'Luana', store: 'Loja A', quantity: 1, amount: 2500, cadAmount: null },
+      { id: 'part-2', title: 'Creme anotado', person: 'Ana', store: 'Loja B', quantity: 2, amount: 1200, cadAmount: null },
+      { id: 'part-3', wishId: 'deleted-wish', title: 'Brinde anotado', person: 'Lívia', store: 'Loja B', quantity: 1, amount: 0, cadAmount: 0 },
+    ];
+    const finance = Finance.update(Finance.empty(), { type: 'add', entry: {
+      id: purchaseId, description: 'Compra mista', source: 'wishlist', category: 'Lista de Compras',
+      amount: 3700, currency: 'BRL', status: 'paid', date: '2026-11-10', purchaseItems: parts,
+    } });
+    WalletStore.commitBoth(finance, wallet.simulator);
+    await SharedWallet.flush();
+  });
+
+  await page.locator('[data-panel=financePanel]').click();
+  await page.locator('[data-note-ids=mixed-return]').getByRole('button', { name: 'Desfazer compra' }).click();
+  await page.locator('[data-dialog-confirm]').click();
+  const wishlist = page.locator('#wishlistPanel');
+  for (const [person, title] of [['Luana', 'Blusa vinculada'], ['Ana', 'Creme anotado'], ['Lívia', 'Brinde anotado']]) {
+    const group = wishlist.locator('.wish-group').filter({ has: page.getByRole('heading', { name: person, exact: true }) });
+    await expect(group.getByRole('checkbox', { name: 'Selecionar para compra: ' + title })).toBeEnabled();
+  }
+  const saved = await page.evaluate(() => {
+    const { finance, simulator } = WalletCloud.unpack(SharedWallet.state().base);
+    return { entries: finance.entries, wishes: JSON.parse(simulator.wishlist) };
+  });
+  expect(saved.entries).toHaveLength(0);
+  expect(saved.wishes).toHaveLength(4);
+  expect(saved.wishes.find(wish => wish.id === 'linked')).toMatchObject({ bought: false, currency: 'CAD', url: 'https://example.invalid/blusa' });
+  expect(saved.wishes.find(wish => wish.title === 'Creme anotado')).toMatchObject({ bought: false, personId: 'ana', currency: 'BRL', originalPrice: 6, quantity: 2 });
+  expect(saved.wishes.find(wish => wish.id === 'deleted-wish')).toMatchObject({ bought: false, personId: 'livia', originalPrice: 0 });
+  expect(saved.wishes.find(wish => wish.id === 'unrelated')).toMatchObject({ bought: true, purchaseNoteId: 'other-purchase' });
+});
