@@ -23,7 +23,7 @@
   function conflict() {
     throw new Error('Este item foi alterado ao mesmo tempo. A cópia anterior foi preservada para conferência.');
   }
-  function list(base, local, remote, key = 'id', mergeItem) {
+  function list(base, local, remote, key = 'id', mergeItem, canRemove = equal) {
     if (equal(base, local)) return structuredClone(remote);
     const index = (items) => {
       const occurrences = new Map();
@@ -41,7 +41,7 @@
       r = index(remote);
     for (const [id, old] of b)
       if (!l.has(id)) {
-        if (r.has(id) && !equal(r.get(id), old)) conflict();
+        if (r.has(id) && !canRemove(old, r.get(id))) conflict();
         r.delete(id);
       }
     for (const [id, item] of l) {
@@ -89,6 +89,12 @@
       { pricing: r.pricing, productLink: r.productLink },
     );
     return { ...object(b.details, l.details, r.details), ...pricing, ...productLink, updatedAt: Math.max(local.updatedAt || 0, remote.updatedAt || 0) };
+  }
+  function canRemoveEntry(before, remote) {
+    if (equal(before, remote)) return true;
+    if (before.source !== 'wishlist' || remote.cadReference?.kind !== 'estimated' || remote.cadReference.source !== 'Frankfurter') return false;
+    const withoutQuote = ({ cadReference, updatedAt, ...entry }) => entry;
+    return equal(withoutQuote(before), withoutQuote(remote));
   }
   function merge(base, local, current, { timerOwner = true, accelerationNow } = {}) {
     const originalBoostIds = (doc) => new Set(JSON.parse(doc.simulator.accelBoosts || '[]').map((boost) => boost.id));
@@ -198,7 +204,8 @@
     delete lfRest.revision;
     delete rfRest.revision;
     const finance = object(bfRest, lfRest, rfRest);
-    for (const key of ['entries', 'audit', 'redemptions']) finance[key] = list(bf[key] || [], lf[key] || [], rf[key] || []);
+    finance.entries = list(bf.entries || [], lf.entries || [], rf.entries || [], 'id', undefined, canRemoveEntry);
+    for (const key of ['audit', 'redemptions']) finance[key] = list(bf[key] || [], lf[key] || [], rf[key] || []);
     finance.revision = Math.max(rf.revision || 0, lf.revision || 0) + (!equal(bf, lf) && !equal(bf, rf) ? 1 : 0);
     out.financeJson = JSON.stringify(finance);
     // Only newly added history rows receive their actual post-transaction balance.

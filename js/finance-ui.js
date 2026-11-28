@@ -1358,7 +1358,7 @@ document.addEventListener('DOMContentLoaded', () => {
     WalletStore.commitBoth(finance, simulator);
     if (!sync) return;
     await sync.flush();
-    const confirmed = sync.state().base;
+    const { base: confirmed, writeError } = sync.state();
     const sameRows = (expected, actual, ids, matches = SharedMerge.equal) => {
       const index = rows => new Map(rows.map(row => [row.id, row]));
       const before = index(expected), after = index(actual);
@@ -1371,9 +1371,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!confirmed || !sameRows(finance.entries, JSON.parse(confirmed.financeJson).entries, entryIds) ||
         !sameRows(JSON.parse(simulator.wishlist || '[]'), JSON.parse(confirmed.simulator.wishlist || '[]'), wishIds, matchesWish) ||
         !sameRows(afterPeople, JSON.parse(confirmed.simulator.wishlistPeople || '[]'), changedPeople)) {
-      throw Error(returningWishes
-        ? 'O Firebase ainda não confirmou o retorno dos itens. Em Configurações, abra Carteira compartilhada, reconecte e confira se a compra ainda aparece antes de tentar novamente.'
-        : 'O Firebase ainda não confirmou a alteração da compra. Confira o estado da conexão e tente novamente.');
+      if (returningWishes) {
+        const networkError = ['unavailable', 'deadline-exceeded'].includes(writeError?.code);
+        const reason = networkError
+          ? 'A conexão caiu ou demorou demais durante a gravação.'
+          : writeError?.message || 'O Firebase ainda não confirmou o retorno dos itens.';
+        throw Error(reason + ' Em Configurações, abra Carteira compartilhada, reconecte e confira se a compra ainda aparece antes de tentar novamente.');
+      }
+      throw Error('O Firebase ainda não confirmou a alteração da compra. Confira o estado da conexão e tente novamente.');
     }
   }
   window.FinanceUI = { rememberChange, commitPurchase, getState: () => structuredClone(state), save, message, render };

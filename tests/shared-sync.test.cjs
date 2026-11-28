@@ -234,6 +234,20 @@ test('same-note conflicting edits are rejected while independent changes merge',
   }
   assert.throws(() => Merge.merge(base, local, remote), /alterado/);
 });
+test('a wishlist purchase can be removed during a quote update but not a purchase edit', () => {
+  const base = doc(), local = doc(), remote = doc();
+  const purchase = { id: 'buy', source: 'wishlist', amount: 6000, description: 'Loja' };
+  const update = (wallet, entry) => {
+    wallet.financeJson = JSON.stringify({ ...Finance.empty(), entries: [entry] });
+  };
+  update(base, purchase);
+  const quoted = { ...purchase, updatedAt: '2026-01-02', cadReference: { kind: 'estimated', source: 'Frankfurter', rate: 4 } };
+  update(remote, quoted);
+  assert.deepEqual(JSON.parse(Merge.merge(base, local, remote).financeJson).entries, []);
+  update(remote, { ...quoted, amount: 7000 });
+  assert.throws(() => Merge.merge(base, local, remote), /alterado/);
+});
+
 test('legacy duplicate records without IDs remain present', () => {
   const rows = [
     { timestamp: 'old', descricao: 'same' },

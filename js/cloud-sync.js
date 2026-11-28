@@ -59,7 +59,8 @@
       latest = null,
       stopped = false,
       suspended = false,
-      connectionTimer = null;
+      connectionTimer = null,
+      writeError = null;
     const assertWalletFits = wallet => assertFits(transport.preparePayload ? transport.preparePayload(wallet) : wallet);
     function status(next, error) {
       if ((mode === 'local' || mode === 'controlling') && next !== mode && (freezeOnReceive || next !== 'receiving')) {
@@ -224,11 +225,13 @@
           return { ...current, ...sent, revision: current.revision + 1, leaseUntil: now() + LEASE_MS };
         });
         base = structuredClone(doc);
+        writeError = null;
         guardLease();
         pending = signature(pack(store.snapshot())) !== signature(doc);
         onState({ mode, pending });
         schedule(pending ? checkpointMs : 15000);
       } catch (error) {
+        writeError = error;
         if (error.code === 'wallet/stale' && error.current) {
           // A console edit or another device won the race. Keep the unsent copy
           // but continue following the server instead of suspending snapshots.
@@ -288,7 +291,7 @@
       if (pending) backup(store.snapshot());
       status('local');
     }
-    return { connect, takeControl, release, flush, stop, assertWalletFits, receive, suspend: fail, state: () => ({ mode, pending, base: structuredClone(base) }) };
+    return { connect, takeControl, release, flush, stop, assertWalletFits, receive, suspend: fail, state: () => ({ mode, pending, writeError, base: structuredClone(base) }) };
   }
   return { create, pack, unpack, signature, fits, assertFits, LEASE_MS };
 });

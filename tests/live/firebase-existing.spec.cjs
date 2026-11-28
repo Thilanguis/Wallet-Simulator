@@ -335,7 +335,7 @@ for (const count of [55, 75]) {
   });
 }
 
-test('returns reassigned items after a refused write and preserves a concurrent link edit', async ({ page }) => {
+test('returns reassigned items after a refused write, a concurrent link edit and a quote update', async ({ page }) => {
   const Primary = require('../../js/firebase-primary-model.js');
   const legacy = { saldoDominadora: 1000 };
   const wallet = Primary.bootstrap(legacy, {}, { simulator: {}, emptyFinance: Finance.empty() });
@@ -346,7 +346,7 @@ test('returns reassigned items after a refused write and preserves a concurrent 
   wallet.financeJson = JSON.stringify(Finance.update(Finance.empty(), { type: 'add', entry: {
     id, description: 'Loja', store: 'Loja', category: 'Lista de Compras',
     currency: 'BRL', status: 'paid', date: '2025-05-10', amount: 6000, source: 'wishlist',
-    purchaseItems: [{ id: 'row', wishId: product.id, title: product.title, store: product.store, person: product.person, quantity: 1, amount: 6000, cadAmount: 1500 }],
+    purchaseItems: [{ id: 'row', wishId: product.id, title: product.title, store: product.store, person: product.person, quantity: 1, amount: 6000, cadAmount: null }],
   } }));
   const server = await hub({ [root]: { ...legacy, walletAtualV4: wallet } });
   await page.setViewportSize({ width: 820, height: 1000 });
@@ -383,7 +383,7 @@ test('returns reassigned items after a refused write and preserves a concurrent 
 
   server.rejectWrites(undoWrite);
   await undo();
-  await expect(page.locator('#appDialogMessage')).toContainText(/Firebase.*confirmou/);
+  await expect(page.locator('#appDialogMessage')).toContainText('O Firebase recusou a gravação');
   expect(savedWishes()[0]).toMatchObject({ personId: 'cecilia', bought: true, purchaseNoteId: id });
   expect(JSON.parse(state().financeJson).entries).toHaveLength(1);
   await page.locator('[data-dialog-confirm]').click();
@@ -404,9 +404,14 @@ test('returns reassigned items after a refused write and preserves a concurrent 
     const current = state();
     const wishes = savedWishes();
     wishes[0].url = url;
+    const finance = Finance.update(JSON.parse(current.financeJson), { type: 'edit', id, patch: {
+      cadReference: { kind: 'estimated', source: 'Frankfurter', amount: 1500, basisAmount: 6000, rate: 4,
+        rateDate: '2025-05-10', referenceDate: '2025-05-10', entryDate: '2025-05-10', methodVersion: 2 },
+    } });
     server.docs.set(root, { ...previous, walletAtualV4: {
       ...current,
       revision: current.revision + 1,
+      financeJson: JSON.stringify(finance),
       simulator: { ...current.simulator, wishlist: JSON.stringify(wishes) },
     } });
     return false;
